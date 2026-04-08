@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { authFetch, getStoredUser } from "@/lib/auth";
 import { apiPath, getApiBase } from "@/lib/api";
+import { useToastStore } from "@/store/toastStore";
 
 export default function SettingsPage() {
     const [currentPassword, setCurrentPassword] = useState("");
@@ -12,7 +13,7 @@ export default function SettingsPage() {
     const [showNewPwd, setShowNewPwd] = useState(false);
     const [showConfirmPwd, setShowConfirmPwd] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [successMessage, setSuccessMessage] = useState("");
+    const { showToast } = useToastStore();
     const [errorMessage, setErrorMessage] = useState("");
     const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
     const [sessionTimeout, setSessionTimeout] = useState(30);
@@ -28,7 +29,6 @@ export default function SettingsPage() {
 
     const handleChangePassword = async (e: React.FormEvent) => {
         e.preventDefault();
-        setSuccessMessage("");
         setErrorMessage("");
 
         if (!currentPassword) { setErrorMessage("Current password is required"); return; }
@@ -54,7 +54,7 @@ export default function SettingsPage() {
                 throw new Error(data.message || `Error ${response.status}`);
             }
 
-            setSuccessMessage("Password changed successfully!");
+            showToast("Password changed successfully!", "success", true);
             setCurrentPassword("");
             setNewPassword("");
             setConfirmPassword("");
@@ -67,10 +67,11 @@ export default function SettingsPage() {
 
     const handleToggleTwoFactor = async () => {
         setTwoFactorEnabled(!twoFactorEnabled);
-        setSuccessMessage(
-            twoFactorEnabled ? "Two-factor authentication disabled" : "Two-factor authentication enabled"
+        showToast(
+            twoFactorEnabled ? "Two-factor authentication disabled" : "Two-factor authentication enabled",
+            "success",
+            true
         );
-        setTimeout(() => setSuccessMessage(""), 3000);
     };
 
 
@@ -142,19 +143,7 @@ export default function SettingsPage() {
                 <div className="card">
                     <h3 className="card-title" style={{ marginBottom: "1rem" }}>Change Password</h3>
 
-                    {successMessage && (
-                        <div style={{
-                            padding: "0.75rem",
-                            marginBottom: "1rem",
-                            background: "#d4edda",
-                            border: "1px solid #c3e6cb",
-                            borderRadius: "var(--radius-md)",
-                            color: "#155724",
-                            fontSize: "0.875rem",
-                        }}>
-                            ✓ {successMessage}
-                        </div>
-                    )}
+
 
                     {errorMessage && (
                         <div style={{

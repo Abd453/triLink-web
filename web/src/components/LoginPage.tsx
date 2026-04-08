@@ -75,7 +75,7 @@ export default function LoginPage({ role, rolePlural, dashboardPath, gradient, t
                     department: u.department,
                     childName: u.childName,
                     relationship: u.relationship,
-                    profileImageFileId: u.profileImageFileId,
+                    profileImageFileId: u.profileImageFileId || data.profileImageFileId || data.profileImageId || data.avatarId,
                 });
             } else {
                 // Fallback: at minimum store email + role

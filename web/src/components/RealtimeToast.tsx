@@ -2,7 +2,7 @@
 import { ToastState } from "@/hooks/useRealtimeNotifications";
 
 interface RealtimeToastProps {
-    toast: (ToastState & { ok?: boolean }) | null;
+    toast: any;
     onClose: () => void;
 }
 

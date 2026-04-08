@@ -55,6 +55,17 @@ export interface StoredUser {
   childName?: string;
   relationship?: string;
   profileImageFileId?: string;
+  phone?: string;
+  homeroomClass?: string;
+  experience?: string;
+  country?: string;
+  cityState?: string;
+  postalCode?: string;
+  officeRoom?: string;
+  dateOfBirth?: string;
+  studentId?: string;
+  guardian?: string;
+  occupation?: string;
 }
 
 export function getStoredUser(): StoredUser | null {
@@ -94,7 +105,18 @@ export async function refreshStoredProfile(): Promise<void> {
       department: typeof u.department === "string" ? u.department : undefined,
       childName: typeof u.childName === "string" ? u.childName : undefined,
       relationship: typeof u.relationship === "string" ? u.relationship : undefined,
-      profileImageFileId: typeof u.profileImageFileId === "string" ? u.profileImageFileId : undefined,
+      profileImageFileId: u.profileImageFileId ? String(u.profileImageFileId) : prev?.profileImageFileId,
+      phone: typeof u.phone === "string" ? u.phone : undefined,
+      homeroomClass: typeof u.homeroomClass === "string" ? u.homeroomClass : undefined,
+      experience: typeof u.experience === "string" ? u.experience : undefined,
+      country: typeof u.country === "string" ? u.country : undefined,
+      cityState: typeof u.cityState === "string" ? u.cityState : undefined,
+      postalCode: typeof u.postalCode === "string" ? u.postalCode : undefined,
+      officeRoom: typeof u.officeRoom === "string" ? u.officeRoom : undefined,
+      dateOfBirth: typeof u.dateOfBirth === "string" ? u.dateOfBirth : undefined,
+      studentId: typeof u.studentId === "string" ? u.studentId : undefined,
+      guardian: typeof u.guardian === "string" ? u.guardian : undefined,
+      occupation: typeof u.occupation === "string" ? u.occupation : undefined,
     });
   } catch {
     /* ignore */

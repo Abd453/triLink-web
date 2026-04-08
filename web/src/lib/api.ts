@@ -6,11 +6,8 @@ export function getApiBase(): string {
   const envBase =
     (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "")) || "";
   if (envBase) return envBase;
-  if (typeof window !== "undefined") {
-    // If we're in the browser and no env is set, we MUST fallback to port 4000 on the same host
-    return `${window.location.protocol}//${window.location.hostname}:4000`;
-  }
-  return "http://localhost:4000";
+  // If no env is set, we default to the production backend
+  return "https://trilink-backend-ms68.onrender.com";
 }
 
 /**
@@ -20,8 +17,8 @@ export function getApiBase(): string {
 export function getFileUrl(fileId: string | null | undefined): string {
   if (!fileId) return "";
   const base = getApiBase();
-  // If base is empty, we force a fallback to localhost:4000 to avoid relative path failures in dev
-  const safeBase = base || "http://localhost:4000";
+  // If base is empty (should not happen now with our default), fallback to the production backend
+  const safeBase = base || "https://trilink-backend-ms68.onrender.com";
   return `${safeBase}/api/files/${fileId}/download`;
 }
 

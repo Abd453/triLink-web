@@ -14,6 +14,7 @@ import { apiPath, getApiBase } from "@/lib/api";
 import { authFetch, getAccessToken } from "@/lib/auth";
 import { listUsers, type PublicUser } from "@/lib/admin-api";
 import Select from "@/components/Select";
+import { useToastStore } from "@/store/toastStore";
 
 type RegistrationType = "student" | "teacher" | "parent";
 
@@ -83,6 +84,7 @@ export default function AdminRegistration() {
     const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null);
     const [errorMessage, setErrorMessage] = useState("");
     const [errors, setErrors] = useState<FormErrors>({});
+    const { showToast } = useToastStore();
     const [emailStatus, setEmailStatus] = useState<"idle" | "sent" | "failed" | "skipped">("idle");
     const [studentOptions, setStudentOptions] = useState<PublicUser[]>([]);
     const [loadingStudents, setLoadingStudents] = useState(false);
@@ -237,6 +239,7 @@ export default function AdminRegistration() {
 
             setSuccessInfo(info);
             setEmailStatus(registrationEmailSent ? "sent" : "skipped");
+            showToast(`${regType.charAt(0).toUpperCase() + regType.slice(1)} registered successfully!`, "success", true);
 
             // Reset form
             setFormData({

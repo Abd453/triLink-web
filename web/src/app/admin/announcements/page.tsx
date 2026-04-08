@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { BellRing, CalendarDays, Megaphone, RefreshCcw, Sparkles, Users, Trash2, Send } from "lucide-react";
-import { 
-  type AcademicYear, 
-  type Announcement, 
-  createAnnouncement, 
-  deleteAnnouncement, 
-  getActiveAcademicYear, 
-  listAnnouncements 
+import {
+  type AcademicYear,
+  type Announcement,
+  createAnnouncement,
+  deleteAnnouncement,
+  getActiveAcademicYear,
+  listAnnouncements
 } from "@/lib/admin-api";
 import Select from "@/components/Select";
 
@@ -53,6 +53,7 @@ export default function AdminAnnouncements() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -85,7 +86,7 @@ export default function AdminAnnouncements() {
       showToast("Both title and message are required.", false);
       return;
     }
-    
+
     setIsSubmitting(true);
     try {
       await createAnnouncement({
@@ -133,16 +134,16 @@ export default function AdminAnnouncements() {
   return (
     <div className="page-wrapper">
       {toast && (
-        <div style={{ 
-          position: "fixed", 
-          top: 30, 
-          right: 30, 
-          zIndex: 9999, 
-          background: toast.ok ? "#065f46" : "var(--danger)", 
+        <div style={{
+          position: "fixed",
+          top: 30,
+          right: 30,
+          zIndex: 9999,
+          background: toast.ok ? "#065f46" : "var(--danger)",
           color: "#fff",
-          padding: "0.85rem 1.75rem", 
-          borderRadius: 14, 
-          boxShadow: "0 10px 40px rgba(0,0,0,0.15)", 
+          padding: "0.85rem 1.75rem",
+          borderRadius: 14,
+          boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
           fontWeight: 700,
           fontSize: "0.9rem",
           display: "flex",
@@ -151,9 +152,9 @@ export default function AdminAnnouncements() {
           animation: "toast-entry 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards"
         }}>
           {toast.ok ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
           ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
           )}
           {toast.msg}
         </div>
@@ -205,42 +206,42 @@ export default function AdminAnnouncements() {
           <BellRing size={20} className="text-primary-500" />
           Create New Broadast
         </h3>
-        
+
         <div style={{ display: "grid", gap: "1.5rem", maxWidth: "800px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 200px", gap: "1rem" }}>
-             <div style={{ display: "grid", gap: "0.5rem" }}>
-               <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>Subject / Title</label>
-               <input 
-                 placeholder="Main heading for the announcement" 
-                 value={title} 
-                 onChange={(e) => setTitle(e.target.value)} 
-                 style={{ padding: "0.75rem 1rem", borderRadius: 12, border: "1.5px solid var(--gray-200)", fontSize: "0.95rem", width: "100%", outline: "none" }} 
-               />
-             </div>
-             <div style={{ display: "grid", gap: "0.5rem" }}>
-               <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>Target Audience</label>
-               <Select 
-                 value={audience} 
-                 onChange={(e) => setAudience(e.target.value)} 
-                 style={{ padding: "0.75rem", borderRadius: 12, border: "1.5px solid var(--gray-200)", background: "var(--gray-50)", cursor: "pointer", fontWeight: 600 }}
-               >
-                 {AUDIENCES.map((a) => (
-                   <option key={a} value={a}>
-                     {a.charAt(0).toUpperCase() + a.slice(1)}
-                   </option>
-                 ))}
-               </Select>
-             </div>
+            <div style={{ display: "grid", gap: "0.5rem" }}>
+              <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>Subject / Title</label>
+              <input
+                placeholder="Main heading for the announcement"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                style={{ padding: "0.75rem 1rem", borderRadius: 12, border: "1.5px solid var(--gray-200)", fontSize: "0.95rem", width: "100%", outline: "none" }}
+              />
+            </div>
+            <div style={{ display: "grid", gap: "0.5rem" }}>
+              <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>Target Audience</label>
+              <Select
+                value={audience}
+                onChange={(e) => setAudience(e.target.value)}
+                style={{ padding: "0.75rem", borderRadius: 12, border: "1.5px solid var(--gray-200)", background: "var(--gray-50)", cursor: "pointer", fontWeight: 600 }}
+              >
+                {AUDIENCES.map((a) => (
+                  <option key={a} value={a}>
+                    {a.charAt(0).toUpperCase() + a.slice(1)}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
 
           <div style={{ display: "grid", gap: "0.5rem" }}>
             <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>Message Content</label>
-            <textarea 
-              placeholder="Provide more details about this announcement..." 
-              value={body} 
-              onChange={(e) => setBody(e.target.value)} 
-              rows={4} 
-              style={{ padding: "0.75rem 1rem", borderRadius: 12, border: "1.5px solid var(--gray-200)", fontSize: "0.95rem", width: "100%", outline: "none", resize: "none" }} 
+            <textarea
+              placeholder="Provide more details about this announcement..."
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={4}
+              style={{ padding: "0.75rem 1rem", borderRadius: 12, border: "1.5px solid var(--gray-200)", fontSize: "0.95rem", width: "100%", outline: "none", resize: "none" }}
             />
           </div>
 
@@ -252,10 +253,10 @@ export default function AdminAnnouncements() {
                 <span className="text-danger">Target year not selected</span>
               )}
             </p>
-            <button 
-              type="button" 
-              className="btn btn-primary" 
-              onClick={publish} 
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={publish}
               disabled={isSubmitting || !year}
               style={{ padding: "0.75rem 2rem", borderRadius: 12, fontWeight: 700, gap: "0.5rem" }}
             >
@@ -275,7 +276,7 @@ export default function AdminAnnouncements() {
             {year ? `Showing broadcast for ${year.label}` : "All historic broadcasts"}
           </span>
         </div>
-        
+
         <div className="table-wrapper">
           <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0" }}>
             <thead>
@@ -299,10 +300,10 @@ export default function AdminAnnouncements() {
                   <tr key={a.id} className="table-row-hover">
                     <td style={{ padding: "1.25rem 2rem", fontWeight: 700, color: "var(--gray-800)" }}>{a.title}</td>
                     <td style={{ padding: "1.25rem 2rem" }}>
-                      <span style={{ 
-                        padding: "0.25rem 0.75rem", 
-                        borderRadius: "20px", 
-                        fontSize: "0.75rem", 
+                      <span style={{
+                        padding: "0.25rem 0.75rem",
+                        borderRadius: "20px",
+                        fontSize: "0.75rem",
                         fontWeight: 700,
                         background: a.audience === 'all' ? 'var(--primary-50)' : 'var(--gray-100)',
                         color: a.audience === 'all' ? 'var(--primary-700)' : 'var(--gray-600)',
@@ -315,9 +316,9 @@ export default function AdminAnnouncements() {
                       {new Date(a.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                     </td>
                     <td style={{ padding: "1.25rem 2rem", textAlign: "right" }}>
-                      <button 
-                        type="button" 
-                        className="btn btn-secondary btn-icon" 
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-icon"
                         onClick={() => del(a.id)}
                         style={{ color: "var(--danger)", background: "transparent", border: "none", cursor: "pointer" }}
                         title="Delete broadcast"
@@ -332,7 +333,7 @@ export default function AdminAnnouncements() {
           </table>
         </div>
       </div>
-      
+
       <style jsx>{`
         .table-row-hover:hover {
           background: var(--primary-50)/10;

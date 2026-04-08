@@ -10,7 +10,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 # Browser talks to API on the host (maps to api:4000 from compose)
-ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
+ARG NEXT_PUBLIC_API_BASE_URL=https://trilink-backend-ms68.onrender.com
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 RUN npm run build
 

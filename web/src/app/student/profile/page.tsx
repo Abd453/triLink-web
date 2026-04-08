@@ -3,6 +3,9 @@
 import { useRef, useState, useEffect } from "react";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
+import { useToastStore } from "@/store/toastStore";
+import { patchMe, uploadProfileImage } from "@/lib/admin-api";
+import { refreshStoredProfile } from "@/lib/auth";
 
 type StudentProfile = {
     firstName: string;
@@ -20,7 +23,7 @@ type StudentProfile = {
 };
 
 const defaultProfile: StudentProfile = {
-    firstName: "Student",
+    firstName: "",
     lastName: "",
     email: "",
     phone: "",
@@ -46,7 +49,7 @@ function StaticField({ label, value }: { label: string; value: string }) {
             }}
         >
             <div style={{ fontSize: "0.78rem", color: "var(--gray-500)", marginBottom: "0.35rem", fontWeight: 600 }}>{label}</div>
-            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--gray-900)", lineHeight: 1.35 }}>{value}</div>
+            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--gray-900)", lineHeight: 1.35 }}>{value || "—"}</div>
         </div>
     );
 }
@@ -58,6 +61,7 @@ function EditableField({
     type = "text",
     placeholder,
     readOnly = false,
+    disabled = false,
 }: {
     label: string;
     value: string;
@@ -65,6 +69,7 @@ function EditableField({
     type?: string;
     placeholder?: string;
     readOnly?: boolean;
+    disabled?: boolean;
 }) {
     return (
         <div className="input-group">
@@ -76,6 +81,7 @@ function EditableField({
                     onChange={(e) => onChange(e.target.value)}
                     placeholder={placeholder}
                     readOnly={readOnly}
+                    disabled={disabled}
                     style={readOnly ? { background: "var(--gray-50)", cursor: "not-allowed" } : {}}
                 />
             </div>
@@ -88,28 +94,31 @@ export default function StudentProfilePage() {
     const [isEditing, setIsEditing] = useState(false);
     const [profile, setProfile] = useState<StudentProfile>(defaultProfile);
     const [draft, setDraft] = useState<StudentProfile>(defaultProfile);
+    const [saving, setSaving] = useState(false);
+    const [avatarUploading, setAvatarUploading] = useState(false);
+    const { showToast } = useToastStore();
     const user = useCurrentUser("student");
 
     // Hydrate from auth user on mount
     useEffect(() => {
         if (user && user.email) {
-            setProfile((prev) => ({
-                ...prev,
-                firstName: user.firstName || prev.firstName,
-                lastName: user.lastName || prev.lastName,
-                email: user.email || prev.email,
-                grade: user.grade || prev.grade,
-                section: user.section || prev.section,
-            }));
+            const next: StudentProfile = {
+                firstName: user.firstName || "",
+                lastName: user.lastName || "",
+                email: user.email || "",
+                phone: user.phone || "",
+                grade: user.grade || "",
+                section: user.section || "",
+                dateOfBirth: user.dateOfBirth || "",
+                studentId: user.studentId || user.id || "",
+                guardian: user.guardian || "",
+                country: user.country || "",
+                cityState: user.cityState || "",
+                postalCode: user.postalCode || "",
+            };
+            setProfile(next);
             if (!isEditing) {
-                setDraft((prev) => ({
-                    ...prev,
-                    firstName: user.firstName || prev.firstName,
-                    lastName: user.lastName || prev.lastName,
-                    email: user.email || prev.email,
-                    grade: user.grade || prev.grade,
-                    section: user.section || prev.section,
-                }));
+                setDraft(next);
             }
         }
     }, [user, isEditing]);
@@ -132,31 +141,42 @@ export default function StudentProfilePage() {
         setIsEditing(false);
     }
 
-    function saveProfile() {
+    async function saveProfile() {
         if (!draft.firstName.trim() || !draft.lastName.trim() || !draft.email.trim()) {
-            window.alert("First name, last name, and email are required.");
+            showToast("First name, last name, and email are required.", "error", false);
             return;
         }
 
-        // Call backend to save changes
-        const updatePayload = {
-            ...draft,
-            firstName: draft.firstName.trim(),
-            lastName: draft.lastName.trim(),
-            email: draft.email.trim(),
-            phone: draft.phone.trim(),
-            dateOfBirth: draft.dateOfBirth.trim(),
-            guardian: draft.guardian.trim(),
-            country: draft.country.trim(),
-            cityState: draft.cityState.trim(),
-            postalCode: draft.postalCode.trim(),
-        };
+        try {
+            setSaving(true);
+            await patchMe(draft);
+            await refreshStoredProfile();
+            setProfile(draft);
+            setIsEditing(false);
+            showToast("Profile updated successfully");
+        } catch (e) {
+            showToast(e instanceof Error ? e.message : "Failed to update profile", "error", false);
+        } finally {
+            setSaving(false);
+        }
+    }
 
-        // TODO: Implement actual API call
-        // fetch(`/api/student/${profile.studentId}`, { method: "PUT", body: JSON.stringify(updatePayload) })
+    async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
 
-        setProfile(updatePayload);
-        setIsEditing(false);
+        try {
+            setAvatarUploading(true);
+            const res = await uploadProfileImage(file);
+            await patchMe({ profileImageFileId: res.id });
+            await refreshStoredProfile();
+            showToast("Profile photo updated successfully!");
+        } catch (e) {
+            showToast("Failed to upload photo.", "error", false);
+        } finally {
+            setAvatarUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        }
     }
 
     return (
@@ -167,8 +187,8 @@ export default function StudentProfilePage() {
                     <button className="btn btn-primary" onClick={startEditing}>Edit</button>
                 ) : (
                     <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <button className="btn btn-secondary" onClick={cancelEditing}>Cancel</button>
-                        <button className="btn btn-primary" onClick={saveProfile}>Save Changes</button>
+                        <button className="btn btn-secondary" onClick={cancelEditing} disabled={saving}>Cancel</button>
+                        <button className="btn btn-primary" onClick={saveProfile} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>
                     </div>
                 )}
             </div>
@@ -176,17 +196,18 @@ export default function StudentProfilePage() {
             <div className="card">
                 <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.9fr)", gap: "1rem", alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
-                        <div
-                            className="avatar avatar-xl avatar-initials"
-                            style={{ fontSize: "1.5rem", flexShrink: 0, background: "linear-gradient(135deg, #0891b2, #0e7490)" }}
-                        >
-                            {initials || "S"}
-                        </div>
+                        <AuthenticatedAvatar
+                            fileId={user.profileImageFileId}
+                            initials={initials || "S"}
+                            size={110}
+                            alt={fullName || "User"}
+                            style={{ border: "4px solid #fff", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+                        />
 
                         <div>
                             <h2 style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--gray-900)" }}>{fullName}</h2>
                             <p style={{ color: "var(--gray-500)", fontSize: "0.95rem", marginTop: "0.2rem" }}>{profile.grade} - Section {profile.section}</p>
-                            <p style={{ color: "var(--gray-400)", fontSize: "0.9rem", marginTop: "0.2rem" }}>{profile.cityState}, {profile.country}</p>
+                            <p style={{ color: "var(--gray-400)", fontSize: "0.9rem", marginTop: "0.2rem" }}>{profile.cityState}{profile.cityState && profile.country ? ", " : ""}{profile.country}</p>
                         </div>
                     </div>
 
@@ -195,17 +216,17 @@ export default function StudentProfilePage() {
                             {quickStats.map((item) => (
                                 <div key={item.label} style={{ padding: "0.75rem 0.85rem", border: "1px solid var(--gray-200)", background: "#fff", borderRadius: "var(--radius-md)" }}>
                                     <div style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.04em", color: "var(--gray-400)", textTransform: "uppercase" }}>{item.label}</div>
-                                    <div style={{ marginTop: "0.35rem", fontSize: "0.9rem", fontWeight: 600, color: "var(--gray-800)" }}>{item.value}</div>
+                                    <div style={{ marginTop: "0.35rem", fontSize: "0.9rem", fontWeight: 600, color: "var(--gray-800)" }}>{item.value || "—"}</div>
                                 </div>
                             ))}
                         </div>
 
                         {isEditing && (
                             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                                <button className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()}>
-                                    Upload Photo
+                                <button className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()} disabled={avatarUploading}>
+                                    {avatarUploading ? "Uploading..." : "Upload Photo"}
                                 </button>
-                                <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} />
+                                <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleAvatarUpload} />
                             </div>
                         )}
                     </div>
@@ -230,12 +251,12 @@ export default function StudentProfilePage() {
                         </div>
                     ) : (
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.85rem" }}>
-                            <EditableField label="First Name" value={draft.firstName} onChange={(value) => setDraft((prev) => ({ ...prev, firstName: value }))} placeholder="First name" />
-                            <EditableField label="Last Name" value={draft.lastName} onChange={(value) => setDraft((prev) => ({ ...prev, lastName: value }))} placeholder="Last name" />
-                            <EditableField label="Email Address" type="email" value={draft.email} onChange={(value) => setDraft((prev) => ({ ...prev, email: value }))} placeholder="student@school.edu" />
-                            <EditableField label="Phone no" value={draft.phone} onChange={(value) => setDraft((prev) => ({ ...prev, phone: value }))} placeholder="+251 9XX XXX XXX" />
-                            <EditableField label="Date of Birth" type="date" value={draft.dateOfBirth} onChange={(value) => setDraft((prev) => ({ ...prev, dateOfBirth: value }))} />
-                            <EditableField label="Guardian" value={draft.guardian} onChange={(value) => setDraft((prev) => ({ ...prev, guardian: value }))} placeholder="Guardian name" />
+                            <EditableField label="First Name" value={draft.firstName} onChange={(value) => setDraft((prev) => ({ ...prev, firstName: value }))} placeholder="First name" disabled={saving} />
+                            <EditableField label="Last Name" value={draft.lastName} onChange={(value) => setDraft((prev) => ({ ...prev, lastName: value }))} placeholder="Last name" disabled={saving} />
+                            <EditableField label="Email Address" type="email" value={draft.email} onChange={(value) => setDraft((prev) => ({ ...prev, email: value }))} placeholder="student@school.edu" disabled />
+                            <EditableField label="Phone no" value={draft.phone} onChange={(value) => setDraft((prev) => ({ ...prev, phone: value }))} placeholder="+251 9XX XXX XXX" disabled={saving} />
+                            <EditableField label="Date of Birth" type="date" value={draft.dateOfBirth} onChange={(value) => setDraft((prev) => ({ ...prev, dateOfBirth: value }))} disabled={saving} />
+                            <EditableField label="Guardian" value={draft.guardian} onChange={(value) => setDraft((prev) => ({ ...prev, guardian: value }))} placeholder="Guardian name" disabled={saving} />
                         </div>
                     )}
                 </div>
@@ -254,9 +275,9 @@ export default function StudentProfilePage() {
                         </div>
                     ) : (
                         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "0.85rem" }}>
-                            <EditableField label="Country" value={draft.country} onChange={(value) => setDraft((prev) => ({ ...prev, country: value }))} placeholder="Country" />
-                            <EditableField label="City/State" value={draft.cityState} onChange={(value) => setDraft((prev) => ({ ...prev, cityState: value }))} placeholder="City or State" />
-                            <EditableField label="Postal Code" value={draft.postalCode} onChange={(value) => setDraft((prev) => ({ ...prev, postalCode: value }))} placeholder="Postal code" />
+                            <EditableField label="Country" value={draft.country} onChange={(value) => setDraft((prev) => ({ ...prev, country: value }))} placeholder="Country" disabled={saving} />
+                            <EditableField label="City/State" value={draft.cityState} onChange={(value) => setDraft((prev) => ({ ...prev, cityState: value }))} placeholder="City or State" disabled={saving} />
+                            <EditableField label="Postal Code" value={draft.postalCode} onChange={(value) => setDraft((prev) => ({ ...prev, postalCode: value }))} placeholder="Postal code" disabled={saving} />
                         </div>
                     )}
                 </div>

@@ -232,7 +232,7 @@ function buildEmailHtml(payload: RegistrationEmailPayload): string {
           <!-- Login Button -->
           <tr>
             <td style="padding:28px 40px 0;text-align:center;">
-              <a href="http://localhost:3000/${payload.role}/login"
+              <a href="${(process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "")}/${payload.role}/login"
                  style="display:inline-block;background:linear-gradient(135deg,${primary},${primary}cc);color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 40px;border-radius:10px;letter-spacing:0.3px;">
                 Log In to Your Account →
               </a>

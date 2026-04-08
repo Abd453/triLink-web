@@ -6,6 +6,7 @@ import { getUser, patchUser, uploadProfileImage, type PublicUser } from "@/lib/a
 import { authFetch, getStoredUser, setStoredUser } from "@/lib/auth";
 import { apiPath, getApiBase } from "@/lib/api";
 import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
+import { useToastStore } from "@/store/toastStore";
 
 function roleLabel(role: string): string {
   switch (role) {
@@ -29,7 +30,7 @@ export default function AdminProfile() {
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [err, setErr] = useState<string | null>(null);
-  const [ok, setOk] = useState<string | null>(null);
+  const { showToast } = useToastStore();
   const [loading, setLoading] = useState(true);
   const [avatarUploading, setAvatarUploading] = useState(false);
 
@@ -37,7 +38,6 @@ export default function AdminProfile() {
   const [newPwd, setNewPwd] = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
   const [pwdLoading, setPwdLoading] = useState(false);
-  const [pwdMsg, setPwdMsg] = useState<string | null>(null);
   const [pwdErr, setPwdErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,12 +61,9 @@ export default function AdminProfile() {
     })();
   }, [stored?.id]);
 
-
-
   const saveProfile = async () => {
     if (!stored?.id) return;
     setErr(null);
-    setOk(null);
     try {
       const row = await patchUser(stored.id, {
         firstName: firstName.trim(),
@@ -83,8 +80,7 @@ export default function AdminProfile() {
           lastName: row.lastName,
         });
       }
-      setOk("Profile updated.");
-      setTimeout(() => setOk(null), 2500);
+      showToast("Profile updated successfully", "success", true);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
     }
@@ -93,7 +89,6 @@ export default function AdminProfile() {
   const changePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPwdErr(null);
-    setPwdMsg(null);
     if (!curPwd) {
       setPwdErr("Enter your current password.");
       return;
@@ -119,11 +114,11 @@ export default function AdminProfile() {
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(typeof data.message === "string" ? data.message : "Could not change password");
-      setPwdMsg("Password updated.");
+      
+      showToast("Password updated successfully", "success", true);
       setCurPwd("");
       setNewPwd("");
       setConfirmPwd("");
-      setTimeout(() => setPwdMsg(null), 3000);
     } catch (e) {
       setPwdErr(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -136,7 +131,6 @@ export default function AdminProfile() {
     const file = e.target.files?.[0];
     if (!file) return;
     setErr(null);
-    setOk(null);
     if (!file.type.startsWith("image/")) {
       setErr("Please choose an image file.");
       return;
@@ -158,8 +152,7 @@ export default function AdminProfile() {
           profileImageFileId: uploaded.id,
         });
       }
-      setOk("Profile photo updated.");
-      setTimeout(() => setOk(null), 2500);
+      showToast("Profile photo updated successfully", "success", true);
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : "Image upload failed");
     } finally {
@@ -203,7 +196,6 @@ export default function AdminProfile() {
         </button>
       </div>
       {err && <div className="card" style={{ color: "var(--danger)", marginBottom: "1rem" }}>{err}</div>}
-      {ok && <div className="card" style={{ color: "var(--success)", marginBottom: "1rem" }}>{ok}</div>}
 
       <div className="content-grid" style={{ alignItems: "start" }}>
         <div
@@ -221,16 +213,18 @@ export default function AdminProfile() {
             alt="Profile"
             style={{ margin: "0 auto 1rem", border: "3px solid #ddd6fe" }}
           />
-          <label style={{ display: "inline-flex", margin: "0 auto 0.75rem", cursor: avatarUploading ? "not-allowed" : "pointer" }}>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={onAvatarSelected}
-              disabled={avatarUploading}
-              style={{ display: "none" }}
-            />
-            <span className="btn btn-secondary btn-sm">{avatarUploading ? "Uploading…" : "Upload photo"}</span>
-          </label>
+          <div style={{ textAlign: "center" }}>
+            <label style={{ display: "inline-flex", margin: "0 auto 0.75rem", cursor: avatarUploading ? "not-allowed" : "pointer" }}>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={onAvatarSelected}
+                disabled={avatarUploading}
+                style={{ display: "none" }}
+              />
+              <span className="btn btn-secondary btn-sm">{avatarUploading ? "Uploading…" : "Upload photo"}</span>
+            </label>
+          </div>
           <h2 style={{ fontSize: "1.35rem", fontWeight: 800, textAlign: "center", margin: "0 0 0.35rem" }}>
             {firstName} {lastName}
           </h2>
@@ -291,7 +285,6 @@ export default function AdminProfile() {
             </h3>
             <p style={{ fontSize: "0.875rem", color: "var(--gray-600)", marginBottom: "1rem" }}>Use a strong password you do not use on other sites.</p>
             {pwdErr && <p style={{ color: "var(--danger)", fontSize: "0.875rem", marginBottom: "0.75rem" }}>{pwdErr}</p>}
-            {pwdMsg && <p style={{ color: "var(--success)", fontSize: "0.875rem", marginBottom: "0.75rem" }}>{pwdMsg}</p>}
             <form onSubmit={changePassword} style={{ display: "grid", gap: "0.75rem", maxWidth: 420 }}>
               <label>
                 Current password

@@ -8,6 +8,7 @@ import { X } from "lucide-react";
 import { getActiveAcademicYear, listAcademicYears } from "@/lib/admin-api";
 import { getFileUrl, getApiBase } from "@/lib/api";
 import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
+import { useToastStore } from "@/store/toastStore";
 import RealtimeToast from "@/components/RealtimeToast";
 import Select from "@/components/Select";
 import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
@@ -103,6 +104,7 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
     
     // Real-time notifications
     const { toast, setToast } = useRealtimeNotifications(userId, userName);
+    const { toast: manualToast, hideToast } = useToastStore();
 
     useEffect(() => {
         const q = searchText.trim().toLowerCase();
@@ -393,7 +395,13 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
                 {userBlock}
             </div>
 
-            <RealtimeToast toast={toast} onClose={() => setToast(null)} />
+            <RealtimeToast 
+                toast={toast || manualToast} 
+                onClose={() => {
+                    if (toast) setToast(null);
+                    if (manualToast) hideToast();
+                }} 
+            />
         </header>
     );
 }

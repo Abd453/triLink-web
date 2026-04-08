@@ -17,6 +17,17 @@ export interface CurrentUser {
   childName?: string;
   relationship?: string;
   profileImageFileId?: string;
+  phone?: string;
+  homeroomClass?: string;
+  experience?: string;
+  country?: string;
+  cityState?: string;
+  postalCode?: string;
+  officeRoom?: string;
+  dateOfBirth?: string;
+  studentId?: string;
+  guardian?: string;
+  occupation?: string;
 }
 
 const FALLBACKS: Record<string, CurrentUser> = {
@@ -60,6 +71,17 @@ function fromStored(u: StoredUser): CurrentUser {
     childName: u.childName,
     relationship: u.relationship,
     profileImageFileId: u.profileImageFileId,
+    phone: u.phone,
+    homeroomClass: u.homeroomClass,
+    experience: u.experience,
+    country: u.country,
+    cityState: u.cityState,
+    postalCode: u.postalCode,
+    officeRoom: u.officeRoom,
+    dateOfBirth: u.dateOfBirth,
+    studentId: u.studentId,
+    guardian: u.guardian,
+    occupation: u.occupation,
   };
 }
 
