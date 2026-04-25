@@ -19,6 +19,7 @@ export default function ExamMonitor({ exam, onClose }: ExamMonitorProps) {
     const [error, setError] = useState<string | null>(null);
     const [showWarnModal, setShowWarnModal] = useState<{ attemptId: string; studentName: string } | null>(null);
     const [warnMsg, setWarnMsg] = useState("Please focus on your exam and avoid switching tabs.");
+    const [actionError, setActionError] = useState<string | null>(null);
     const [activity, setActivity] = useState<Array<{ id: string; text: string; at: string }>>([]);
     const [rtStatus, setRtStatus] = useState<string>("idle");
     const studentsRef = useRef<ExamRosterStudent[]>([]);
@@ -113,6 +114,7 @@ export default function ExamMonitor({ exam, onClose }: ExamMonitorProps) {
 
     const handleControl = async (attemptId: string, action: "force_submit" | "warn" | "allow_rejoin") => {
         if (!attemptId) return;
+        setActionError(null);
         try {
             await controlExamAttempt(attemptId, action, action === "warn" ? warnMsg : undefined);
             if (action === "warn") {
@@ -123,7 +125,7 @@ export default function ExamMonitor({ exam, onClose }: ExamMonitorProps) {
             }
             fetchRoster(); // Refresh status
         } catch (err) {
-            alert(err instanceof Error ? err.message : "Control action failed");
+            setActionError(err instanceof Error ? err.message : "Control action failed");
         }
     };
 
@@ -137,6 +139,25 @@ export default function ExamMonitor({ exam, onClose }: ExamMonitorProps) {
             backdropFilter: "blur(4px)", display: "flex", alignItems: "center", 
             justifyContent: "center", zIndex: 1000, padding: "2rem"
         }}>
+            {actionError && (
+                <div role="alert" style={{
+                    position: "fixed",
+                    top: "1.25rem",
+                    right: "1.25rem",
+                    zIndex: 1200,
+                    maxWidth: 360,
+                    borderRadius: 16,
+                    background: "#fff",
+                    color: "var(--danger)",
+                    border: "1px solid var(--danger-light)",
+                    boxShadow: "0 24px 70px rgba(15, 23, 42, 0.18)",
+                    padding: "0.85rem 1rem",
+                    fontSize: "0.86rem",
+                    fontWeight: 700,
+                }}>
+                    {actionError}
+                </div>
+            )}
             <div style={{
                 background: "#fff", borderRadius: "24px", width: "100%", 
                 maxWidth: "1000px", height: "85vh", display: "flex", 

@@ -96,10 +96,10 @@ export default function ParentDashboardPage() {
                             tone={(dash?.unreadNotifications ?? 0) > 0 ? "warning" : "info"}
                         />
                         <StatTile
-                            label="Upcoming events"
-                            value="—"
+                            label="Family status"
+                            value={(dash?.linkedChildren ?? 0) > 0 ? "Active" : "Pending"}
                             icon={<CalendarDays size={16} />}
-                            tone="purple"
+                            tone={(dash?.linkedChildren ?? 0) > 0 ? "success" : "purple"}
                         />
                     </>
                 )}

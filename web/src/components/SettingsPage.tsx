@@ -119,19 +119,27 @@ export default function SettingsPage() {
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                         <button
                             className="btn btn-outline"
+                            type="button"
+                            disabled
+                            title="Activity log is handled by the administrator workspace."
                             style={{ fontSize: "0.875rem" }}
                         >
                             View Activity Log
                         </button>
                         <button
                             className="btn btn-outline"
+                            type="button"
+                            disabled
+                            title="Session management is not available for this account yet."
                             style={{ fontSize: "0.875rem" }}
                         >
                             Active Sessions
                         </button>
                         <button
                             className="btn btn-outline"
-                            onClick={() => alert("Download account data")}
+                            type="button"
+                            disabled
+                            title="Data export requires backend support before it can be enabled."
                             style={{ fontSize: "0.875rem" }}
                         >
                             Download Data
