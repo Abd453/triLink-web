@@ -23,7 +23,8 @@ export function useRealtimeNotifications(userId?: string, userName?: string) {
         chatRealtime.connect({ id: userId, name: userName || "User" });
 
         const unsubMsg = chatRealtime.on("message:new", (payload) => {
-            showToast(`New message in chat: "${payload.message.text.slice(0, 30)}${payload.message.text.length > 30 ? '...' : ''}"`, 'chat');
+            const text = payload.message.text ?? "";
+            showToast(`New message in chat: "${text.slice(0, 30)}${text.length > 30 ? '...' : ''}"`, 'chat');
         });
 
         const unsubNotif = chatRealtime.on("notification:new", (payload) => {
@@ -34,8 +35,10 @@ export function useRealtimeNotifications(userId?: string, userName?: string) {
             showToast(`New Announcement: ${payload.title || 'See Dashboard'}`, 'announcement');
         });
 
-        const unsubError = chatRealtime.on("connection:error", () => {
-            /* realtime is best-effort; UI continues to work via polling/refresh */
+        const unsubError = chatRealtime.on("connection:error", (payload) => {
+             // Silence connection errors from auto-toasts to avoid annoyance, 
+             // but could be used for debugging.
+             console.error("Realtime connection error:", payload.message);
         });
 
         return () => {

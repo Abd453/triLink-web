@@ -3,5 +3,5 @@
 import RestChat from "@/components/RestChat";
 
 export default function TeacherChat() {
-  return <RestChat />;
+  return <RestChat role="teacher" />;
 }
