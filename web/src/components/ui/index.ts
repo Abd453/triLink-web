@@ -1,12 +1,16 @@
-export { Button } from "./Button";
-export { Card, CardHeader, CardSection } from "./Card";
-export { EmptyState } from "./EmptyState";
-export { Skeleton, SkeletonText, SkeletonCard } from "./Skeleton";
-export { Modal } from "./Modal";
-export { Tabs } from "./Tabs";
-export type { Tab } from "./Tabs";
-export { Badge } from "./Badge";
+// Shared UI primitives for the TriLink web app.
+// Import via: import { PageHeader, PageSkeleton, EmptyState, StatCard, Section } from "@/components/ui";
+
 export { PageHeader } from "./PageHeader";
-export { Input, Textarea } from "./Input";
-export { Avatar } from "./Avatar";
-export { StatTile } from "./StatTile";
+export {
+  Skeleton,
+  CardSkeleton,
+  StatGridSkeleton,
+  TableSkeleton,
+  ListSkeleton,
+  PageHeaderSkeleton,
+  PageSkeleton,
+} from "./Skeleton";
+export { EmptyState } from "./EmptyState";
+export { StatCard } from "./StatCard";
+export { Section } from "./Section";
