@@ -16,8 +16,12 @@ import {
     type GradeEntry,
 } from "@/lib/admin-api";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import TermSelector from "@/components/TermSelector";
+import { useTermStore } from "@/store/termStore";
 import { filterOfferingsBySubject } from "@/lib/teacher-utils";
 import { cachedFetch } from "@/lib/cache";
+import { PageHeader, PageHeaderSkeleton, TableSkeleton, EmptyState } from "@/components/ui";
+import { Users, AlertCircle } from "lucide-react";
 
 type StudentRow = {
     id: string;
@@ -39,16 +43,8 @@ function offeringLabel(o: ClassOffering) {
 function TeacherStudentsSkeleton() {
     return (
         <div className="page-wrapper">
-            <div className="page-header admin-dash-skeleton-block">
-                <div style={{ width: "100%", maxWidth: 380 }}>
-                    <div className="admin-skeleton shimmer" style={{ width: 120, height: 12, marginBottom: 12 }} />
-                    <div className="admin-skeleton shimmer" style={{ width: "55%", height: 28, marginBottom: 8 }} />
-                    <div className="admin-skeleton shimmer" style={{ width: "70%", height: 12 }} />
-                </div>
-            </div>
-            <div className="card admin-dash-skeleton-block">
-                <div className="admin-skeleton shimmer" style={{ width: "100%", height: 320, borderRadius: 12 }} />
-            </div>
+            <PageHeaderSkeleton withActions={false} />
+            <TableSkeleton rows={8} columns={5} />
         </div>
     );
 }
@@ -67,6 +63,9 @@ export default function TeacherStudents() {
     const [detailTab, setDetailTab] = useState<"exams" | "grades">("grades");
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
+    const [activeYearId, setActiveYearId] = useState<string | null>(null);
+
+    const { selectedTermId } = useTermStore();
 
     const loadOfferings = useCallback(async () => {
         if (!isClient) return;
@@ -75,6 +74,7 @@ export default function TeacherStudents() {
         try {
             const year = await cachedFetch("active-year", () => getActiveAcademicYear(), 120_000);
             if (!year) { setErr("No active academic year"); return; }
+            setActiveYearId(year.id);
             const mine = await cachedFetch(`offerings:${year.id}`, () => listMyClassOfferings(year.id), 60_000);
             const scoped = filterOfferingsBySubject(mine, user?.subject);
             setOfferings(scoped);
@@ -84,11 +84,11 @@ export default function TeacherStudents() {
         } finally {
             setLoading(false);
         }
-    }, [isClient, user?.subject]);
+    }, [isClient, user?.subject, selectedTermId]);
 
     useEffect(() => {
         loadOfferings();
-    }, [loadOfferings]);
+    }, [loadOfferings, selectedTermId]);
 
     // Load students for selected offering
     useEffect(() => {
@@ -106,7 +106,7 @@ export default function TeacherStudents() {
                 const [enrollments, allUsers, exams, attendanceReport] = await Promise.all([
                     cachedFetch(`enroll:${selectedOffering}:${year.id}`, () => listEnrollments({ classOfferingId: selectedOffering, academicYearId: year.id }), 60_000),
                     cachedFetch("students:all", () => listUsers("student"), 120_000),
-                    cachedFetch(`exams:${year.id}`, () => listExams(year.id), 30_000),
+                    cachedFetch(`exams:${year.id}:${selectedTermId ?? 'all'}`, () => listExams(year.id, selectedTermId ?? undefined), 30_000),
                     cachedFetch(`attendance:${selectedOffering}`, () => classAttendanceReport(selectedOffering), 30_000).catch(() => null),
                 ]);
                 if (cancelled) return;
@@ -184,6 +184,18 @@ export default function TeacherStudents() {
 
     const selected = useMemo(() => rankedStudents.find(s => s.id === selectedStudentId), [rankedStudents, selectedStudentId]);
 
+    // Re-fetch grades when the active term changes (or when a student is first selected)
+    useEffect(() => {
+        if (!selectedStudentId) return;
+        let cancelled = false;
+        setGradesLoading(true);
+        listGradesForStudent(selectedStudentId, selectedTermId ?? undefined)
+            .then(g => { if (!cancelled) setStudentGrades(g); })
+            .catch(() => { if (!cancelled) setStudentGrades([]); })
+            .finally(() => { if (!cancelled) setGradesLoading(false); });
+        return () => { cancelled = true; };
+    }, [selectedStudentId, selectedTermId]);
+
     if (!isClient || loading) {
         return <TeacherStudentsSkeleton />;
     }
@@ -191,20 +203,22 @@ export default function TeacherStudents() {
     if (err) {
         return (
             <div className="page-wrapper">
-                <div className="page-header"><div><h1 className="page-title">Students</h1></div></div>
-                <div className="card" style={{ color: "var(--danger)", padding: "2rem" }}>{err}</div>
+                <PageHeader kicker="Roster" title="Students" subtitle="Couldn't load data." icon={<Users size={22} />} variant="light" />
+                <EmptyState icon={<AlertCircle size={26} />} title="Couldn't load students" description={err} action={<button className="btn btn-primary" onClick={() => loadOfferings()} style={{ borderRadius: 12 }}>Try again</button>} />
             </div>
         );
     }
 
     return (
         <div className="page-wrapper">
-            <div className="page-header" style={{ marginBottom: "0.75rem" }}>
-                <div>
-                    <h1 className="page-title">Students</h1>
-                    <p className="page-subtitle">Student analytics per class</p>
-                </div>
-            </div>
+            <PageHeader
+                kicker="Roster"
+                title="Students"
+                subtitle="Student analytics and performance per class."
+                icon={<Users size={22} />}
+                variant="light"
+                actions={<TermSelector academicYearId={activeYearId} onTermChange={() => undefined} />}
+            />
 
             {/* Class Tabs (Buttons instead of dropdown) */}
             <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", flexWrap: "wrap", alignItems: "center" }}>
@@ -226,9 +240,12 @@ export default function TeacherStudents() {
             </div>
 
             {rankedStudents.length === 0 && !loading ? (
-                <div className="card" style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--gray-400)" }}>
-                    <div style={{ fontWeight: 600, fontSize: "1rem", color: "var(--gray-500)", marginBottom: "0.25rem" }}>No students enrolled</div>
-                    <div style={{ fontSize: "0.85rem" }}>Students will appear once enrolled by the admin.</div>
+                <div style={{ background: "#fff", borderRadius: 20, padding: "4rem 2rem", textAlign: "center", border: "1.5px solid var(--gray-100)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+                    <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#f0fdf4", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: "1rem", color: "var(--gray-700)", marginBottom: "0.25rem" }}>No students enrolled</div>
+                    <div style={{ fontSize: "0.875rem", color: "var(--gray-400)" }}>Students will appear once enrolled by the admin.</div>
                 </div>
             ) : (
                 <div style={{ display: "grid", gridTemplateColumns: selected ? "minmax(0,1fr) minmax(0,1.5fr)" : "1fr", gap: "1.25rem" }}>
@@ -241,11 +258,6 @@ export default function TeacherStudents() {
                                         <tr key={s.id} onClick={() => {
                                             setSelectedStudentId(s.id);
                                             setDetailTab("grades");
-                                            setGradesLoading(true);
-                                            listGradesForStudent(s.id)
-                                                .then(g => setStudentGrades(g))
-                                                .catch(() => setStudentGrades([]))
-                                                .finally(() => setGradesLoading(false));
                                         }} style={{ cursor: "pointer", background: selectedStudentId === s.id ? "var(--primary-50)" : undefined }}>
                                             <td style={{ fontWeight: 600 }}>
                                                 {s.name}<br />
@@ -268,28 +280,31 @@ export default function TeacherStudents() {
                                         {selected && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                             {/* ── Student header ── */}
-                            <div className="card">
-                                <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1rem", flexWrap: "wrap" }}>
-                                    <div className="avatar avatar-initials avatar-lg" style={{ fontSize: "1rem", flexShrink: 0 }}>
+                            <div style={{ background: "#fff", borderRadius: 16, border: "1.5px solid var(--gray-100)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", padding: "1.5rem" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
+                                    <div style={{ width: 56, height: 56, borderRadius: 12, background: "var(--primary-100)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "1.1rem", color: "var(--primary-600)", flexShrink: 0 }}>
                                         {selected.name.split(" ").map((n: string) => n[0]).join("")}
                                     </div>
-                                    <div style={{ minWidth: 0 }}>
-                                        <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selected.name}</h3>
-                                        <p style={{ fontSize: "0.78rem", color: "var(--gray-500)", margin: "0.1rem 0 0" }}>{selected.offeringLabel} · Rank #{selected.rank}</p>
-                                        <p style={{ fontSize: "0.72rem", color: "var(--gray-400)", margin: 0 }}>{selected.email}</p>
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                        <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--gray-900)" }}>{selected.name}</h3>
+                                        <p style={{ fontSize: "0.78rem", color: "var(--gray-600)", margin: "0.1rem 0 0" }}>{selected.offeringLabel}</p>
+                                        <p style={{ fontSize: "0.72rem", color: "var(--gray-500)", margin: "0.1rem 0 0" }}>{selected.email}</p>
+                                    </div>
+                                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                        <div style={{ fontWeight: 800, fontSize: "1.25rem", color: "var(--primary-600)" }}>#{selected.rank}</div>
+                                        <div style={{ fontSize: "0.7rem", color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Rank</div>
                                     </div>
                                 </div>
 
                                 {/* Stats row */}
-                                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "0.5rem", marginBottom: "1rem" }}>
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: "0.75rem" }}>
                                     {[
                                         { label: "Avg Score", value: selected.avg > 0 ? `${selected.avg}%` : "—", color: selected.avg >= 80 ? "var(--success)" : selected.avg >= 60 ? "var(--primary-600)" : "var(--warning)" },
                                         { label: "Attendance", value: `${selected.attendance}%`, color: selected.attendance >= 80 ? "var(--success)" : selected.attendance >= 60 ? "var(--warning)" : "var(--danger)" },
-                                        { label: "Rank", value: `#${selected.rank}`, color: "var(--gray-700)" },
                                     ].map(stat => (
-                                        <div key={stat.label} style={{ background: "var(--gray-50)", borderRadius: 8, padding: "0.6rem 0.75rem", textAlign: "center" }}>
-                                            <div style={{ fontSize: "0.68rem", color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.2rem" }}>{stat.label}</div>
-                                            <div style={{ fontWeight: 800, fontSize: "1rem", color: stat.color }}>{stat.value}</div>
+                                        <div key={stat.label} style={{ background: "var(--gray-50)", borderRadius: 10, border: "1px solid var(--gray-100)", padding: "0.75rem", textAlign: "center" }}>
+                                            <div style={{ fontSize: "0.7rem", color: "var(--gray-600)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.3rem", fontWeight: 600 }}>{stat.label}</div>
+                                            <div style={{ fontWeight: 800, fontSize: "1.1rem", color: stat.color }}>{stat.value}</div>
                                         </div>
                                     ))}
                                 </div>
