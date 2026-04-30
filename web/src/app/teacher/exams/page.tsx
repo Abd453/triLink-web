@@ -4,6 +4,7 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 import RealtimeToast from "@/components/RealtimeToast";
 import TablePagination from "@/components/TablePagination";
+import TermSelector from "@/components/TermSelector";
 import { type ToastState } from "@/hooks/useRealtimeNotifications";
 
 import {
@@ -16,7 +17,6 @@ import {
     addQuestionsToExam,
     updateExamMaxPoints,
     listQuestions,
-    listQuestionsFiltered,
     listExamAttempts,
     gradeAttempt as apiGradeAttempt,
     releaseAttempt as apiReleaseAttempt,
@@ -33,7 +33,6 @@ import { createPortal } from "react-dom";
 import ExamMonitor from "@/components/ExamMonitor";
 import Select from "@/components/Select";
 import { refreshStoredProfile } from "@/lib/auth";
-import { cachedFetch, invalidateCachePrefix } from "@/lib/cache";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 
 
@@ -68,21 +67,48 @@ function preprocess(tex: string): string {
 
 /* ─── Render LaTeX ─── */
 function offeringLabel(o: ClassOffering) {
-    const grade = (o as any).gradeName || "";
-    const subj = o.subjectName || (o as any).subject?.name || "";
-    const sec = o.sectionName || (o as any).section?.name || "";
-    // Show "Grade 9 Biology - A" format
-    if (grade && subj && sec) return `${grade} ${subj} - ${sec}`;
-    if (grade && subj) return `${grade} ${subj}`;
-    if (subj && sec) return `${subj} - ${sec}`;
-    return o.displayName || o.name?.trim() || "Untitled Class";
+    return classOfferingLabel(o);
 }
 
 function normSub(s: string) {
     return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function gradeLabelFromOffering(o: ClassOffering) {
+    if (o.gradeName?.trim()) return o.gradeName.trim();
+    const text = `${o.displayName || ""} ${o.name || ""}`;
+    const match = text.match(/\b(?:grade\s*)?(\d{1,2})\b/i) ?? text.match(/\bG(\d{1,2})\b/i);
+    return match ? `Grade ${match[1]}` : "";
+}
+
+function sectionLabelFromOffering(o: ClassOffering) {
+    if (o.sectionName?.trim()) return o.sectionName.trim();
+    const text = `${o.displayName || ""} ${o.name || ""}`;
+    const match = text.match(/\b(?:grade\s*\d{1,2}\s*)?[-\/]?\s*([A-Z])\b/i) ?? text.match(/\bG\d{1,2}([A-Z])\b/i);
+    return match ? match[1].toUpperCase() : "";
+}
+
+function subjectLabelFromOffering(o: ClassOffering) {
+    return o.subjectName || (o as { subject?: { name?: string } }).subject?.name || "";
+}
+
+function classOfferingLabel(o?: ClassOffering | null) {
+    if (!o) return "";
+    const grade = gradeLabelFromOffering(o);
+    const section = sectionLabelFromOffering(o);
+    const subject = subjectLabelFromOffering(o);
+    if (grade && section && subject) return `${grade} - ${section} | ${subject}`;
+    if (grade && subject) return `${grade} | ${subject}`;
+    if (grade && section) return `${grade} - ${section}`;
+    if (section && subject) return `${section} | ${subject}`;
+    if (subject) return subject;
+    return o.displayName || o.name?.trim() || "Untitled Class";
+}
+
 import { filterOfferingsBySubject, subjectNameMatchesProfile } from "@/lib/teacher-utils";
+import { useTermStore } from "@/store/termStore";
+import { PageHeader, PageHeaderSkeleton, CardSkeleton } from "@/components/ui";
+import { FileText } from "lucide-react";
 
 type QuestionListRow = { subjectId: string; subject?: { name?: string } };
 
@@ -104,23 +130,11 @@ function questionInTeacherSubjectBank(
 
 function TeacherExamsSkeleton() {
     return (
-        <div className="page-wrapper teacher-exams-page">
-            <div className="page-header admin-dash-skeleton-block">
-                <div style={{ width: "100%", maxWidth: 380 }}>
-                    <div className="admin-skeleton shimmer" style={{ width: 200, height: 12, marginBottom: 12 }} />
-                    <div className="admin-skeleton shimmer" style={{ width: "72%", height: 26, marginBottom: 8 }} />
-                    <div className="admin-skeleton shimmer" style={{ width: "58%", height: 12 }} />
-                </div>
-            </div>
-            <div className="admin-skeleton shimmer" style={{ width: 300, height: 38, borderRadius: 8, marginBottom: "1.25rem" }} />
+        <div className="page-wrapper">
+            <PageHeaderSkeleton />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: "1.25rem", alignItems: "start" }}>
-                <div className="card admin-dash-skeleton-block" style={{ padding: "1.25rem" }}>
-                    <div className="admin-skeleton shimmer" style={{ width: 100, height: 14, marginBottom: 14 }} />
-                    <div className="admin-skeleton shimmer" style={{ width: "100%", height: 140, borderRadius: 12 }} />
-                </div>
-                <div className="card admin-dash-skeleton-block" style={{ padding: "1.25rem" }}>
-                    <div className="admin-skeleton shimmer" style={{ width: "100%", height: 220, borderRadius: 12 }} />
-                </div>
+                <CardSkeleton lines={5} />
+                <CardSkeleton lines={4} />
             </div>
         </div>
     );
@@ -521,8 +535,6 @@ interface Question {
     type: "mcq" | "truefalse" | "fillin";
     bankId?: string;
     edited?: boolean;
-    imageUrl?: string;   // optional image attached to the question
-    imageFileId?: string;
 }
 const blankQ = (): Question => ({ id: Date.now() + Math.random(), text: "", options: { A: "", B: "", C: "", D: "" }, correct: "", points: 1, type: "mcq", edited: false });
 
@@ -669,104 +681,10 @@ function LatexField({ label, value, onChange, rows = 3, placeholder, mini = fals
     );
 }
 
-
-// ── Exam Result Accordion ─────────────────────────────────────────────────────
-function ExamResultAccordion({
-    examTitle, maxPts, submitted, avgRaw, rows, defaultOpen, onViewResponses,
-}: {
-    examTitle: string;
-    maxPts: number;
-    submitted: number;
-    avgRaw: number;
-    rows: { name: string; score: number; sent: boolean; _attemptId?: string; [k: string]: any }[];
-    defaultOpen: boolean;
-    onViewResponses: (r: any) => void;
-}) {
-    const [open, setOpen] = useState(defaultOpen);
-    const ROW_HEIGHT = 44; // px per row
-    const MAX_VISIBLE = 10;
-    const listHeight = Math.min(rows.length, MAX_VISIBLE) * ROW_HEIGHT;
-
-    return (
-        <div style={{ borderBottom: "1px solid var(--gray-100)" }}>
-            {/* Accordion header */}
-            <button
-                onClick={() => setOpen(o => !o)}
-                style={{
-                    width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "0.85rem 1.25rem", background: open ? "#fff" : "var(--gray-50)",
-                    border: "none", cursor: "pointer", textAlign: "left", gap: "0.5rem",
-                    transition: "background 0.15s",
-                }}
-            >
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", flex: 1, minWidth: 0 }}>
-                    <span style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--gray-900)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{examTitle}</span>
-                    <span style={{ fontSize: "0.75rem", color: "var(--gray-500)", flexShrink: 0 }}>{submitted} submitted</span>
-                    <span style={{ fontSize: "0.75rem", fontWeight: 700, color: avgRaw >= 80 ? "var(--success)" : avgRaw >= 60 ? "var(--primary-600)" : "var(--warning)", flexShrink: 0 }}>
-                        Avg {avgRaw}/{maxPts}
-                    </span>
-                </div>
-                <svg
-                    width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--gray-400)"
-                    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                    style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }}
-                >
-                    <polyline points="6 9 12 15 18 9" />
-                </svg>
-            </button>
-
-            {/* Accordion body */}
-            {open && (
-                <div style={{ overflowY: "auto", maxHeight: `${listHeight + 48}px` }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-                        <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
-                            <tr style={{ background: "var(--gray-50)" }}>
-                                <th style={{ padding: "0.55rem 1rem", textAlign: "left", fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)" }}>Student</th>
-                                <th style={{ padding: "0.55rem 0.75rem", textAlign: "center", fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 100 }}>Score</th>
-                                <th style={{ padding: "0.55rem 0.75rem", textAlign: "center", fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 90 }}>Status</th>
-                                <th style={{ padding: "0.55rem 0.75rem", textAlign: "center", fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 100 }}>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows.map((s, i) => {
-                                const pct = maxPts > 0 ? (s.score / maxPts) * 100 : 0;
-                                return (
-                                    <tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fafafa", borderBottom: "1px solid var(--gray-100)", height: ROW_HEIGHT }}>
-                                        <td style={{ padding: "0.45rem 1rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 180 }}>{s.name}</td>
-                                        <td style={{ padding: "0.45rem 0.75rem", textAlign: "center", fontWeight: 700, color: pct >= 80 ? "var(--success)" : pct >= 60 ? "var(--primary-600)" : "var(--warning)" }}>
-                                            {s.score}/{maxPts}
-                                        </td>
-                                        <td style={{ padding: "0.45rem 0.75rem", textAlign: "center" }}>
-                                            {s.sent
-                                                ? <span className="badge badge-success" style={{ fontSize: "0.7rem" }}>Released</span>
-                                                : <span className="badge badge-warning" style={{ fontSize: "0.7rem" }}>Pending</span>}
-                                        </td>
-                                        <td style={{ padding: "0.45rem 0.75rem", textAlign: "center" }}>
-                                            <button className="btn btn-outline btn-sm" style={{ fontSize: "0.75rem", padding: "0.2rem 0.5rem" }} onClick={() => onViewResponses(s)}>
-                                                View
-                                            </button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-        </div>
-    );
-}
-
 export default function TeacherExams() {
     const [isClient, setIsClient] = useState(false);
     const user = useCurrentUser("teacher");
-    
-    // Enforce subject from profile
-    useEffect(() => {
-        if (user?.subject) {
-            setSubject(user.subject);
-        }
-    }, [user?.subject]);
+    const { selectedTermId } = useTermStore();
     const [activeTab, setActiveTab] = useState<"create" | "bank" | "results">("create");
 
     // ── API-loaded data ──
@@ -774,16 +692,36 @@ export default function TeacherExams() {
     const [selectedOfferingIds, setSelectedOfferingIds] = useState<string[]>([]);
     const [bankPage, setBankPage] = useState(1);
     const [bankRows, setBankRows] = useState(10);
+    const [resultsPage, setResultsPage] = useState(1);
+    const [resultsRows, setResultsRows] = useState(10);
+    const [publishBusy, setPublishBusy] = useState(false);
+    const [scheduleBusy, setScheduleBusy] = useState(false);
+    const [saveBankBusy, setSaveBankBusy] = useState(false);
+    const [sendAllBusy, setSendAllBusy] = useState(false);
+    const [saveEvalBusy, setSaveEvalBusy] = useState(false);
+    const [sendingGradeId, setSendingGradeId] = useState<string | null>(null);
 
-    /** Classes shown in the quiz dropdown: only subjects that match the teacher's profile when set (e.g. English teacher ≠ Biology class). */
+    const subjectOptions = useMemo(() => {
+        const seen = new Set<string>();
+        return offerings
+            .map((o) => subjectLabelFromOffering(o).trim())
+            .filter(Boolean)
+            .filter((name) => {
+                const key = normSub(name);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .sort((a, b) => a.localeCompare(b));
+    }, [offerings]);
+
+    const [selectedSubject, setSelectedSubject] = useState("");
+
+    /** Classes shown in the quiz dropdown: filtered by the currently selected subject. */
     const offeringsForClassSelect = useMemo(() => {
-        const profile = user?.subject?.trim();
-        if (!profile) return offerings;
-        return offerings.filter((o) => {
-            const sn = o.subjectName || (o as { subject?: { name?: string } }).subject?.name || "";
-            return subjectNameMatchesProfile(sn, profile);
-        });
-    }, [offerings, user?.subject]);
+        if (!selectedSubject.trim()) return offerings;
+        return offerings.filter((o) => subjectNameMatchesProfile(subjectLabelFromOffering(o), selectedSubject));
+    }, [offerings, selectedSubject]);
     const [activeYearId, setActiveYearId] = useState("");
     const [publishedExams, setPublishedExams] = useState<ApiExam[]>([]);
     const [rosterByExam, setRosterByExam] = useState<Record<string, ExamRosterStudent[]>>({});
@@ -793,12 +731,27 @@ export default function TeacherExams() {
 
     // Quiz meta
     const [quizTitle, setQuizTitle] = useState("");
-    const classGroup = offerings.find(o => o.id === selectedOfferingIds[0])?.displayName ||
-                      offerings.find(o => o.id === selectedOfferingIds[0])?.name ||
-                      "Selected Class";
+    const classGroup = classOfferingLabel(offerings.find((o) => o.id === selectedOfferingIds[0])) || "Selected Class";
     const [subject, setSubject] = useState("");
     const [duration, setDuration] = useState("30");
     const [minStayMinutes, setMinStayMinutes] = useState("0");
+
+    useEffect(() => {
+        if (selectedSubject.trim()) return;
+        const initial = subjectOptions.includes(user?.subject?.trim() ?? "")
+            ? (user?.subject?.trim() ?? "")
+            : subjectOptions[0] ?? user?.subject?.trim() ?? "";
+        if (initial) {
+            setSelectedSubject(initial);
+            setSubject(initial);
+        }
+    }, [selectedSubject, subjectOptions, user?.subject]);
+
+    useEffect(() => {
+        if (selectedSubject.trim()) {
+            setSubject(selectedSubject);
+        }
+    }, [selectedSubject]);
 
     // Questions
     const [questions, setQuestions] = useState<Question[]>([blankQ()]);
@@ -810,13 +763,10 @@ export default function TeacherExams() {
     // Bank state
     const [bank, setBank] = useState<BankQ[]>([]);
     const [bankSearch, setBankSearch] = useState("");
-    const [bankClassFilter, setBankClassFilter] = useState<string>("");
-    const [bankTotal, setBankTotal] = useState(0);
 
     // Results - built from real API data
     const [results, setResults] = useState<ResultRow[]>([]);
     const [monitoringExam, setMonitoringExam] = useState<ApiExam | null>(null);
-    const [liveMonitorPage, setLiveMonitorPage] = useState(1);
 
     // Toast
     const [toast, setToast] = useState<(ToastState & { ok?: boolean }) | null>(null);
@@ -837,8 +787,11 @@ export default function TeacherExams() {
 
     const getQuizValidationError = () => {
         if (!quizTitle.trim()) return "Enter a quiz title";
-        if (user?.subject?.trim() && offerings.length > 0 && offeringsForClassSelect.length === 0) {
-            return "No class matches your subject profile. Ask an admin to assign the correct subject classes.";
+        if (offerings.length > 0 && subjectOptions.length > 0 && !selectedSubject.trim()) {
+            return "Select a subject before creating or scheduling an exam.";
+        }
+        if (selectedSubject.trim() && offerings.length > 0 && offeringsForClassSelect.length === 0) {
+            return "No class matches the selected subject. Try a different subject.";
         }
         if (offerings.length > 0 && selectedOfferingIds.length === 0) return "Select at least one class for this quiz";
         const withText = questions.filter((qq) => qq.text.trim());
@@ -854,8 +807,12 @@ export default function TeacherExams() {
     const publishQuiz = async (mode: "published" | "scheduled", opensAtIso: string) => {
         const parsedDuration = Number.parseInt(duration, 10);
         const safeDuration = Number.isNaN(parsedDuration) ? 30 : Math.max(5, parsedDuration);
+        const parsedMinStay = Number.parseInt(minStayMinutes, 10);
+        const safeMinStay = Number.isNaN(parsedMinStay) ? 0 : Math.max(0, Math.min(parsedMinStay, safeDuration));
 
         try {
+            if (mode === "published") setPublishBusy(true);
+            else setScheduleBusy(true);
             if (!activeYearId) {
                 showToast("Academic year is still loading. Wait a moment and try again.", false);
                 return;
@@ -870,14 +827,14 @@ export default function TeacherExams() {
             const offering1 = offerings.find(o => o.id === selectedOfferingIds[0]);
             const subjectId = offering1?.subjectId ?? "";
 
-            if (user?.subject?.trim()) {
+            if (selectedSubject.trim()) {
                 const invalid = selectedOfferingIds.some(id => {
                     const off = offerings.find(o => o.id === id);
-                    const sn = off?.subjectName || (off as any)?.subject?.name || "";
-                    return !subjectNameMatchesProfile(sn, user.subject || "");
+                    const sn = subjectLabelFromOffering(off as ClassOffering);
+                    return !subjectNameMatchesProfile(sn, selectedSubject || "");
                 });
                 if (invalid) {
-                    showToast(`Select classes that match your subject (${user.subject}).`, false);
+                    showToast(`Select classes that match the selected subject (${selectedSubject}).`, false);
                     return;
                 }
             }
@@ -945,8 +902,9 @@ export default function TeacherExams() {
                     opensAt: opensDate.toISOString(),
                     closesAt: closesDate.toISOString(),
                     durationMinutes: safeDuration,
-                    minStayMinutes: Math.max(0, parseInt(minStayMinutes, 10) || 0),
+                    minStayMinutes: safeMinStay,
                     maxPoints: Math.max(1, totalPoints),
+                    termId: selectedTermId ?? undefined,
                 });
                 
                 await addQuestionsToExam(exam.id, items);
@@ -954,10 +912,7 @@ export default function TeacherExams() {
                 await apiPublishExam(exam.id);
             }
 
-            await loadBank(bankClassFilter || undefined);
-            // Invalidate exam + roster caches so results tab shows fresh data
-            invalidateCachePrefix("exams:");
-            invalidateCachePrefix("roster:");
+            await loadBank();
 
             if (mode === "scheduled") {
                 const scheduledLabel = new Date(opensAtIso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -971,11 +926,15 @@ export default function TeacherExams() {
             // setQuestions([blankQ()]);
             // setActiveQ(0);
             setScheduledOpenAt("");
+            setMinStayMinutes("0");
 
             // Refresh results data
             loadResultsData();
         } catch (e) {
             showToast(e instanceof Error ? e.message : "Publish failed", false);
+        } finally {
+            setPublishBusy(false);
+            setScheduleBusy(false);
         }
     };
 
@@ -1011,20 +970,19 @@ export default function TeacherExams() {
     };
 
     // Add a bank question into the current quiz
-    const addFromBank = (item: BankQ) => {
+    const useFromBank = (item: BankQ) => {
         let qType: "mcq"|"truefalse"|"fillin" = "mcq";
         if (item.rawType === "truefalse") qType = "truefalse";
         else if (item.rawType === "fillin") qType = "fillin";
 
-        const c = item.correct;
-        const newQ: Question = {
-            ...blankQ(),
+        const newQ: Question = { 
+            ...blankQ(), 
             bankId: item.id,
             edited: false,
             text: item.q,
             type: qType,
             options: item.options ? { ...item.options } : { A: "", B: "", C: "", D: "" },
-            correct: (c === "A" || c === "B" || c === "C" || c === "D") ? c : "",
+            correct: (item.correct as "" | "A" | "B" | "C" | "D") || ""
         };
         setQuestions(p => { const next = [...p, newQ]; setActiveQ(next.length - 1); return next; });
         setBank(p => p.map(b => b.id === item.id ? { ...b, used: b.used + 1 } : b));
@@ -1035,9 +993,9 @@ export default function TeacherExams() {
     // Load a bank question directly into full quiz builder for detailed editing.
     const editFromBank = (item: BankQ) => {
         setActiveTab("create");
-        const profile = user?.subject?.trim();
-        const useProfile = profile && SUBJECT_CONFIG[profile];
-        setSubject(useProfile ? profile : item.subj);
+        const current = selectedSubject?.trim();
+        const useSelected = current && SUBJECT_CONFIG[current];
+        setSubject(useSelected ? current : item.subj);
         setQuestions([{ ...blankQ(), text: item.q }]);
         setActiveQ(0);
         if (!quizTitle.trim()) {
@@ -1062,31 +1020,22 @@ export default function TeacherExams() {
     const evalGrade       = autoGrade(evalScore);
 
     // ── Load offerings + results from API ──
-    const loadResultsData = useCallback(async (forceRefresh = false) => {
+    const loadResultsData = useCallback(async () => {
         setApiLoading(true);
         setApiErr(null);
         try {
-            if (forceRefresh) {
-                invalidateCachePrefix("active-year");
-                invalidateCachePrefix("offerings:");
-                invalidateCachePrefix("exams:");
-                invalidateCachePrefix("roster:");
-            }
-
-            const year = await cachedFetch("active-year", () => getActiveAcademicYear(), 120_000);
+            const year = await getActiveAcademicYear();
             if (!year?.id) {
-                setActiveYearId(""); setOfferings([]); setPublishedExams([]); setResults([]); setRosterByExam({});
+                setActiveYearId("");
+                setOfferings([]);
+                setPublishedExams([]);
+                setResults([]);
+                setRosterByExam({});
                 setApiErr("No active academic year. Ask an admin to activate one.");
                 return;
             }
             setActiveYearId(year.id);
-
-            // Fetch offerings + exams in parallel
-            const [mine, allExams] = await Promise.all([
-                cachedFetch(`offerings:${year.id}`, () => listMyClassOfferings(year.id), 60_000),
-                cachedFetch(`exams:${year.id}`, () => apiListExams(year.id), 30_000),
-            ]);
-
+            const mine = await listMyClassOfferings(year.id);
             setOfferings(mine);
             setSelectedOfferingIds((prev) => {
                 if (prev && prev.length > 0 && mine.some((o) => prev.includes(o.id))) return prev;
@@ -1094,80 +1043,83 @@ export default function TeacherExams() {
             });
 
             const myOfferingIds = new Set(mine.map((o) => o.id));
-            const filteredExams = allExams.filter((ex) => !!ex.classOfferingId && myOfferingIds.has(ex.classOfferingId));
+            const exams = await apiListExams(year.id, selectedTermId ?? undefined);
+            const filteredExams = exams.filter((ex) => !!ex.classOfferingId && myOfferingIds.has(ex.classOfferingId));
             setPublishedExams(filteredExams);
-
-            // Fetch all rosters in parallel, each cached 20s
-            const activeExams = filteredExams.filter(e => e.published);
-            const rosterResults = await Promise.all(
-                activeExams.map(ex =>
-                    cachedFetch(`roster:${ex.id}`, () => getExamStudentRoster(ex.id), 20_000)
-                        .then(r => ({ ex, rosterData: r }))
-                        .catch(() => null)
-                )
-            );
 
             const rosters: Record<string, ExamRosterStudent[]> = {};
             const rows: ResultRow[] = [];
-            for (const item of rosterResults) {
-                if (!item) continue;
-                const { ex, rosterData } = item;
-                rosters[ex.id] = rosterData.students;
-                const exOffering = mine.find(o => o.id === ex.classOfferingId);
-                const exSubject = (exOffering as any)?.subjectName || (exOffering as any)?.subject?.name || "Academic";
-                for (const s of rosterData.students) {
-                    if (s.status === "submitted") {
-                        rows.push({
-                            name: [s.firstName, s.lastName].filter(Boolean).join(" ") || s.studentId.slice(0, 8),
-                            quiz: ex.title,
-                            subject: exSubject,
-                            score: s.score ?? 0,
-                            grade: autoGrade(s.score ?? 0),
-                            sent: !!s.releasedAt,
-                            comment: "",
-                            sentAt: s.releasedAt ? new Date(s.releasedAt).toISOString().slice(0, 10) : "",
-                            assessments: [{ id: 1, name: ex.title, type: "final", maxMark: ex.maxPoints, result: s.score ?? 0 }],
-                            _attemptId: s.attemptId ?? undefined,
-                            _violationCount: s.violationCount,
-                        });
+            const activeExams = filteredExams.filter(e => e.published);
+
+            await Promise.all(activeExams.map(async (ex) => {
+                try {
+                    const rosterData = await getExamStudentRoster(ex.id);
+                    rosters[ex.id] = rosterData.students;
+                    
+                    const exOffering = mine.find(o => o.id === ex.classOfferingId);
+                    const exSubject = (exOffering as any)?.subjectName || (exOffering as any)?.subject?.name || "Academic";
+
+                    for (const s of rosterData.students) {
+                        if (s.status === "submitted") {
+                            rows.push({
+                                name: [s.firstName, s.lastName].filter(Boolean).join(" ") || s.email || s.studentId.slice(0, 8),
+                                quiz: ex.title,
+                                subject: exSubject,
+                                score: s.score ?? 0,
+                                grade: autoGrade(s.score ?? 0),
+                                sent: !!s.releasedAt,
+                                comment: "",
+                                sentAt: s.releasedAt ? new Date(s.releasedAt).toISOString().slice(0, 10) : "",
+                                assessments: [{
+                                    id: 1,
+                                    name: ex.title,
+                                    type: "final",
+                                    maxMark: ex.maxPoints,
+                                    result: s.score ?? 0,
+                                }],
+                                _attemptId: s.attemptId ?? undefined,
+                                _violationCount: s.violationCount,
+                            });
+                        }
                     }
-                }
-            }
+                } catch { /* skip */ }
+            }));
+
             setResults(rows);
+            setResultsPage(1);
             setRosterByExam(rosters);
         } catch (e) {
             setApiErr(e instanceof Error ? e.message : "Failed to load exams");
         } finally {
             setApiLoading(false);
         }
-    }, []);
+    }, [selectedTermId]);
 
-    const loadBank = useCallback(async (classOfferingIdFilter?: string) => {
+    const loadBank = useCallback(async () => {
         try {
-            const profileSub = user?.subject;
-            const allowedIds = allowedBankSubjectIds(offerings, profileSub);
-            const scoped = filterOfferingsBySubject(offerings, profileSub);
+            const rawqs = await listQuestions();
+            const selectedClassOfferings = selectedOfferingIds.length > 0
+                ? offerings.filter((o) => selectedOfferingIds.includes(o.id))
+                : offeringsForClassSelect;
+            const candidateOfferings = selectedClassOfferings.length > 0 ? selectedClassOfferings : offeringsForClassSelect;
+            const allowedIds = new Set(candidateOfferings.map((o) => o.subjectId).filter(Boolean));
+            const scoped = candidateOfferings;
             const subjectIdToLabel = new Map<string, string>();
             for (const o of scoped) {
                 if (!o.subjectId) continue;
                 const label = o.subjectName || (o as { subject?: { name?: string } }).subject?.name || "";
                 if (label) subjectIdToLabel.set(o.subjectId, label);
             }
-            const result = await listQuestionsFiltered({
-                classOfferingId: classOfferingIdFilter || undefined,
-                take: 100,
-            });
-            const rawqs = result.items;
-            setBankTotal(result.total);
             const mapped: BankQ[] = rawqs
                 .filter((q) =>
-                    classOfferingIdFilter
-                        ? true
-                        : questionInTeacherSubjectBank(
-                            { subjectId: q.subjectId, subject: (q as { subject?: { name?: string } }).subject },
-                            allowedIds,
-                            profileSub,
-                        ),
+                    questionInTeacherSubjectBank(
+                        {
+                            subjectId: q.subjectId,
+                            subject: (q as { subject?: { name?: string } }).subject,
+                        },
+                        allowedIds,
+                        selectedSubject,
+                    ),
                 )
                 .map((q) => {
                     let opts: Record<"A"|"B"|"C"|"D", string> = { A: "", B: "", C: "", D: "" };
@@ -1179,6 +1131,8 @@ export default function TeacherExams() {
                             }
                         } catch {}
                     }
+
+                    // Map answerKey back to A/B/C/D if possible, otherwise it's a string
                     let corr = "";
                     if (q.type === "mcq") {
                         if (q.answerKey === opts.A) corr = "A";
@@ -1190,44 +1144,51 @@ export default function TeacherExams() {
                     } else {
                         corr = q.answerKey || "";
                     }
+
                     return {
                         id: q.id,
                         q: q.stem,
-                        subj: (q as { subject?: { name?: string } }).subject?.name || subjectIdToLabel.get(q.subjectId) || q.subjectId || "Assorted",
+                        subj:
+                            (q as { subject?: { name?: string } }).subject?.name ||
+                            subjectIdToLabel.get(q.subjectId) ||
+                            q.subjectId ||
+                            "Assorted",
                         type: q.type === "mcq" ? "Multiple Choice" : q.type === "truefalse" ? "True / False" : "Fill in Blank",
                         used: 0,
                         options: opts,
                         correct: corr,
-                        rawType: q.type,
+                        rawType: q.type
                     };
                 });
             setBank(mapped);
         } catch { /* keep prior bank on failure */ }
-    }, [user?.subject, offerings]);
+    }, [selectedSubject, offerings, offeringsForClassSelect, selectedOfferingIds]);
 
     const saveQuestionsToBank = useCallback(async () => {
+        setSaveBankBusy(true);
         const offering = offerings.find((o) => o.id === selectedOfferingIds[0]);
         const subjectId = offering?.subjectId ?? "";
         if (!subjectId) {
             showToast("Select a class so questions are saved under the correct subject", false);
+            setSaveBankBusy(false);
             return;
         }
-        if (user?.subject?.trim() && offering) {
-            const sn = (offering as any).subjectName || (offering as any).subject?.name || "";
-            if (!subjectNameMatchesProfile(sn, user.subject)) {
-                showToast(`Select a class that matches your subject (${user.subject}) before saving to the bank.`, false);
+        if (selectedSubject?.trim() && offering) {
+            const sn = subjectLabelFromOffering(offering);
+            if (!subjectNameMatchesProfile(sn, selectedSubject)) {
+                showToast(`Select a class that matches the selected subject (${selectedSubject}) before saving to the bank.`, false);
                 return;
             }
         }
         const toSave = questions.filter((qq) => qq.text.trim() && qq.correct && (!qq.bankId || qq.edited));
         if (toSave.length === 0) {
             showToast("Add question text and choose a correct answer for at least one question", false);
+            setSaveBankBusy(false);
             return;
         }
         const subjLabel =
-            (offering as any).subjectName ||
-            (offering as any).subject?.name ||
-            user?.subject ||
+            subjectLabelFromOffering(offering as ClassOffering) ||
+            selectedSubject ||
             "Assorted";
         try {
             const newRows: BankQ[] = [];
@@ -1272,7 +1233,7 @@ export default function TeacherExams() {
                 }
                 return merged;
             });
-            await loadBank(bankClassFilter || undefined);
+            await loadBank();
             // GET /questions can lag or omit nested fields; keep rows we just created in the list.
             setBank((prev) => {
                 const ids = new Set(prev.map((b) => b.id));
@@ -1282,8 +1243,10 @@ export default function TeacherExams() {
             showToast(toSave.length === 1 ? "Saved to exam bank ✓" : `Saved ${toSave.length} questions to exam bank ✓`);
         } catch (e) {
             showToast(e instanceof Error ? e.message : "Could not save to exam bank", false);
+        } finally {
+            setSaveBankBusy(false);
         }
-    }, [offerings, selectedOfferingIds, questions, loadBank, user?.subject]);
+    }, [offerings, selectedOfferingIds, questions, loadBank, selectedSubject]);
 
     useEffect(() => {
         setIsClient(true);
@@ -1306,14 +1269,14 @@ export default function TeacherExams() {
     useEffect(() => {
         if (!isClient) return;
         if (offeringsForClassSelect.length === 0) {
-            if (user?.subject?.trim() && offerings.length > 0) setSelectedOfferingIds([]);
+            if (selectedSubject?.trim() && offerings.length > 0) setSelectedOfferingIds([]);
             return;
         }
         setSelectedOfferingIds((p) => {
             if (p && p.length > 0 && offeringsForClassSelect.some((o) => p.includes(o.id))) return p;
             return [offeringsForClassSelect[0].id];
         });
-    }, [offeringsForClassSelect, user?.subject, offerings.length, isClient]);
+    }, [offeringsForClassSelect, selectedSubject, offerings.length, isClient]);
     // ── Grade sender / published exams via real API ───────────────────────────────
 
     const openEvaluate = async (res: ResultRow) => {
@@ -1326,8 +1289,8 @@ export default function TeacherExams() {
                 const { getAttemptForGrader } = await import("@/lib/admin-api");
                 const details = await getAttemptForGrader(res._attemptId);
                 setEvalAttemptDetails(details);
-            } catch {
-                /* eval modal will fall back to summary data */
+            } catch (err) {
+                console.error("Failed to load attempt details:", err);
             } finally {
                 setEvalLoading(false);
             }
@@ -1338,39 +1301,50 @@ export default function TeacherExams() {
 
     const saveEval = async (sendNow: boolean) => {
         if (!evaluating) return;
-        const score = calcScore(evalAssessments);
-        const grade = autoGrade(score);
-        const now = new Date().toISOString().slice(0, 10);
-        const updated: ResultRow = {
-            ...evaluating,
-            score,
-            grade,
-            comment: evalComment,
-            assessments: evalAssessments,
-            sent: sendNow ? true : evaluating.sent,
-            sentAt: sendNow && !evaluating.sentAt ? now : evaluating.sentAt,
-        };
-        setResults(p => p.map(r => r.name === evaluating.name && r.quiz === evaluating.quiz ? updated : r));
+        setSaveEvalBusy(true);
+        try {
+            const evalAttemptId = (evaluating as ResultRow & { _attemptId?: string })._attemptId;
+            const score = calcScore(evalAssessments);
+            const grade = autoGrade(score);
+            const now = new Date().toISOString().slice(0, 10);
+            const updated: ResultRow = {
+                ...evaluating,
+                score,
+                grade,
+                comment: evalComment,
+                assessments: evalAssessments,
+                sent: sendNow ? true : evaluating.sent,
+                sentAt: sendNow && !evaluating.sentAt ? now : evaluating.sentAt,
+            };
+            setResults((prev) =>
+                prev.map((r) => {
+                    const rid = (r as ResultRow & { _attemptId?: string })._attemptId;
+                    if (evalAttemptId && rid) return rid === evalAttemptId ? updated : r;
+                    return r.name === evaluating.name && r.quiz === evaluating.quiz ? updated : r;
+                }),
+            );
 
-        // Call real API for grading + releasing
-        const attemptId = (evaluating as ResultRow & { _attemptId?: string })._attemptId;
-        if (attemptId) {
-            try {
-                await apiGradeAttempt(attemptId, score);
-                if (sendNow) {
-                    await apiReleaseAttempt(attemptId);
+            // Call real API for grading + releasing
+            if (evalAttemptId) {
+                try {
+                    await apiGradeAttempt(evalAttemptId, score);
+                    if (sendNow) {
+                        await apiReleaseAttempt(evalAttemptId);
+                    }
+                } catch (e) {
+                    showToast(e instanceof Error ? e.message : "Grading API failed", false);
                 }
-            } catch (e) {
-                showToast(e instanceof Error ? e.message : "Grading API failed", false);
             }
-        }
 
-        if (sendNow) {
-            showToast(`Grade sent to ${updated.name} ✓`);
-        } else {
-            showToast("Evaluation saved ✓");
+            if (sendNow) {
+                showToast(`Grade sent to ${updated.name} ✓`);
+            } else {
+                showToast("Evaluation saved ✓");
+            }
+            setEvaluating(null);
+        } finally {
+            setSaveEvalBusy(false);
         }
-        setEvaluating(null);
     };
 
     const downloadPDF = () => {
@@ -1543,7 +1517,6 @@ export default function TeacherExams() {
 
     return (
         <div className="page-wrapper">
-            <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}`}</style>
             {/* Toast */}
             {toast && (
                 <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, background: "#fff", borderRadius: 4, padding: "1rem 1.5rem", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: `1.5px solid ${toast.ok ? "var(--success)" : "var(--danger)"}`, display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -1562,8 +1535,8 @@ export default function TeacherExams() {
                         {/* ── Modal Header ── */}
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1.1rem 1.5rem", borderBottom: "1.5px solid var(--gray-100)", flexShrink: 0 }}>
                             <div>
-                                <h3 style={{ fontWeight: 800, fontSize: "1.05rem", margin: 0 }}>Student Responses</h3>
-                                <div style={{ fontSize: "0.76rem", color: "var(--gray-400)", marginTop: "0.15rem" }}>Exam submission detail — question by question</div>
+                                <h3 style={{ fontWeight: 800, fontSize: "1.05rem", margin: 0 }}>Evaluate Student</h3>
+                                <div style={{ fontSize: "0.76rem", color: "var(--gray-400)", marginTop: "0.15rem" }}>Score is calculated automatically from assessments below</div>
                             </div>
                             <button onClick={() => setEvaluating(null)} style={{ width: 32, height: 32, borderRadius: 4, border: "1.5px solid var(--gray-200)", background: "var(--gray-50)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -1573,9 +1546,9 @@ export default function TeacherExams() {
                         {/* ── Course Info Strip ── */}
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0", background: "var(--gray-50)", borderBottom: "1px solid var(--gray-100)", flexShrink: 0 }}>
                             {[
-                                { label: "Exam", value: evaluating.quiz },
-                                { label: "Subject", value: evaluating.subject },
-                                { label: "Student", value: evaluating.name },
+                                { label: "Course Title", value: evaluating.quiz },
+                                { label: "Subject",      value: evaluating.subject },
+                                { label: "Student",      value: evaluating.name },
                             ].map((item, i) => (
                                 <div key={item.label} style={{ padding: "0.75rem 1.25rem", borderRight: i < 2 ? "1px solid var(--gray-200)" : "none" }}>
                                     <div style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--gray-400)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: "0.2rem" }}>{item.label}</div>
@@ -1587,76 +1560,181 @@ export default function TeacherExams() {
                         {/* ── Scrollable body ── */}
                         <div style={{ flex: 1, overflowY: "auto", padding: "1.25rem 1.5rem" }}>
                             {evalLoading ? (
-                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "3rem", gap: "0.75rem", color: "var(--gray-400)" }}>
-                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
-                                    <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>Loading submission…</span>
+                                <div style={{ padding: "3rem", textAlign: "center", color: "var(--gray-400)" }}>
+                                    <div style={{ fontSize: "1.2rem", fontWeight: 600, marginBottom: "0.5rem" }}>Loading Submission...</div>
+                                    <p style={{ fontSize: "0.85rem" }}>Fetching student answers and grading breakdown</p>
                                 </div>
                             ) : evalAttemptDetails ? (
-                                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                                    <h4 style={{ fontSize: "0.8rem", fontWeight: 800, color: "var(--gray-400)", textTransform: "uppercase", letterSpacing: "0.08em", borderBottom: "1px solid var(--gray-100)", paddingBottom: "0.5rem", margin: 0 }}>
-                                        Responses
-                                    </h4>
-                                    {Object.entries(evalAttemptDetails.answers || {}).map(([qId, answer]: [string, any], idx) => {
-                                        const breakdown = evalAttemptDetails.breakdown?.perQuestion?.find((p: any) => p.questionId === qId);
-                                        const isCorrect = breakdown ? breakdown.pointsEarned === breakdown.pointsMax : null;
-                                        const eqRow = (evalAttemptDetails.examQuestions || []).find((eq: any) => eq.questionId === qId);
-                                        const qStem = eqRow?.question?.stem || `Question ${idx + 1}`;
-                                        const answerKey = eqRow?.question?.answerKey ?? null;
-                                        return (
-                                            <div key={qId} style={{ padding: "1.1rem 1.25rem", borderRadius: 4, border: `1.5px solid ${isCorrect === true ? "var(--success)" : isCorrect === false ? "var(--danger)" : "var(--gray-200)"}`, background: isCorrect === true ? "#f0fdf4" : isCorrect === false ? "#fff5f5" : "var(--gray-50)" }}>
-                                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.6rem" }}>
-                                                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                                                        <div style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--gray-200)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.72rem", fontWeight: 700, color: "var(--gray-600)", flexShrink: 0 }}>{idx + 1}</div>
-                                                        <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--gray-600)" }}>
-                                                            {isCorrect === true ? "✓ Correct" : isCorrect === false ? "✗ Incorrect" : "— Not auto-graded"}
-                                                        </span>
-                                                    </div>
-                                                    {breakdown && (
-                                                        <span className={`badge ${isCorrect === true ? "badge-success" : isCorrect === false ? "badge-danger" : "badge-warning"}`}>
-                                                            {breakdown.pointsEarned} / {breakdown.pointsMax} pts
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div style={{ fontSize: "0.9rem", color: "var(--gray-900)", fontWeight: 600, lineHeight: 1.5, marginBottom: "0.75rem" }}>{qStem}</div>
-                                                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                                                    <div style={{ background: "#fff", padding: "0.6rem 0.85rem", borderRadius: 4, border: "1.5px solid var(--gray-100)", fontSize: "0.875rem" }}>
-                                                        <span style={{ color: "var(--gray-400)", fontWeight: 700, fontSize: "0.7rem", textTransform: "uppercase", display: "block", marginBottom: "0.2rem" }}>Student Answer</span>
-                                                        <span style={{ color: "var(--gray-800)", fontWeight: 500 }}>{String(answer) || "—"}</span>
-                                                    </div>
-                                                    {answerKey && isCorrect === false && (
-                                                        <div style={{ background: "#f0fdf4", padding: "0.6rem 0.85rem", borderRadius: 4, border: "1.5px solid var(--success)", fontSize: "0.875rem" }}>
-                                                            <span style={{ color: "var(--success)", fontWeight: 700, fontSize: "0.7rem", textTransform: "uppercase", display: "block", marginBottom: "0.2rem" }}>Correct Answer</span>
-                                                            <span style={{ color: "var(--gray-800)", fontWeight: 500 }}>{answerKey}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginBottom: "2rem" }}>
+                                    <h4 style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--gray-400)", textTransform: "uppercase", letterSpacing: "0.08em", borderBottom: "1px solid var(--gray-100)", paddingBottom: "0.5rem" }}>Exam Submission Details</h4>
+                                    
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                                        {Object.entries(evalAttemptDetails.answers || {}).map(([qId, answer]: [string, any], idx) => {
+                                            const breakdown = evalAttemptDetails.breakdown?.perQuestion?.find((p: any) => p.questionId === qId);
+                                            const isCorrect = breakdown ? breakdown.pointsEarned === breakdown.pointsMax : null;
+                                            const qStem = (evalAttemptDetails.examQuestions || []).find((eq: any) => eq.questionId === qId)?.question?.stem || `Question ${idx + 1}`;
 
-                                    {/* Feedback textarea — read-only note for teacher reference */}
-                                    <div style={{ marginTop: "0.5rem" }}>
-                                        <label style={{ fontSize: "0.76rem", fontWeight: 600, color: "var(--gray-600)", textTransform: "uppercase" as const, letterSpacing: "0.05em", display: "block", marginBottom: "0.4rem" }}>Feedback for Student (optional)</label>
-                                        <textarea value={evalComment} onChange={e => setEvalComment(e.target.value)} rows={3}
-                                            placeholder="E.g. 'Great work. Focus on exam technique for the final.'"
-                                            style={{ width: "100%", padding: "0.65rem 0.9rem", border: "1.5px solid var(--gray-200)", borderRadius: 4, fontSize: "0.875rem", fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" as const }} />
+                                            return (
+                                                <div key={qId} style={{ padding: "1.25rem", borderRadius: "12px", border: "1.5px solid var(--gray-100)", background: isCorrect === true ? "var(--success-50)" : isCorrect === false ? "var(--danger-50)" : "var(--gray-50)" }}>
+                                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
+                                                        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                                                            <div style={{ width: 24, height: 24, borderRadius: "50%", background: "var(--gray-200)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-600)" }}>{idx + 1}</div>
+                                                            <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--gray-700)" }}>Question Item</span>
+                                                        </div>
+                                                        <div className={`badge ${isCorrect === true ? "badge-success" : isCorrect === false ? "badge-danger" : "badge-warning"}`}>
+                                                            {breakdown?.pointsEarned ?? 0} / {breakdown?.pointsMax ?? 0} PTS
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ fontSize: "1rem", color: "var(--gray-900)", fontWeight: 600, lineHeight: 1.5, marginBottom: "1rem" }}>{qStem}</div>
+                                                    <div style={{ background: "#fff", padding: "0.85rem 1rem", borderRadius: "8px", border: "1.5px solid var(--gray-100)", fontSize: "0.9rem" }}>
+                                                        <span style={{ color: "var(--gray-400)", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", display: "block", marginBottom: "0.25rem" }}>Student Response</span>
+                                                        <div style={{ color: "var(--gray-800)", fontWeight: 500 }}>{String(answer)}</div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
-                            ) : (
-                                <div style={{ padding: "2rem", textAlign: "center", color: "var(--gray-400)", fontSize: "0.9rem" }}>No submission data available.</div>
-                            )}
+                            ) : null}
+
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                                <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--gray-400)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Manual Overrides / Grades</div>
+                                <button className="btn btn-primary btn-sm" disabled={saveEvalBusy} onClick={() => setEvalAssessments(p => [...p, { id: Date.now(), name: "Assessment", type: "other", maxMark: 10, result: 0 }])}>
+                                    + Add Item
+                                </button>
+                            </div>
+
+                            {/* Assessment Table */}
+                            <div style={{ overflowX: "auto", borderRadius: 4, border: "1.5px solid var(--gray-200)", marginBottom: "1rem" }}>
+                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                                    <thead>
+                                        <tr style={{ background: "var(--gray-50)" }}>
+                                            <th style={{ padding: "0.65rem 0.75rem", textAlign: "left" as const, fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 36 }}>SN</th>
+                                            <th style={{ padding: "0.65rem 0.75rem", textAlign: "left" as const, fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)" }}>Assessment Name</th>
+                                            <th style={{ padding: "0.65rem 0.75rem", textAlign: "left" as const, fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 150 }}>Assessment Type</th>
+                                            <th style={{ padding: "0.65rem 0.75rem", textAlign: "center" as const, fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 110 }}>Maximum Mark</th>
+                                            <th style={{ padding: "0.65rem 0.75rem", textAlign: "center" as const, fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 110 }}>Result</th>
+                                            <th style={{ padding: "0.65rem 0.5rem", textAlign: "center" as const, fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 34 }}></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {evalAssessments.map((a, i) => (
+                                            <tr key={a.id} style={{ background: i % 2 === 0 ? "#fff" : "#fafafa", borderBottom: "1px solid var(--gray-100)" }}>
+                                                <td style={{ padding: "0.45rem 0.75rem", color: "var(--gray-400)", fontWeight: 600, fontSize: "0.8rem" }}>{i + 1}</td>
+                                                <td style={{ padding: "0.45rem 0.5rem" }}>
+                                                    <input value={a.name}
+                                                        onChange={e => setEvalAssessments(p => p.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                                                        style={{ width: "100%", padding: "0.3rem 0.55rem", border: "1.5px solid var(--gray-200)", borderRadius: 4, fontSize: "0.83rem", fontFamily: "inherit", boxSizing: "border-box" as const }} />
+                                                </td>
+                                                <td style={{ padding: "0.45rem 0.5rem" }}>
+                                                    <Select value={a.type}
+                                                        onChange={e => setEvalAssessments(p => p.map((x, j) => j === i ? { ...x, type: e.target.value } : x))}
+                                                        style={{ width: "100%", padding: "0.3rem 0.5rem", border: "1.5px solid var(--gray-200)", borderRadius: 4, fontSize: "0.83rem", background: "#fff", fontFamily: "inherit" }}>
+                                                        <option value="continuous">continuous</option>
+                                                        <option value="midterm">midterm</option>
+                                                        <option value="quiz">quiz</option>
+                                                        <option value="assignment">assignment</option>
+                                                        <option value="project">project</option>
+                                                        <option value="final">final</option>
+                                                        <option value="other">other</option>
+                                                    </Select>
+                                                </td>
+                                                <td style={{ padding: "0.45rem 0.5rem" }}>
+                                                    <input type="number" min={0} value={a.maxMark === 0 ? "" : a.maxMark}
+                                                        onChange={e => {
+                                                            const raw = e.target.value;
+                                                            setEvalAssessments(p => p.map((x, j) => {
+                                                                if (j !== i) return x;
+                                                                if (raw === "") return { ...x, maxMark: 0 };
+                                                                const parsed = parseFloat(raw);
+                                                                return Number.isNaN(parsed) ? x : { ...x, maxMark: parsed };
+                                                            }));
+                                                        }}
+                                                        onBlur={() => setEvalAssessments(p => p.map((x, j) => j === i ? { ...x, maxMark: Math.max(0, x.maxMark) } : x))}
+                                                        style={{ width: "100%", padding: "0.3rem 0.5rem", border: "1.5px solid var(--gray-200)", borderRadius: 4, fontSize: "0.83rem", textAlign: "center" as const, boxSizing: "border-box" as const }} />
+                                                </td>
+                                                <td style={{ padding: "0.45rem 0.5rem" }}>
+                                                    <input type="number" min={0} max={a.maxMark} value={a.result === 0 ? "" : a.result}
+                                                        onChange={e => {
+                                                            const raw = e.target.value;
+                                                            setEvalAssessments(p => p.map((x, j) => {
+                                                                if (j !== i) return x;
+                                                                if (raw === "") return { ...x, result: 0 };
+                                                                const parsed = parseFloat(raw);
+                                                                return Number.isNaN(parsed) ? x : { ...x, result: parsed };
+                                                            }));
+                                                        }}
+                                                        onBlur={() => setEvalAssessments(p => p.map((x, j) => j === i ? { ...x, result: Math.max(0, Math.min(x.result, x.maxMark || 0)) } : x))}
+                                                        style={{ width: "100%", padding: "0.3rem 0.5rem", border: `1.5px solid ${a.result > a.maxMark ? "var(--danger)" : "var(--gray-200)"}`, borderRadius: 4, fontSize: "0.83rem", textAlign: "center" as const, boxSizing: "border-box" as const, background: a.result > a.maxMark ? "var(--danger-light)" : "#fff" }} />
+                                                </td>
+                                                <td style={{ padding: "0.45rem 0.4rem", textAlign: "center" as const }}>
+                                                    <button onClick={() => setEvalAssessments(p => p.filter((_, j) => j !== i))}
+                                                        style={{ width: 24, height: 24, borderRadius: 4, border: "none", background: "var(--danger-light)", color: "var(--danger)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr style={{ background: "var(--gray-50)", borderTop: "2px solid var(--gray-200)" }}>
+                                            <td colSpan={3} style={{ padding: "0.65rem 0.75rem", fontWeight: 700, fontSize: "0.85rem", textAlign: "right" as const, color: "var(--gray-700)" }}>Totals</td>
+                                            <td style={{ padding: "0.65rem 0.75rem", textAlign: "center" as const, fontWeight: 800, fontSize: "0.9rem" }}>{evalTotalMax}</td>
+                                            <td style={{ padding: "0.65rem 0.75rem", textAlign: "center" as const, fontWeight: 800, fontSize: "0.9rem", color: evalScore >= 90 ? "var(--success)" : evalScore >= 70 ? "var(--primary-600)" : "var(--warning)" }}>
+                                                <strong>{evalTotalResult}</strong><span style={{ fontSize: "0.75rem", color: "var(--gray-400)", fontWeight: 400 }}>/{evalTotalMax}</span>
+                                            </td>
+                                            <td />
+                                        </tr>
+                                        <tr style={{ background: evalScore >= 90 ? "#f0fdf4" : evalScore >= 70 ? "var(--primary-50)" : "#fffbeb" }}>
+                                            <td colSpan={6} style={{ padding: "0.6rem 0.75rem" }}>
+                                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "1.5rem", flexWrap: "wrap" as const }}>
+                                                    <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-600)" }}>
+                                                        Final Score: <strong style={{ fontSize: "1rem", color: evalScore >= 90 ? "var(--success)" : evalScore >= 70 ? "var(--primary-600)" : "var(--warning)" }}>{evalScore}%</strong>
+                                                    </span>
+                                                    <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-600)" }}>
+                                                        Grade: <strong style={{ fontSize: "1.15rem", color: evalScore >= 90 ? "var(--success)" : evalScore >= 70 ? "var(--primary-600)" : "var(--warning)" }}>{evalGrade}</strong>
+                                                    </span>
+                                                    {evalTotalMax !== 100 && evalTotalMax > 0 && (
+                                                        <span style={{ fontSize: "0.72rem", color: "#b45309", background: "#fef3c7", padding: "0.15rem 0.5rem", borderRadius: 4 }}>⚠ Total max marks = {evalTotalMax} (not 100)</span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            {/* Add Row */}
+                            <button disabled={saveEvalBusy} onClick={() => setEvalAssessments(p => [...p, { id: Date.now(), name: "New Assessment", type: "continuous", maxMark: 10, result: 0 }])}
+                                style={{ display: "flex", alignItems: "center", gap: "0.4rem", padding: "0.4rem 0.875rem", borderRadius: 4, border: "1.5px dashed var(--primary-300)", background: "var(--primary-50)", color: "var(--primary-600)", fontWeight: 600, fontSize: "0.8rem", cursor: "pointer", marginBottom: "1.25rem" }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                                Add Assessment Row
+                            </button>
+
+                            {/* Feedback */}
+                            <label style={{ fontSize: "0.76rem", fontWeight: 600, color: "var(--gray-600)", textTransform: "uppercase" as const, letterSpacing: "0.05em", display: "block", marginBottom: "0.4rem" }}>Feedback for Student (optional)</label>
+                            <textarea disabled={saveEvalBusy} value={evalComment} onChange={e => setEvalComment(e.target.value)} rows={3}
+                                placeholder="E.g. 'Great work on the mid-term. Focus on exam technique for the final.'"
+                                style={{ width: "100%", padding: "0.65rem 0.9rem", border: "1.5px solid var(--gray-200)", borderRadius: 4, fontSize: "0.875rem", fontFamily: "inherit", resize: "vertical", boxSizing: "border-box" as const }} />
                         </div>
 
                         {/* ── Footer ── */}
                         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", padding: "1rem 1.5rem", borderTop: "1.5px solid var(--gray-100)", flexShrink: 0 }}>
-                            <button className="btn btn-secondary" onClick={() => setEvaluating(null)}>Close</button>
+                            <button className="btn btn-secondary" disabled={saveEvalBusy} onClick={() => setEvaluating(null)}>Cancel</button>
+                            <button className="btn btn-outline" disabled={saveEvalBusy} onClick={() => saveEval(false)} style={{ display: "flex", alignItems: "center", gap: "0.35rem", opacity: saveEvalBusy ? 0.75 : 1 }}>
+                                {saveEvalBusy && <div className="spinner" style={{ width: 12, height: 12, border: "2px solid var(--gray-300)", borderTopColor: "var(--primary-600)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
+                                {saveEvalBusy ? "Saving..." : "Save Only"}
+                            </button>
+                            <button className="btn btn-primary" disabled={saveEvalBusy} onClick={() => saveEval(true)} style={{ display: "flex", alignItems: "center", gap: "0.35rem", opacity: saveEvalBusy ? 0.75 : 1 }}>
+                                {saveEvalBusy && <div className="spinner" style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.45)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
+                                {saveEvalBusy ? "Sending..." : "Save & Send to Student"}
+                            </button>
                         </div>
                     </div>
                 </div>,
                 document.body
             )}
 
-            
             {showPublishConfirm && (
                 <div className="modal-overlay" onClick={() => setShowPublishConfirm(false)}>
                     <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
@@ -1671,7 +1749,10 @@ export default function TeacherExams() {
                         </div>
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={() => setShowPublishConfirm(false)}>Cancel</button>
-                            <button type="button" className="btn btn-primary" onClick={() => void handlePublishConfirm()}>Confirm Publish</button>
+                            <button type="button" className="btn btn-primary" disabled={publishBusy} onClick={() => void handlePublishConfirm()} style={{ display: "flex", alignItems: "center", gap: "0.35rem", opacity: publishBusy ? 0.75 : 1 }}>
+                                {publishBusy && <div className="spinner" style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.45)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
+                                {publishBusy ? "Publishing..." : "Confirm Publish"}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1726,7 +1807,10 @@ export default function TeacherExams() {
                         </div>
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={() => setShowScheduleConfirm(false)}>Cancel</button>
-                            <button type="button" className="btn btn-primary" onClick={() => void handleScheduleConfirm()}>Confirm Schedule</button>
+                            <button type="button" className="btn btn-primary" disabled={scheduleBusy} onClick={() => void handleScheduleConfirm()} style={{ display: "flex", alignItems: "center", gap: "0.35rem", opacity: scheduleBusy ? 0.75 : 1 }}>
+                                {scheduleBusy && <div className="spinner" style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.45)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
+                                {scheduleBusy ? "Scheduling..." : "Confirm Schedule"}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1734,15 +1818,14 @@ export default function TeacherExams() {
 
             {/* ── CSV Column Picker Modal removed ── */}
 
-            <div className="page-header teacher-exams-hero">
-                <div>
-                    <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
-                        Exams & Assessments
-                    </h1>
-                    <p className="page-subtitle">Create quizzes, manage exam bank &amp; student grades</p>
-                </div>
-            </div>
+            <PageHeader
+                kicker="Assessment"
+                title="Exams & Assessments"
+                subtitle="Create quizzes, manage your exam bank, and review student grades."
+                icon={<FileText size={22} />}
+                variant="light"
+                actions={<TermSelector academicYearId={activeYearId || null} readOnly={false} />}
+            />
 
             {apiErr && (
                 <div className="card" style={{ marginBottom: "1rem", padding: "0.85rem 1rem", color: "var(--danger)", border: "1.5px solid var(--danger-light)", background: "var(--danger-light)" }}>
@@ -1750,7 +1833,7 @@ export default function TeacherExams() {
                 </div>
             )}
 
-            <div className="tabs teacher-exams-tabs" style={{ marginBottom: "1.5rem" }}>
+            <div className="tabs" style={{ marginBottom: "1.5rem" }}>
                 <button className={`tab ${activeTab === "create" ? "active" : ""}`} onClick={() => setActiveTab("create")}>Create Quiz</button>
                 <button className={`tab ${activeTab === "bank" ? "active" : ""}`} onClick={() => setActiveTab("bank")}>Exam Bank ({bank.length})</button>
                 <button className={`tab ${activeTab === "results" ? "active" : ""}`} onClick={() => setActiveTab("results")}>Results &amp; Grades</button>
@@ -1758,7 +1841,7 @@ export default function TeacherExams() {
 
             {/* ── CREATE ── */}
             {activeTab === "create" && (
-                <div className="teacher-exams-create-grid" style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: "1.25rem", alignItems: "start" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: "1.25rem", alignItems: "start" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                         {/* Meta */}
                         <div className="card">
@@ -1766,19 +1849,28 @@ export default function TeacherExams() {
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
                                 <div className="input-group"><label>Quiz Title</label><div className="input-field"><input value={quizTitle} onChange={e => setQuizTitle(e.target.value)} placeholder={`e.g., ${subject} Chapter Quiz`} /></div></div>
                                 <div className="input-group"><label>Subject</label>
-                                    <div style={{ padding: "0.75rem 1rem", background: user?.subject ? "var(--gray-100)" : "#fff5f5", border: "1.5px solid " + (user?.subject ? "var(--gray-200)" : "#fca5a5"), borderRadius: "12px", fontSize: "0.9rem", color: user?.subject ? "var(--gray-600)" : "#c53030", fontWeight: 600 }}>
-                                        {user?.subject || "No subject assigned - Please update profile"}
+                                    <select
+                                        value={selectedSubject}
+                                        onChange={(e) => setSelectedSubject(e.target.value)}
+                                        style={{ padding: "0.75rem 1rem", background: "#fff", border: "1.5px solid var(--gray-200)", borderRadius: "12px", fontSize: "0.9rem", color: "var(--gray-700)", fontWeight: 600, width: "100%" }}
+                                    >
+                                        <option value="" disabled>
+                                            {subjectOptions.length > 0 ? "Select your subject" : "No assigned subjects available"}
+                                        </option>
+                                        {subjectOptions.map((name) => (
+                                            <option key={name} value={name}>
+                                                {name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <div style={{ marginTop: "0.35rem", fontSize: "0.75rem", color: "var(--gray-500)" }}>
+                                        Assigned subjects from your class offerings
                                     </div>
                                 </div>
                                 <div className="input-group" style={{ gridColumn: "1 / -1" }}>
                                     <label>Classes</label>
                                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "0.5rem", padding: "1rem", background: "var(--gray-50)", border: "1.5px solid var(--gray-200)", borderRadius: "12px" }}>
-                                        {apiLoading && offerings.length === 0 ? (
-                                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--gray-400)", fontSize: "0.85rem" }}>
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
-                                                Loading classes…
-                                            </div>
-                                        ) : offeringsForClassSelect.map(o => (
+                                        {offeringsForClassSelect.map(o => (
                                             <label key={o.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontSize: "0.9rem" }}>
                                                 <input
                                                     type="checkbox"
@@ -1802,24 +1894,12 @@ export default function TeacherExams() {
                                         ))}
                                         {offerings.length === 0 && <span style={{ fontSize: "0.9rem", color: "var(--gray-500)" }}>No classes assigned for this year</span>}
                                         {offerings.length > 0 && offeringsForClassSelect.length === 0 && (
-                                            <span style={{ fontSize: "0.9rem", color: "var(--gray-500)" }}>No class matches your subject ({user?.subject || "—"})</span>
+                                            <span style={{ fontSize: "0.9rem", color: "var(--gray-500)" }}>No class matches the selected subject ({selectedSubject || "—"})</span>
                                         )}
                                     </div>
                                 </div>
                                 <div className="input-group"><label>Duration (min)</label><div className="input-field"><input type="number" value={duration} min={5} max={180} onChange={e => setDuration(e.target.value)} /></div></div>
-                                <div className="input-group">
-                                    <label>Min Stay (min) <span style={{ fontWeight: 400, color: "var(--gray-400)", fontSize: "0.75rem" }}>— 0 = no lock</span></label>
-                                    <div className="input-field">
-                                        <input
-                                            type="number"
-                                            value={minStayMinutes}
-                                            min={0}
-                                            max={duration}
-                                            onChange={e => setMinStayMinutes(e.target.value)}
-                                            placeholder="0"
-                                        />
-                                    </div>
-                                </div>
+                                <div className="input-group"><label>Minimum Stay (min)</label><div className="input-field"><input type="number" value={minStayMinutes} min={0} max={Math.max(0, Number.parseInt(duration, 10) || 30)} onChange={e => setMinStayMinutes(e.target.value)} /></div><div style={{ marginTop: "0.25rem", fontSize: "0.75rem", color: "var(--gray-500)" }}>Students cannot submit before this time elapses.</div></div>
                             </div>
                         </div>
 
@@ -1870,46 +1950,6 @@ export default function TeacherExams() {
                             {/* Subject-aware field - snippets, tips, placeholder all derived from subject */}
                             <LatexField label="Question Text" value={q.text} onChange={v => updateQ({ text: v })} rows={4} placeholder={q.type === "fillin" ? "Type question, use ____ for blank" : (SUBJECT_CONFIG[subject]?.placeholder ?? "Type question here…")} subject={subject} />
 
-                            {/* ── Image attachment for question ── */}
-                            <div style={{ marginBottom: "0.875rem" }}>
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
-                                    <label style={{ fontSize: "0.76rem", fontWeight: 600, color: "var(--gray-600)", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Question Image (optional)</label>
-                                    {q.imageUrl && (
-                                        <button onClick={() => updateQ({ imageUrl: undefined, imageFileId: undefined })} style={{ fontSize: "0.72rem", color: "var(--danger)", background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>Remove</button>
-                                    )}
-                                </div>
-                                {q.imageUrl ? (
-                                    <div style={{ position: "relative", display: "inline-block" }}>
-                                        <img src={q.imageUrl} alt="Question" style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 8, border: "1.5px solid var(--gray-200)", display: "block" }} />
-                                    </div>
-                                ) : (
-                                    <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.65rem 1rem", border: "1.5px dashed var(--gray-300)", borderRadius: 8, cursor: "pointer", background: "var(--gray-50)", fontSize: "0.85rem", color: "var(--gray-500)", transition: "border-color 0.15s" }}
-                                        onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--primary-400)")}
-                                        onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--gray-300)")}>
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                                        <span>Attach an image to this question</span>
-                                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => {
-                                            const file = e.target.files?.[0];
-                                            if (!file) return;
-                                            const formData = new FormData();
-                                            formData.append("file", file);
-                                            try {
-                                                const { authFetch } = await import("@/lib/auth");
-                                                const { getApiBase } = await import("@/lib/api");
-                                                const res = await authFetch(`${getApiBase()}/api/files/upload`, { method: "POST", body: formData });
-                                                if (!res.ok) throw new Error("Upload failed");
-                                                const uploaded = await res.json();
-                                                updateQ({ imageUrl: uploaded.path, imageFileId: uploaded.id });
-                                            } catch (err) {
-                                                showToast("Image upload failed", false);
-                                            }
-                                        }} />
-                                    </label>
-                                )}
-                            </div>
-
-
-
                             {q.type === "mcq" && (
                                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.875rem" }}>
                                     {(["A", "B", "C", "D"] as const).map(opt => (
@@ -1944,9 +1984,7 @@ export default function TeacherExams() {
 
                                 {q.type === "fillin" && (
                                     <div className="input-field">
-                                        {/* fill-in re-uses the `correct` field as free-form text; the union type
-                                            stays narrow for MCQ where it represents A/B/C/D. */}
-                                        <input value={q.correct} onChange={e => updateQ({ correct: e.target.value as Question["correct"] })} placeholder="Correct word(s)" style={{ background: "#fff" }} />
+                                        <input value={q.correct} onChange={e => updateQ({ correct: e.target.value as any })} placeholder="Correct word(s)" style={{ background: "#fff" }} />
                                     </div>
                                 )}
 
@@ -1960,22 +1998,27 @@ export default function TeacherExams() {
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                                 Add Question
                             </button>
-                            <button type="button" className="btn btn-outline" onClick={() => void saveQuestionsToBank()}>Save to Bank</button>
-                            <button type="button" className="btn btn-outline" onClick={() => {
+                            <button type="button" className="btn btn-outline" disabled={saveBankBusy} onClick={() => void saveQuestionsToBank()} style={{ display: "flex", alignItems: "center", gap: "0.4rem", opacity: saveBankBusy ? 0.75 : 1 }}>
+                                {saveBankBusy && <div className="spinner" style={{ width: 12, height: 12, border: "2px solid var(--gray-300)", borderTopColor: "var(--primary-600)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
+                                {saveBankBusy ? "Saving..." : "Save to Bank"}
+                            </button>
+                            <button type="button" className="btn btn-outline" disabled={scheduleBusy} onClick={() => {
                                 const error = getQuizValidationError();
                                 if (error) { showToast(error, false); return; }
                                 setShowScheduleModal(true);
-                            }} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                            }} style={{ display: "flex", alignItems: "center", gap: "0.4rem", opacity: scheduleBusy ? 0.75 : 1 }}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" /><line x1="16" x2="16" y1="2" y2="6" /><line x1="8" x2="8" y1="2" y2="6" /><line x1="3" x2="21" y1="10" y2="10" /></svg>
-                                Schedule Quiz
+                                {scheduleBusy && <div className="spinner" style={{ width: 12, height: 12, border: "2px solid var(--gray-300)", borderTopColor: "var(--primary-600)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
+                                {scheduleBusy ? "Preparing..." : "Schedule Quiz"}
                             </button>
-                            <button type="button" className="btn btn-primary" onClick={() => {
+                            <button type="button" className="btn btn-primary" disabled={publishBusy} onClick={() => {
                                 const error = getQuizValidationError();
                                 if (error) { showToast(error, false); return; }
                                 setShowPublishConfirm(true);
-                            }} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                            }} style={{ display: "flex", alignItems: "center", gap: "0.4rem", opacity: publishBusy ? 0.75 : 1 }}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 11 13" /><path d="M22 2 15 22 11 13 2 9l20-7z" /></svg>
-                                Publish Quiz
+                                {publishBusy && <div className="spinner" style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.45)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
+                                {publishBusy ? "Publishing..." : "Publish Quiz"}
                             </button>
                         </div>
                     </div>
@@ -2029,31 +2072,15 @@ export default function TeacherExams() {
                 <div className="card">
                     <div className="card-header">
                         <div>
-                            <h3 className="card-title">Exam Bank ({bankTotal > 0 ? bankTotal : filteredBank.length})</h3>
+                            <h3 className="card-title">Exam Bank ({filteredBank.length})</h3>
                             <p style={{ margin: "0.35rem 0 0", fontSize: "0.8rem", color: "var(--gray-500)", maxWidth: 520 }}>
-                                {user?.subject?.trim()
-                                    ? `Questions for your subject (${user.subject}). Filter by class to narrow down.`
-                                    : "Questions from your assigned classes."}
+                                {selectedSubject?.trim()
+                                    ? `Filtered by selected subject (${selectedSubject}) and currently selected class set (${selectedOfferingIds.length || offeringsForClassSelect.length} class${(selectedOfferingIds.length || offeringsForClassSelect.length) === 1 ? "" : "es"}).`
+                                    : "Questions are limited to your assigned classes."}
                             </p>
                         </div>
-                        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                            <Select
-                                value={bankClassFilter}
-                                onChange={e => {
-                                    setBankClassFilter(e.target.value);
-                                    setBankPage(1);
-                                    void loadBank(e.target.value || undefined);
-                                }}
-                                style={{ padding: "0.45rem 0.65rem", border: "1.5px solid var(--gray-200)", borderRadius: 4, fontSize: "0.85rem", background: "#fff", minWidth: 180 }}
-                            >
-                                <option value="">All Classes</option>
-                                {offeringsForClassSelect.map(o => (
-                                    <option key={o.id} value={o.id}>{offeringLabel(o)}</option>
-                                ))}
-                            </Select>
-                            <div className="header-search" style={{ width: 200 }}>
-                                <input value={bankSearch} onChange={e => { setBankSearch(e.target.value); setBankPage(1); }} placeholder="Search questions…" />
-                            </div>
+                        <div className="header-search" style={{ width: 240 }}>
+                            <input value={bankSearch} onChange={e => { setBankSearch(e.target.value); setBankPage(1); }} placeholder="Search questions or subject…" />
                         </div>
                     </div>
                     <div className="table-wrapper">
@@ -2069,7 +2096,7 @@ export default function TeacherExams() {
                                         <td>
                                             <div style={{ display: "flex", gap: "0.375rem" }}>
                                                 <button className="btn btn-outline btn-sm" onClick={() => editFromBank(item)}>Edit</button>
-                                                <button className="btn btn-secondary btn-sm" onClick={() => addFromBank(item)}>Use</button>
+                                                <button className="btn btn-secondary btn-sm" onClick={() => useFromBank(item)}>Use</button>
                                             </div>
                                         </td>
                                     </tr>
@@ -2108,121 +2135,131 @@ export default function TeacherExams() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
                     {/* Live Proctoring Section */}
                     <div className="card">
-                        <div className="card-header" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+                        <div className="card-header">
                             <h3 className="card-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                 Live Exam Monitoring
                             </h3>
                         </div>
-                        {(() => {
-                            const liveExams = publishedExams.filter(ex => ex.published);
-                            const LIVE_PAGE_SIZE = 6;
-                            const totalLivePages = Math.ceil(liveExams.length / LIVE_PAGE_SIZE);
-                            const pagedLive = liveExams.slice((liveMonitorPage - 1) * LIVE_PAGE_SIZE, liveMonitorPage * LIVE_PAGE_SIZE);
-                            return (
-                                <>
-                                    <div style={{ padding: "1.25rem", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "1rem" }}>
-                                        {pagedLive.map(ex => {
-                                            const isLive = new Date(ex.opensAt) <= new Date() && new Date(ex.closesAt) >= new Date();
-                                            const roster = rosterByExam[ex.id] || [];
-                                            const activeCount = roster.filter(s => s.status === "in_progress").length;
-                                            return (
-                                                <div key={ex.id} style={{ padding: "1rem", borderRadius: "12px", background: "var(--gray-50)", border: `1.5px solid ${isLive ? "var(--success)" : "var(--gray-100)"}` }}>
-                                                    <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "var(--gray-900)", marginBottom: "0.4rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ex.title}</div>
-                                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                                                        <span style={{ fontSize: "0.68rem", fontWeight: 800, color: isLive ? "var(--success)" : "var(--gray-400)" }}>{isLive ? "● LIVE" : "○ INACTIVE"}</span>
-                                                        <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--gray-500)" }}>{activeCount} active</span>
-                                                    </div>
-                                                    <button onClick={() => setMonitoringExam(ex)} className="btn btn-primary btn-sm" style={{ width: "100%", justifyContent: "center", fontSize: "0.8rem" }}>
-                                                        Monitor
-                                                    </button>
-                                                </div>
-                                            );
-                                        })}
-                                        {liveExams.length === 0 && (
-                                            <div style={{ gridColumn: "1 / -1", padding: "2rem", textAlign: "center", color: "var(--gray-400)", border: "1.5px dashed var(--gray-200)", borderRadius: "12px", fontSize: "0.85rem" }}>
-                                                No published exams found to monitor.
-                                            </div>
-                                        )}
-                                    </div>
-                                    {totalLivePages > 1 && (
-                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", padding: "0.75rem 1.25rem", borderTop: "1px solid var(--gray-100)" }}>
-                                            <button className="btn btn-secondary btn-sm" onClick={() => setLiveMonitorPage(p => Math.max(1, p - 1))} disabled={liveMonitorPage === 1}>‹</button>
-                                            <span style={{ fontSize: "0.82rem", color: "var(--gray-500)" }}>{liveMonitorPage} / {totalLivePages}</span>
-                                            <button className="btn btn-secondary btn-sm" onClick={() => setLiveMonitorPage(p => Math.min(totalLivePages, p + 1))} disabled={liveMonitorPage === totalLivePages}>›</button>
-                                        </div>
-                                    )}
-                                </>
-                            );
-                        })()}
-                    </div>
-
-                    
-                    <div className="card">
-                        <div className="card-header" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-                            <h3 className="card-title">Results by Exam</h3>
-                            <button className="btn btn-outline btn-sm" onClick={downloadPDF} style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                                PDF
-                            </button>
-                        </div>
-
-                        {apiLoading ? (
-                            <div style={{ display: "flex", justifyContent: "center", padding: "3rem" }}>
-                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
-                            </div>
-                        ) : (() => {
-                            if (results.length === 0) {
+                        <div style={{ padding: "1.25rem", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1rem" }}>
+                            {publishedExams.filter(ex => ex.published).map(ex => {
+                                const isLive = new Date(ex.opensAt) <= new Date() && new Date(ex.closesAt) >= new Date();
+                                const roster = rosterByExam[ex.id] || [];
+                                const activeCount = roster.filter(s => s.status === 'in_progress').length;
+                                
                                 return (
-                                    <div style={{ padding: "2.5rem", textAlign: "center", color: "var(--gray-400)", fontSize: "0.9rem" }}>
-                                        No submitted results yet. Results appear here after students submit exams.
+                                    <div key={ex.id} style={{ 
+                                        padding: "1.25rem", borderRadius: "16px", background: "var(--gray-50)", 
+                                        border: "1.5px solid var(--gray-100)"
+                                    }}>
+                                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--gray-900)", marginBottom: "0.5rem" }}>{ex.title}</div>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+                                            <span style={{ fontSize: "0.7rem", fontWeight: 800, color: isLive ? "var(--success)" : "var(--gray-400)" }}>
+                                                {isLive ? "● LIVE NOW" : "○ INACTIVE"}
+                                            </span>
+                                            <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-500)" }}>{activeCount} active students</span>
+                                        </div>
+                                        <button 
+                                            onClick={() => setMonitoringExam(ex)}
+                                            className="btn btn-primary btn-sm" 
+                                            style={{ width: "100%", justifyContent: "center" }}
+                                        >
+                                            Launch Monitor
+                                        </button>
                                     </div>
                                 );
-                            }
-
-                            // Group by grade+subject+section, then by exam within each group
-                            const classGroupMap = new Map<string, { label: string; exams: Map<string, typeof results> }>();
-                            for (const r of results) {
-                                const examObj = publishedExams.find(e => e.title === r.quiz);
-                                const co = examObj?.classOffering;
-                                const gKey = co
-                                    ? [co.gradeName, co.subjectName, co.sectionName].filter(Boolean).join(" ")
-                                    : r.subject || "General";
-                                if (!classGroupMap.has(gKey)) classGroupMap.set(gKey, { label: gKey, exams: new Map() });
-                                const grp = classGroupMap.get(gKey)!;
-                                if (!grp.exams.has(r.quiz)) grp.exams.set(r.quiz, []);
-                                grp.exams.get(r.quiz)!.push(r);
-                            }
-
-                            return [...classGroupMap.entries()].map(([gKey, grp]) => (
-                                <div key={gKey} style={{ borderBottom: "2px solid var(--gray-100)" }}>
-                                    <div style={{ padding: "0.6rem 1.25rem", background: "var(--primary-50)", borderBottom: "1px solid var(--primary-100)" }}>
-                                        <span style={{ fontWeight: 800, fontSize: "0.82rem", color: "var(--primary-700)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{grp.label}</span>
-                                        <span style={{ marginLeft: "0.75rem", fontSize: "0.72rem", color: "var(--primary-500)" }}>{grp.exams.size} exam{grp.exams.size !== 1 ? "s" : ""}</span>
-                                    </div>
-                                    {[...grp.exams.entries()].map(([examTitle, rows], examIdx) => {
-                                        const examObj = publishedExams.find(e => e.title === examTitle);
-                                        const maxPts = examObj?.maxPoints ?? 100;
-                                        const submitted = rows.length;
-                                        const avgRaw = submitted > 0 ? Math.round(rows.reduce((s, r) => s + r.score, 0) / submitted * 10) / 10 : 0;
-                                        return (
-                                            <ExamResultAccordion
-                                                key={examTitle}
-                                                examTitle={examTitle}
-                                                maxPts={maxPts}
-                                                submitted={submitted}
-                                                avgRaw={avgRaw}
-                                                rows={rows}
-                                                defaultOpen={examIdx === 0}
-                                                onViewResponses={openEvaluate}
-                                            />
-                                        );
-                                    })}
+                            })}
+                            {publishedExams.filter(ex => ex.published).length === 0 && (
+                                <div style={{ gridColumn: "1 / -1", padding: "2rem", textAlign: "center", color: "var(--gray-400)", border: "1.5px dashed var(--gray-200)", borderRadius: "16px", fontSize: "0.85rem" }}>
+                                    No published exams found to monitor.
                                 </div>
-                            ));
-                        })()}
+                            )}
+                        </div>
                     </div>
 
+                    <div className="card">
+                        <div className="card-header">
+                            <h3 className="card-title">Student Results</h3>
+                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                                <button className="btn btn-primary btn-sm" disabled={sendAllBusy} onClick={async () => {
+                                    setSendAllBusy(true);
+                                    try {
+                                        const now = new Date().toISOString().slice(0, 10);
+                                        const updated = results.map(r => r.sent ? r : { ...r, sent: true, sentAt: now });
+                                        setResults(updated);
+                                        for (const r of updated) {
+                                            if (r._attemptId) {
+                                                try { await apiReleaseAttempt(r._attemptId); } catch { /* best-effort */ }
+                                            }
+                                        }
+                                        showToast("All grades sent ✓");
+                                    } finally {
+                                        setSendAllBusy(false);
+                                    }
+                                }} style={{ opacity: sendAllBusy ? 0.75 : 1, display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                                    {sendAllBusy && <div className="spinner" style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.45)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
+                                    {sendAllBusy ? "Sending..." : "Send All Grades"}
+                                </button>
+                                <button className="btn btn-outline btn-sm" onClick={downloadPDF} style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                    Download PDF
+                                </button>
+                            </div>
+                        </div>
+                        <div className="table-wrapper">
+                            <table>
+                                <thead><tr><th>Student</th><th>Quiz</th><th>Score</th><th>Grade</th><th>Status</th><th>Actions</th></tr></thead>
+                                <tbody>
+                                    {results.slice((resultsPage - 1) * resultsRows, resultsPage * resultsRows).map((s, i) => (
+                                        <tr key={i}>
+                                            <td style={{ fontWeight: 600 }}>{s.name}</td>
+                                            <td style={{ fontSize: "0.85rem" }}>{s.quiz}</td>
+                                            <td style={{ fontWeight: 700, color: s.score >= 90 ? "var(--success)" : s.score >= 80 ? "var(--primary-600)" : "var(--warning)" }}>{s.score}%</td>
+                                            <td><span className={`badge ${s.score >= 90 ? "badge-success" : s.score >= 80 ? "badge-primary" : "badge-warning"}`}>{s.grade}</span></td>
+                                            <td>{s.sent ? <span className="badge badge-success">Sent</span> : <span className="badge badge-warning">Pending</span>}</td>
+                                            <td>
+                                                <div style={{ display: "flex", gap: "0.375rem" }}>
+                                                        <button className="btn btn-outline btn-sm" onClick={() => openEvaluate(s)}>Evaluate</button>
+                                                        {!s.sent && <button className="btn btn-primary btn-sm" disabled={sendingGradeId === s._attemptId} onClick={async () => {
+                                                            const key = s._attemptId ?? `${i}`;
+                                                            setSendingGradeId(key);
+                                                            try {
+                                                                const now = new Date().toISOString().slice(0, 10);
+                                                                const updated = { ...s, sent: true, sentAt: now };
+                                                                setResults(p => p.map((r, ri) => ri === i ? updated : r));
+                                                                if (s._attemptId) {
+                                                                    try { await apiReleaseAttempt(s._attemptId); } catch { /* best-effort */ }
+                                                                }
+                                                                showToast(`Grade sent to ${s.name} ✓`);
+                                                            } finally {
+                                                                setSendingGradeId(null);
+                                                            }
+                                                        }} style={{ opacity: sendingGradeId === s._attemptId ? 0.75 : 1, display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                                                            {sendingGradeId === s._attemptId && <div className="spinner" style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.45)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
+                                                            {sendingGradeId === s._attemptId ? "Sending..." : "Send Grade"}
+                                                        </button>}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {results.length > 0 && (
+                            <div style={{ marginTop: "1rem" }}>
+                                <TablePagination
+                                    total={results.length}
+                                    page={resultsPage}
+                                    rowsPerPage={resultsRows}
+                                    onPageChange={setResultsPage}
+                                    onRowsPerPageChange={(r) => {
+                                        setResultsRows(r);
+                                        setResultsPage(1);
+                                    }}
+                                />
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -2240,3 +2277,4 @@ export default function TeacherExams() {
         </div>
     );
 }
+
