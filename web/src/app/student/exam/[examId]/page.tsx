@@ -7,7 +7,8 @@ import {
     saveAttemptAnswers,
     submitAttempt as apiSubmitAttempt,
     recordViolation,
-    listExams,
+    listStudentExams,
+    listEnrollments,
     getActiveAcademicYear,
     type ExamQuestionForStudent,
     type Exam,
@@ -23,32 +24,156 @@ interface Question {
     text: string;
     options?: string[];
     order: number;
+    imageUrl?: string;
 }
 
 interface ExamData {
     id: string;
     title: string;
     duration: number;
+    minStayMinutes: number;
     totalQuestions: number;
     questions: Question[];
 }
 
+function normalizeQuestionType(rawType: string, options?: string[]): QuestionType {
+    const t = rawType.trim().toLowerCase();
+    if (
+        t === "truefalse" ||
+        t === "true_false" ||
+        t === "true-false" ||
+        t === "true/false" ||
+        t === "boolean" ||
+        t === "bool" ||
+        (t.includes("true") && t.includes("false"))
+    ) {
+        return "truefalse";
+    }
+    if (t === "fillin" || t === "fill_in" || t === "fill-in" || t === "short_answer" || t === "shortanswer") {
+        return "fillin";
+    }
+    if (t === "mcq" || t === "choose" || t === "multiple_choice" || t === "multiple-choice") {
+        return "mcq";
+    }
+
+    // If type is ambiguous but options look like true/false, classify it as true/false.
+    if (options && options.length === 2) {
+        const vals = options.map((o) => o.trim().toLowerCase());
+        if (vals.includes("true") && vals.includes("false")) return "truefalse";
+    }
+
+    return "mcq";
+}
+
+function parseQuestionOptions(raw: unknown): string[] | undefined {
+    if (!raw) return undefined;
+
+    try {
+        let parsed: unknown = raw;
+        // Handles nested stringified JSON payloads like '"[\"A\",\"B\"]"'.
+        if (typeof parsed === "string") {
+            parsed = JSON.parse(parsed);
+            if (typeof parsed === "string") parsed = JSON.parse(parsed);
+        }
+        if (Array.isArray(parsed)) {
+            return parsed.map((v) => String(v)).filter((v) => v.trim().length > 0);
+        }
+        if (parsed && typeof parsed === "object") {
+            const obj = parsed as Record<string, unknown>;
+            // Supports formats like { A: "...", B: "..." }.
+            const ordered = [
+                obj.A, obj.B, obj.C, obj.D,
+                obj.a, obj.b, obj.c, obj.d,
+                obj.optionA, obj.optionB, obj.optionC, obj.optionD,
+                obj.option1, obj.option2, obj.option3, obj.option4,
+            ]
+                .filter((v) => typeof v === "string")
+                .map((v) => String(v).trim())
+                .filter((v) => v.length > 0);
+            if (ordered.length > 0) return ordered;
+
+            const values = Object.values(obj)
+                .filter((v) => typeof v === "string")
+                .map((v) => String(v).trim())
+                .filter((v) => v.length > 0);
+            if (values.length > 0) return values;
+        }
+    } catch {
+        // Non-JSON string options fallback handled below.
+    }
+
+    if (typeof raw === "string" && raw.trim().length > 0) {
+        return [raw.trim()];
+    }
+
+    return undefined;
+}
+
 function mapApiQuestions(raw: ExamQuestionForStudent[]): Question[] {
-    return raw
-        .sort((a, b) => a.orderIndex - b.orderIndex)
-        .map((q, i) => {
-            let options: string[] | undefined;
-            if (q.optionsJson) {
-                try { options = JSON.parse(q.optionsJson); } catch { options = undefined; }
+    const rows = [...raw].sort((a, b) => {
+        const aIdx = typeof (a as any).orderIndex === "number" ? (a as any).orderIndex : Number.MAX_SAFE_INTEGER;
+        const bIdx = typeof (b as any).orderIndex === "number" ? (b as any).orderIndex : Number.MAX_SAFE_INTEGER;
+        return aIdx - bIdx;
+    });
+
+    return rows
+        .map((item, i) => {
+            const nested = (item as any).question ?? {};
+            const stem = String(
+                (item as any).stem ??
+                nested.stem ??
+                (item as any).text ??
+                nested.text ??
+                (item as any).questionText ??
+                nested.questionText ??
+                "",
+            ).trim();
+            const id = String((item as any).id ?? (item as any).questionId ?? nested.id ?? `q-${i}`);
+
+            const rawOptions =
+                (item as any).optionsJson ??
+                nested.optionsJson ??
+                (item as any).options ??
+                nested.options ??
+                (item as any).choices ??
+                nested.choices;
+            const options = parseQuestionOptions(rawOptions);
+            const typeRaw = String(
+                (item as any).type ??
+                nested.type ??
+                (item as any).questionType ??
+                nested.questionType ??
+                (item as any).kind ??
+                nested.kind ??
+                "mcq",
+            );
+            const qType = normalizeQuestionType(typeRaw, options);
+
+            const safeOptions = qType === "truefalse"
+                ? ["True", "False"]
+                : options;
+
+            // Extract image from attachmentsJson
+            const rawAttachments = (item as any).attachmentsJson ?? nested.attachmentsJson;
+            let imageUrl: string | undefined;
+            if (rawAttachments) {
+                try {
+                    const atts = typeof rawAttachments === "string" ? JSON.parse(rawAttachments) : rawAttachments;
+                    const img = Array.isArray(atts) ? atts.find((a: any) => a.kind === "image" || a.url?.match(/\.(jpg|jpeg|png|gif|webp)/i)) : null;
+                    if (img?.url) imageUrl = img.url;
+                } catch { /* ignore */ }
             }
 
-            let qType: "mcq" | "truefalse" | "fillin" = "mcq";
-            if (q.type === "mcq" || q.type === "choose") qType = "mcq";
-            else if (q.type === "truefalse") qType = "truefalse";
-            else if (q.type === "fillin") qType = "fillin";
-
-            return { id: q.id, type: qType, text: q.stem, options, order: i + 1 };
-        });
+            return {
+                id,
+                type: qType,
+                text: stem || `Question ${i + 1}`,
+                options: safeOptions,
+                order: i + 1,
+                imageUrl,
+            };
+        })
+        .filter((q) => q.text.trim().length > 0);
 }
 
 export default function ExamSession() {
@@ -59,6 +184,7 @@ export default function ExamSession() {
     // ── Loading state ──
     const [loading, setLoading] = useState(true);
     const [loadErr, setLoadErr] = useState<string | null>(null);
+    const [accessDenied, setAccessDenied] = useState(false);
     const [exam, setExam] = useState<ExamData | null>(null);
     const [attemptId, setAttemptId] = useState<string | null>(null);
 
@@ -73,12 +199,15 @@ export default function ExamSession() {
     const [showTabWarning, setShowTabWarning] = useState(false);
     const [tabViolations, setTabViolations] = useState(0);
     const [submitted, setSubmitted] = useState(false);
+    const [submittingNow, setSubmittingNow] = useState(false);
     const [showReport, setShowReport] = useState(false);
     const [showTeacherWarning, setShowTeacherWarning] = useState(false);
     const [teacherWarningMsg, setTeacherWarningMsg] = useState("");
+    const [sessionLocked, setSessionLocked] = useState(false);
     const tabViolationsRef = useRef(0);
     const submittedRef = useRef(false);
     const attemptIdRef = useRef<string | null>(null);
+    const controlUnsubRef = useRef<null | (() => void)>(null);
 
     // ── Load exam from backend ──
     useEffect(() => {
@@ -87,17 +216,44 @@ export default function ExamSession() {
         (async () => {
             setLoading(true);
             setLoadErr(null);
+            setAccessDenied(false);
             try {
                 // Get exam metadata
                 const year = await getActiveAcademicYear();
                 if (!year) throw new Error("No active academic year");
-                const exams = await listExams(year.id);
-                const examMeta = exams.find(e => e.id === examId);
-                if (!examMeta) throw new Error("Exam not found");
+                const exams = await listStudentExams(year.id);
+
+                const me = getStoredUser();
+                let visibleExams = exams;
+                if (me?.id) {
+                    try {
+                        const mine = await listEnrollments({ academicYearId: year.id, studentId: me.id });
+                        const allowedOfferingIds = new Set(mine.map((e) => e.classOfferingId));
+                        visibleExams = exams.filter((ex) => !ex.classOfferingId || allowedOfferingIds.has(ex.classOfferingId));
+                    } catch {
+                        // Do not block the page if enrollment endpoint is not available for the role.
+                    }
+                }
+
+                const examMeta = visibleExams.find(e => e.id === examId);
+                if (!examMeta) throw new Error("This exam is not assigned to your class.");
+
+                const opensAtMs = new Date(examMeta.opensAt).getTime();
+                const strictEndsAtMs = opensAtMs + examMeta.durationMinutes * 60_000;
+                const nowMs = Date.now();
+                if (nowMs < opensAtMs) {
+                    throw new Error("This exam has not started yet.");
+                }
+                if (nowMs >= strictEndsAtMs) {
+                    throw new Error("This exam time window has ended.");
+                }
 
                 // Get questions
                 const rawQuestions = await getExamQuestions(examId);
                 const questions = mapApiQuestions(rawQuestions);
+                if (questions.length === 0) {
+                    throw new Error("No questions are available for this exam yet.");
+                }
 
                 // Start attempt
                 const attempt = await startExamAttempt(examId);
@@ -121,16 +277,18 @@ export default function ExamSession() {
                     id: examMeta.id,
                     title: examMeta.title,
                     duration: examMeta.durationMinutes,
+                    minStayMinutes: Math.max(0, Math.min(examMeta.durationMinutes, examMeta.minStayMinutes ?? 0)),
                     totalQuestions: questions.length,
                     questions,
                 });
-                setTimeLeft(examMeta.durationMinutes * 60);
+                setTimeLeft(Math.max(0, Math.floor((strictEndsAtMs - nowMs) / 1000)));
 
                 // Setup realtime listener for teacher control
-                const me = getStoredUser();
-                if (me && me.id) {
-                    chatRealtime.connect({ id: me.id, name: `${me.firstName} ${me.lastName}` });
+                const currentUser = getStoredUser();
+                if (currentUser && currentUser.id) {
+                    chatRealtime.connect({ id: currentUser.id, name: `${currentUser.firstName} ${currentUser.lastName}` });
                 }
+                controlUnsubRef.current?.();
                 const unsubControl = chatRealtime.on("attempt:control", (payload) => {
                     if (payload.attemptId !== attempt.id) return;
                     if (payload.action === "force_submit") {
@@ -138,24 +296,32 @@ export default function ExamSession() {
                     } else if (payload.action === "warn") {
                         setTeacherWarningMsg(payload.message || "A teacher has sent you a warning.");
                         setShowTeacherWarning(true);
+                    } else if (payload.action === "allow_rejoin") {
+                        setTeacherWarningMsg(payload.message || "Teacher approved your rejoin request.");
+                        setShowTeacherWarning(true);
                     }
                 });
-                return () => {
-                    cancelled = true;
-                    unsubControl();
-                };
+                controlUnsubRef.current = unsubControl;
             } catch (e) {
-                if (!cancelled) setLoadErr(e instanceof Error ? e.message : "Failed to load exam");
+                if (!cancelled) {
+                    const msg = e instanceof Error ? e.message : "Failed to load exam";
+                    setLoadErr(msg);
+                    setAccessDenied(msg.toLowerCase().includes("not assigned to your class"));
+                }
             } finally {
                 if (!cancelled) setLoading(false);
             }
         })();
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            controlUnsubRef.current?.();
+            controlUnsubRef.current = null;
+        };
     }, [examId, router]);
 
     const question = exam?.questions[currentQ];
     const answeredCount = Object.keys(answers).length;
-    const minimumTimeSeconds = exam ? Math.floor((exam.duration * 60) / 2) : 0;
+    const minimumTimeSeconds = exam ? exam.minStayMinutes * 60 : 0;
 
     // ── Timer ──
     useEffect(() => {
@@ -189,7 +355,15 @@ export default function ExamSession() {
                 setShowTabWarning(true);
                 const aid = attemptIdRef.current;
                 if (aid) {
-                    recordViolation(aid, JSON.stringify({ type: "tab_switch", reason: "Document visibility changed to hidden", timestamp: new Date().toISOString() })).catch(() => {});
+                    recordViolation(aid, "Tab switch detected")
+                        .then((res) => {
+                            if (res.locked) {
+                                setSessionLocked(true);
+                                setLoadErr("Your exam session was locked due to tab switch. Wait for teacher approval to rejoin.");
+                                setTimeout(() => router.push("/student/dashboard"), 900);
+                            }
+                        })
+                        .catch(() => {});
                 }
             }
         };
@@ -209,7 +383,7 @@ export default function ExamSession() {
             document.removeEventListener("contextmenu", handleContextMenu);
             document.removeEventListener("keydown", handleKeyDown);
         };
-    }, [submitted]);
+    }, [submitted, router]);
 
     // ── Fullscreen enforcement ──
     useEffect(() => {
@@ -226,7 +400,15 @@ export default function ExamSession() {
                 setShowTabWarning(true);
                 const aid = attemptIdRef.current;
                 if (aid) {
-                    recordViolation(aid, JSON.stringify({ type: "fullscreen_exit", reason: "Student exited fullscreen mode", timestamp: new Date().toISOString() })).catch(() => {});
+                    recordViolation(aid, "Fullscreen exit detected")
+                        .then((res) => {
+                            if (res.locked) {
+                                setSessionLocked(true);
+                                setLoadErr("Your exam session was locked after leaving fullscreen. Wait for teacher approval to rejoin.");
+                                setTimeout(() => router.push("/student/dashboard"), 900);
+                            }
+                        })
+                        .catch(() => {});
                 }
                 setTimeout(enterFullscreen, 500);
             }
@@ -243,24 +425,37 @@ export default function ExamSession() {
     // ── Submit ──
     useEffect(() => {
         if (!submitted || !attemptId) return;
+        if (sessionLocked) return;
         submittedRef.current = true;
+        setSubmittingNow(true);
         (async () => {
+            let submittedOk = false;
             try {
                 // Save final answers
                 await saveAttemptAnswers(attemptId, JSON.stringify(answers));
                 // Submit attempt
                 await apiSubmitAttempt(attemptId);
-            } catch { /* best-effort */ }
-            router.push(`/student/result/${attemptId}`);
+                submittedOk = true;
+            } catch (e) {
+                setLoadErr(e instanceof Error ? e.message : "Failed to submit exam");
+                submittedRef.current = false;
+                setSubmitted(false);
+                setSubmittingNow(false);
+                return;
+            }
+            if (submittedOk) {
+                router.push(`/student/result/${attemptId}`);
+            }
         })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [submitted]);
+    }, [submitted, attemptId, answers, router, sessionLocked]);
 
     const setAnswer = (qId: string, value: string) => setAnswers(prev => ({ ...prev, [qId]: value }));
     const toggleFlag = (qId: string) => { setFlagged(prev => { const next = new Set(prev); next.has(qId) ? next.delete(qId) : next.add(qId); return next; }); };
 
     const handleSubmitClick = () => {
-        if (timeSpent < minimumTimeSeconds) { setShowEarlyWarning(true); return; }
+        if (submittingNow) return;
+        if (minimumTimeSeconds > 0 && timeSpent < minimumTimeSeconds) { setShowEarlyWarning(true); return; }
         setShowConfirm(true);
     };
     const confirmSubmit = () => {
@@ -287,6 +482,28 @@ export default function ExamSession() {
     }
 
     if (loadErr || !exam || !question) {
+        if (accessDenied) {
+            return (
+                <div style={{ minHeight: "100vh", background: "var(--gray-50)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+                    <div style={{ maxWidth: 520, width: "100%", borderRadius: 20, border: "1.5px solid var(--warning-light)", background: "#fff", padding: "2rem", boxShadow: "0 12px 28px rgba(0,0,0,0.08)", textAlign: "center" }}>
+                        <div style={{ width: 58, height: 58, margin: "0 auto 1rem", borderRadius: "50%", background: "var(--warning-light)", color: "#92400e", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+                        </div>
+                        <h2 style={{ fontSize: "1.4rem", fontWeight: 800, color: "var(--gray-900)", marginBottom: "0.65rem" }}>Not Assigned to Your Class</h2>
+                        <p style={{ fontSize: "0.92rem", color: "var(--gray-600)", lineHeight: 1.6, marginBottom: "1.25rem" }}>
+                            This exam is only available to students enrolled in its class.
+                        </p>
+                        <p style={{ fontSize: "0.82rem", color: "var(--gray-500)", marginBottom: "1.6rem" }}>
+                            If you think this is a mistake, contact your teacher or school admin.
+                        </p>
+                        <button onClick={() => router.push("/student/dashboard")} style={{ padding: "0.75rem 1.4rem", borderRadius: 12, background: "var(--primary-500)", border: "none", color: "#fff", fontWeight: 700, cursor: "pointer" }}>
+                            Back to Dashboard
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
         return (
             <div style={{ minHeight: "100vh", background: "var(--gray-50)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div style={{ textAlign: "center", color: "var(--danger)", maxWidth: 400 }}>
@@ -325,9 +542,10 @@ export default function ExamSession() {
                     padding: "0.6rem 1.25rem", borderRadius: 10,
                     background: "linear-gradient(135deg, var(--success), #059669)",
                     color: "#fff", fontWeight: 700, fontSize: "0.85rem",
-                    border: "none", cursor: "pointer", flexShrink: 0,
+                    border: "none", cursor: submittingNow ? "not-allowed" : "pointer", flexShrink: 0,
+                    opacity: submittingNow ? 0.7 : 1,
                     boxShadow: "0 2px 8px rgba(16,185,129,0.3)",
-                }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4 }}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg> Submit</button>
+                }} disabled={submittingNow}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4 }}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg> {submittingNow ? "Submitting..." : "Submit"}</button>
             </div>
 
             {/* Progress Bar */}
@@ -369,6 +587,15 @@ export default function ExamSession() {
                     {/* Question Text */}
                     <div style={{ background: "#fff", borderRadius: 16, padding: "1.5rem", border: "1px solid var(--gray-100)", marginBottom: "1.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                         <p style={{ fontSize: "1.1rem", lineHeight: 1.7, fontWeight: 500, color: "var(--gray-800)" }}>{question.text}</p>
+                        {question.imageUrl && (
+                            <div style={{ marginTop: "1rem" }}>
+                                <img
+                                    src={question.imageUrl}
+                                    alt="Question image"
+                                    style={{ maxWidth: "100%", maxHeight: 320, borderRadius: 10, border: "1px solid var(--gray-200)", display: "block" }}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {/* Answer Area */}
@@ -390,6 +617,11 @@ export default function ExamSession() {
                                 </label>
                             );
                         })}
+                        {question.type === "mcq" && (!question.options || question.options.length === 0) && (
+                            <div style={{ borderRadius: 12, border: "1.5px solid var(--warning-light)", background: "var(--warning-light)", padding: "0.9rem 1rem", color: "#92400e", fontSize: "0.85rem", fontWeight: 600 }}>
+                                Options are missing for this question. Please notify your teacher to republish the exam question options.
+                            </div>
+                        )}
                         {question.type === "truefalse" && (
                             <div style={{ display: "flex", gap: "1rem" }}>
                                 {["True", "False"].map(opt => {
@@ -489,8 +721,8 @@ export default function ExamSession() {
                             </div>
                         )}
                         <div style={{ display: "flex", gap: "0.75rem" }}>
-                            <button onClick={() => setShowConfirm(false)} style={{ flex: 1, padding: "0.75rem", borderRadius: 12, background: "var(--gray-100)", border: "none", fontWeight: 600, cursor: "pointer", color: "var(--gray-700)" }}>Go Back</button>
-                            <button onClick={confirmSubmit} style={{ flex: 1, padding: "0.75rem", borderRadius: 12, background: "var(--success)", border: "none", fontWeight: 700, cursor: "pointer", color: "#fff" }}>Yes, Submit</button>
+                            <button disabled={submittingNow} onClick={() => setShowConfirm(false)} style={{ flex: 1, padding: "0.75rem", borderRadius: 12, background: "var(--gray-100)", border: "none", fontWeight: 600, cursor: submittingNow ? "not-allowed" : "pointer", color: "var(--gray-700)", opacity: submittingNow ? 0.6 : 1 }}>Go Back</button>
+                            <button disabled={submittingNow} onClick={confirmSubmit} style={{ flex: 1, padding: "0.75rem", borderRadius: 12, background: "var(--success)", border: "none", fontWeight: 700, cursor: submittingNow ? "not-allowed" : "pointer", color: "#fff", opacity: submittingNow ? 0.75 : 1 }}>{submittingNow ? "Submitting..." : "Yes, Submit"}</button>
                         </div>
                     </div>
                 </div>
@@ -541,7 +773,7 @@ export default function ExamSession() {
                         </p>
                         <div style={{ display: "flex", gap: "0.75rem" }}>
                             <button onClick={() => setShowReport(false)} style={{ flex: 1, padding: "0.75rem", borderRadius: 12, background: "var(--primary-500)", border: "none", fontWeight: 700, cursor: "pointer", color: "#fff" }}>Go Back & Review</button>
-                            <button onClick={forceSubmitAfterReport} style={{ flex: 1, padding: "0.75rem", borderRadius: 12, background: "var(--gray-100)", border: "none", fontWeight: 600, cursor: "pointer", color: "var(--gray-700)" }}>Submit Anyway</button>
+                            <button disabled={submittingNow} onClick={forceSubmitAfterReport} style={{ flex: 1, padding: "0.75rem", borderRadius: 12, background: "var(--gray-100)", border: "none", fontWeight: 600, cursor: submittingNow ? "not-allowed" : "pointer", color: "var(--gray-700)", opacity: submittingNow ? 0.6 : 1 }}>{submittingNow ? "Submitting..." : "Submit Anyway"}</button>
                         </div>
                     </div>
                 </div>

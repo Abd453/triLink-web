@@ -52,10 +52,15 @@ function DashboardSkeleton() {
 }
 
 function offeringLabel(o: ClassOffering) {
-  const subj = o.subjectName || (o as any).subject?.name || "Untitled";
+  let gradeStr = "";
+  if (o.gradeName) gradeStr = "Grade " + o.gradeName;
+  else if ((o as any).grade?.name) gradeStr = "Grade " + (o as any).grade.name;
+  else if ((o as any).class?.name) gradeStr = (o as any).class.name;
+
+  const subj = o.subjectName || (o as any).subject?.name || "";
   const sec = o.sectionName || (o as any).section?.name || "";
-  const gr = o.gradeName || (o as any).grade?.name || "";
-  return `${subj} · ${gr}-${sec}`;
+  if (subj && sec) return gradeStr ? `${gradeStr} | ${subj} - ${sec}` : `${subj} - ${sec}`;
+  return o.displayName || o.name?.trim() || "Untitled Class";
 }
 
 export default function TeacherDashboard() {
@@ -76,6 +81,7 @@ export default function TeacherDashboard() {
   const [broadTitle, setBroadTitle] = useState("");
   const [broadBody, setBroadBody] = useState("");
   const [broadAudience, setBroadAudience] = useState("students");
+  const [broadClassId, setBroadClassId] = useState("");
   const [isPublishing, setIsPublishing] = useState(false);
   const [toast, setToast] = useState<(ToastState & { ok?: boolean }) | null>(null);
   const [activeYear, setActiveYear] = useState<any>(null);
@@ -128,7 +134,9 @@ export default function TeacherDashboard() {
         title: broadTitle.trim(),
         body: broadBody.trim(),
         audience: broadAudience,
+        ...(broadClassId ? { classOfferingId: broadClassId } : {})
       });
+      setBroadClassId("");
       setBroadTitle("");
       setBroadBody("");
       showToast("Broadcast sent successfully!", true);
@@ -315,11 +323,22 @@ export default function TeacherDashboard() {
                         style={{ padding: "0.7rem 1rem", borderRadius: 12, border: "1.5px solid var(--gray-200)", background: "var(--gray-50)", fontSize: "0.85rem", width: "100%", outline: "none" }}
                     />
                     <select 
+                        value={broadClassId}
+                        onChange={e => setBroadClassId(e.target.value)}
+                        style={{ padding: "0.7rem", borderRadius: 12, border: "1.5px solid var(--gray-200)", background: "var(--gray-50)", fontSize: "0.75rem", fontWeight: 700, outline: "none", cursor: "pointer", maxWidth: "200px" }}
+                    >
+                        <option value="">All My Classes</option>
+                        {offerings.map(o => (
+                           <option key={o.id} value={o.id}>{offeringLabel(o)}</option>
+                        ))}
+                    </select>
+                    <select 
                         value={broadAudience}
                         onChange={e => setBroadAudience(e.target.value)}
                         style={{ padding: "0.7rem", borderRadius: 12, border: "1.5px solid var(--gray-200)", background: "var(--gray-50)", fontSize: "0.75rem", fontWeight: 700, outline: "none", cursor: "pointer" }}
                     >
                         <option value="students">Students</option>
+                        <option value="parents">Parents</option>
                         <option value="all">Everyone</option>
                     </select>
                 </div>

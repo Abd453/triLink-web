@@ -1,14 +1,20 @@
 "use client";
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
     announcementsForMe,
     studentDashboard,
     listStudentExams,
+    listEnrollments,
     getActiveAcademicYear,
+    listAssignmentsForStudent,
+    listGradesForStudent,
     type Announcement,
     type Exam as BackendExam,
+    type Assignment,
+    type GradeEntry,
 } from "@/lib/admin-api";
+import { getStoredUser } from "@/lib/auth";
 import { 
     Calendar, 
     Clock, 
@@ -28,6 +34,7 @@ type ExamStatus = "available" | "completed" | "upcoming" | "missed";
 
 interface Exam {
     id: string;
+    attemptId?: string;
     course: string;
     type: string;
     title: string;
@@ -37,6 +44,7 @@ interface Exam {
     totalQuestions: number;
     status: ExamStatus;
     score?: number | null;
+    maxPoints: number;
     room: string;
 }
 
@@ -47,47 +55,106 @@ export default function StudentDashboard() {
     const [apiDash, setApiDash] = useState<{ activeEnrollments: number; unreadNotifications: number } | null>(null);
     const [apiExams, setApiExams] = useState<BackendExam[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [assignments, setAssignments] = useState<Assignment[]>([]);
+    const [grades, setGrades] = useState<GradeEntry[]>([]);
     const [year, setYear] = useState<{ id: string; label: string } | null>(null);
 
     const [isClient, setIsClient] = useState(false);
+
+    const loadDashboardData = useCallback(async (opts?: { silent?: boolean }) => {
+        const silent = opts?.silent ?? false;
+        if (!silent) setIsLoading(true);
+        try {
+            const activeYear = await getActiveAcademicYear();
+            setYear(activeYear);
+
+            // Fetch announcements and dashboard regardless of academic year
+            const [ann, dash] = await Promise.all([
+                announcementsForMe(),
+                studentDashboard(),
+            ]);
+
+            let examsRes: BackendExam[] = [];
+            if (activeYear) {
+                examsRes = await listStudentExams(activeYear.id);
+                const me = getStoredUser();
+                if (me?.id) {
+                    try {
+                        const mine = await listEnrollments({ academicYearId: activeYear.id, studentId: me.id });
+                        const allowedOfferingIds = new Set(mine.map((e) => e.classOfferingId));
+                        examsRes = examsRes.filter((ex) => !ex.classOfferingId || allowedOfferingIds.has(ex.classOfferingId));
+                    } catch (enrollErr) {
+                        // Keep exam list fallback if enrollments endpoint is unavailable for this role.
+                        console.warn("Enrollment filter unavailable for student exam dashboard:", enrollErr);
+                    }
+                }
+            }
+
+            setApiAnnouncements(ann);
+            setApiDash(dash);
+            setApiExams(examsRes);
+
+            // Load assignments and grades for activity timeline
+            const me = getStoredUser();
+            if (me?.id) {
+                try {
+                    const [asgns, grd] = await Promise.all([
+                        listAssignmentsForStudent(me.id).catch(() => [] as Assignment[]),
+                        listGradesForStudent(me.id).catch(() => [] as GradeEntry[]),
+                    ]);
+                    setAssignments(asgns);
+                    setGrades(grd);
+                } catch { /* ignore */ }
+            }
+        } catch (err) {
+            console.error("Dashboard load failed:", err);
+        } finally {
+            if (!silent) setIsLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
         setIsClient(true);
-        let c = false;
-        (async () => {
-            setIsLoading(true);
-            try {
-                const activeYear = await getActiveAcademicYear();
-                setYear(activeYear);
-                
-                // Fetch announcements and dashboard regardless of academic year
-                const [ann, dash] = await Promise.all([
-                    announcementsForMe(),
-                    studentDashboard(),
-                ]);
-                
-                let examsRes: BackendExam[] = [];
-                if (activeYear) {
-                    examsRes = await listStudentExams(activeYear.id);
-                }
-                
-                if (!c) {
-                    setApiAnnouncements(ann);
-                    setApiDash(dash);
-                    setApiExams(examsRes);
-                }
-            } catch (err) {
-                console.error("Dashboard primary load failed:", err);
-            } finally {
-                if (!c) setIsLoading(false);
+        void loadDashboardData();
+
+        const onFocus = () => {
+            void loadDashboardData({ silent: true });
+        };
+        const onVisible = () => {
+            if (document.visibilityState === "visible") {
+                void loadDashboardData({ silent: true });
             }
-        })();
-        return () => { c = true; };
-    }, []);
+        };
+        const intervalId = window.setInterval(() => {
+            if (!document.hidden) {
+                void loadDashboardData({ silent: true });
+            }
+        }, 30000);
+
+        window.addEventListener("focus", onFocus);
+        document.addEventListener("visibilitychange", onVisible);
+        return () => {
+            window.removeEventListener("focus", onFocus);
+            document.removeEventListener("visibilitychange", onVisible);
+            window.clearInterval(intervalId);
+        };
+    }, [loadDashboardData]);
 
     const processedExams: Exam[] = useMemo(() => {
         if (!isClient) return [];
+        const meId = getStoredUser()?.id;
+
+        const attemptSortTime = (a: NonNullable<BackendExam["attempts"]>[number]) => {
+            const t = a.submittedAt ?? a.startedAt ?? a.releasedAt;
+            return t ? new Date(t).getTime() : 0;
+        };
+
         return apiExams.map((e: BackendExam) => {
-            const attempt = e.attempts?.[0]; 
+            const mineAttempts = (e.attempts ?? []).filter((a) => !meId || a.studentId === meId);
+            const attempt = mineAttempts.reduce<typeof mineAttempts[number] | undefined>((latest, cur) => {
+                if (!latest) return cur;
+                return attemptSortTime(cur) > attemptSortTime(latest) ? cur : latest;
+            }, undefined);
             const now = new Date();
             const opensAt = new Date(e.opensAt);
             const closesAt = new Date(e.closesAt);
@@ -95,14 +162,15 @@ export default function StudentDashboard() {
             let status: ExamStatus = "upcoming";
             if (attempt?.submittedAt) {
                 status = "completed";
-            } else if (now >= opensAt && now <= closesAt) {
-                status = "available";
             } else if (now > closesAt && !attempt?.submittedAt) {
                 status = "missed";
+            } else if (now >= opensAt && now <= closesAt) {
+                status = "available";
             }
 
             return {
                 id: e.id,
+                attemptId: attempt?.id,
                 course: (e as any).subject?.name || (e as any).classOffering?.name || "General",
                 type: (e as any).type || "Examination",
                 title: e.title,
@@ -112,6 +180,7 @@ export default function StudentDashboard() {
                 totalQuestions: (e as any).questionCount || 0,
                 status,
                 score: attempt?.score,
+                maxPoints: e.maxPoints,
                 room: "Digital Hall"
             };
         });
@@ -163,7 +232,7 @@ export default function StudentDashboard() {
                 </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: "2.5rem", alignItems: "start" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr minmax(0,320px) minmax(0,300px)", gap: "1.5rem", alignItems: "start" }}>
                 {/* Main Content: Exams */}
                 <div className="exams-column">
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
@@ -258,8 +327,20 @@ export default function StudentDashboard() {
                                                 <CheckCircle2 size={20} className="text-primary-600" />
                                                 <div>
                                                     <div style={{ fontSize: "0.7rem", color: "var(--gray-400)", fontWeight: 600 }}>Achieved Score</div>
-                                                    <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--primary-700)" }}>{exam.score != null ? `${exam.score}%` : "Evaluating..."}</div>
+                                                    <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--primary-700)" }}>{exam.score != null ? `${exam.score}/${exam.maxPoints}` : "Evaluating..."}</div>
                                                 </div>
+                                                {exam.attemptId && (
+                                                    <button
+                                                        className="btn btn-outline"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            router.push(`/student/result/${exam.attemptId}`);
+                                                        }}
+                                                        style={{ marginLeft: "0.5rem", borderRadius: 10, padding: "0.5rem 0.85rem", fontSize: "0.78rem" }}
+                                                    >
+                                                        View Result
+                                                    </button>
+                                                )}
                                             </div>
                                         ) : exam.status === "available" ? (
                                             <button 
@@ -281,6 +362,98 @@ export default function StudentDashboard() {
                                 </div>
                             ))
                         )}
+                    </div>
+                </div>
+
+                {/* Activity Timeline */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                    <div style={{ background: "#fff", borderRadius: 24, border: "1.5px solid var(--gray-100)", overflow: "hidden" }}>
+                        <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1.5px solid var(--gray-50)", background: "#fafafa", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                            <div style={{ width: 36, height: 36, background: "var(--primary-100)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--primary-600)" }}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            </div>
+                            <div>
+                                <h3 style={{ fontSize: "1rem", fontWeight: 800 }}>Recent Activity</h3>
+                                <p style={{ fontSize: "0.72rem", color: "var(--gray-400)", fontWeight: 600 }}>Your academic timeline</p>
+                            </div>
+                        </div>
+                        <div style={{ padding: "1rem 1.25rem", display: "flex", flexDirection: "column", gap: "0" }}>
+                            {(() => {
+                                // Build unified activity list
+                                type ActivityItem = { id: string; type: string; title: string; subtitle: string; date: Date; color: string; icon: string; link?: string };
+                                const items: ActivityItem[] = [];
+
+                                // Exams
+                                processedExams.forEach(e => {
+                                    if (e.status === "completed") {
+                                        items.push({ id: `exam-${e.id}`, type: "exam", title: e.title, subtitle: e.score != null ? `Score: ${e.score}/${e.maxPoints}` : "Submitted", date: new Date(e.date), color: "var(--primary-500)", icon: "📝", link: e.attemptId ? `/student/result/${e.attemptId}` : undefined });
+                                    } else if (e.status === "available") {
+                                        items.push({ id: `exam-avail-${e.id}`, type: "exam_available", title: e.title, subtitle: "Available now", date: new Date(e.date), color: "var(--success)", icon: "🎯", link: `/student/exam/${e.id}` });
+                                    }
+                                });
+
+                                // Assignments
+                                assignments.forEach(a => {
+                                    if (a.submission?.submittedAt) {
+                                        items.push({ id: `asgn-${a.id}`, type: "assignment", title: a.title, subtitle: a.submission.releasedAt && a.submission.score != null ? `Graded: ${a.submission.score}/${a.maxScore}` : "Submitted", date: new Date(a.submission.submittedAt), color: "#8b5cf6", icon: "📋" });
+                                    } else if (a.published && !a.isOverdue) {
+                                        items.push({ id: `asgn-due-${a.id}`, type: "assignment_due", title: a.title, subtitle: `Due ${new Date(a.deadline).toLocaleDateString()}`, date: new Date(a.deadline), color: "#f59e0b", icon: "⏰" });
+                                    }
+                                });
+
+                                // Grades released
+                                grades.filter(g => g.releasedAt).forEach(g => {
+                                    items.push({ id: `grade-${g.id}`, type: "grade", title: g.title, subtitle: g.score != null ? `${g.score}/${g.maxScore} pts` : "Released", date: new Date(g.releasedAt!), color: "#10b981", icon: "🏆" });
+                                });
+
+                                // Announcements
+                                apiAnnouncements.slice(0, 3).forEach(a => {
+                                    items.push({ id: `ann-${a.id}`, type: "announcement", title: a.title, subtitle: a.body?.slice(0, 60) + (a.body?.length > 60 ? "…" : ""), date: new Date(a.createdAt), color: "#3b82f6", icon: "📢" });
+                                });
+
+                                // Sort newest first
+                                items.sort((a, b) => b.date.getTime() - a.date.getTime());
+                                const recent = items.slice(0, 12);
+
+                                if (recent.length === 0) {
+                                    return <div style={{ padding: "1.5rem 0", textAlign: "center", color: "var(--gray-400)", fontSize: "0.85rem" }}>No recent activity yet.</div>;
+                                }
+
+                                return recent.map((item, i) => (
+                                    <div key={item.id} style={{ display: "flex", gap: "0.75rem", paddingBottom: "0.85rem", marginBottom: "0.85rem", borderBottom: i < recent.length - 1 ? "1px solid var(--gray-50)" : "none", cursor: item.link ? "pointer" : "default" }}
+                                        onClick={() => item.link && (window.location.href = item.link)}>
+                                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${item.color}18`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.9rem", flexShrink: 0, marginTop: 2 }}>
+                                            {item.icon}
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--gray-900)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</div>
+                                            <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: "0.1rem" }}>{item.subtitle}</div>
+                                        </div>
+                                        <div style={{ fontSize: "0.68rem", color: "var(--gray-400)", flexShrink: 0, marginTop: 3 }}>
+                                            {item.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                        </div>
+                                    </div>
+                                ));
+                            })()}
+                        </div>
+                    </div>
+
+                    {/* Quick stats */}
+                    <div style={{ background: "#fff", borderRadius: 20, border: "1.5px solid var(--gray-100)", padding: "1.25rem" }}>
+                        <h4 style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.85rem" }}>Quick Stats</h4>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+                            {[
+                                { label: "Exams Done", value: processedExams.filter(e => e.status === "completed").length, color: "var(--primary-600)" },
+                                { label: "Assignments", value: assignments.filter(a => a.submission?.submittedAt).length, color: "#8b5cf6" },
+                                { label: "Grades Released", value: grades.filter(g => g.releasedAt).length, color: "#10b981" },
+                                { label: "Pending", value: assignments.filter(a => !a.submission?.submittedAt && !a.isOverdue).length, color: "#f59e0b" },
+                            ].map(stat => (
+                                <div key={stat.label} style={{ background: "var(--gray-50)", borderRadius: 12, padding: "0.75rem", textAlign: "center" }}>
+                                    <div style={{ fontWeight: 800, fontSize: "1.4rem", color: stat.color }}>{stat.value}</div>
+                                    <div style={{ fontSize: "0.7rem", color: "var(--gray-500)", fontWeight: 600, marginTop: "0.1rem" }}>{stat.label}</div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
 

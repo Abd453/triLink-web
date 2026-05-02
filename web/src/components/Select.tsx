@@ -24,7 +24,7 @@ export default function Select({ children, value, onChange, disabled, style, cla
   // Recursively extract options
   function extractOptions(node: ReactNode) {
     React.Children.forEach(node, (child) => {
-      if (React.isValidElement(child)) {
+      if (React.isValidElement<{ value?: unknown; children?: ReactNode; disabled?: boolean }>(child)) {
         if (child.type === 'option') {
           const val = child.props.value ?? child.props.children;
           options.push({
@@ -32,7 +32,7 @@ export default function Select({ children, value, onChange, disabled, style, cla
             label: child.props.children,
             disabled: child.props.disabled
           });
-        } else if (child.props && child.props.children) {
+        } else if (child.props.children) {
           // If it's a Fragment or array inside, drill down
           extractOptions(child.props.children);
         }

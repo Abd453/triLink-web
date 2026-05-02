@@ -2,11 +2,10 @@
 
 import { useRef, useState, useEffect } from "react";
 import { useCurrentUser } from "@/lib/useCurrentUser";
-import { getApiBase, getFileUrl } from "@/lib/api";
-import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
-import { useToastStore } from "@/store/toastStore";
 import { patchMe, uploadProfileImage } from "@/lib/admin-api";
 import { refreshStoredProfile } from "@/lib/auth";
+import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
+import { useToastStore } from "@/store/toastStore";
 
 type TeacherProfile = {
     firstName: string;
@@ -85,7 +84,6 @@ export default function TeacherProfilePage() {
     const [isEditing, setIsEditing] = useState(false);
     const user = useCurrentUser("teacher");
     const [profile, setProfile] = useState<TeacherProfile>(initialProfile);
-    const [draft, setDraft] = useState<TeacherProfile>(initialProfile);
     const [saving, setSaving] = useState(false);
     const [avatarUploading, setAvatarUploading] = useState(false);
     const { showToast } = useToastStore();

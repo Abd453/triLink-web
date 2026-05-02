@@ -50,6 +50,7 @@ export default function AdminAnnouncements() {
   const [body, setBody] = useState("");
   const [audience, setAudience] = useState("all");
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);

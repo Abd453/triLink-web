@@ -3,5 +3,5 @@
 import RestChat from "@/components/RestChat";
 
 export default function AdminChat() {
-  return <RestChat enableNewGroup />;
+  return <RestChat />;
 }

@@ -61,11 +61,8 @@ export default function Sidebar({ role, items, roleColor }: SidebarProps) {
             <aside className={`sidebar ${mobileOpen ? "open" : ""}`}>
                 <div className="sidebar-header">
                     <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.75rem", textDecoration: "none", color: "inherit" }} aria-label="Go to home page">
-                        <div className="sidebar-logo">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-                                <path d="M6 12v5c0 1.1 2.7 3 6 3s6-1.9 6-3v-5" />
-                            </svg>
+                        <div className="sidebar-logo" style={{ overflow: "hidden", borderRadius: "10px", padding: 0, background: "transparent" }}>
+                            <img src="https://avatars.githubusercontent.com/u/261413181?s=200&v=4" alt="TriLink" width={36} height={36} style={{ width: 36, height: 36, objectFit: "contain", display: "block" }} />
                         </div>
                         <div>
                             <div className="sidebar-brand">Tri<span>Link</span></div>

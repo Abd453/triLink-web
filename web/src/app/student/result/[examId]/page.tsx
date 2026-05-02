@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { getAttemptResult, type AttemptResult } from "@/lib/admin-api";
+import { toLetterGrade } from "@/lib/grading";
 
 type QuestionType = "mcq" | "truefalse" | "fillin";
 
@@ -77,17 +78,20 @@ export default function ExamResult() {
     const correct = questions.filter(q => q.studentAnswer && q.correctAnswer && q.studentAnswer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()).length;
     const unanswered = questions.filter(q => !q.studentAnswer).length;
     const wrong = questions.length - correct - unanswered;
-    const timeTaken = data.submittedAt ? formatTime(Math.round((new Date(data.submittedAt).getTime() - new Date(data.submittedAt).getTime()) / 1000)) : "—";
+    const submittedAtLabel = new Date(data.submittedAt).toLocaleString();
+    const releasedAtLabel = data.releasedAt ? new Date(data.releasedAt).toLocaleString() : "Pending";
     const tabViolations = data.violations?.length ?? 0;
 
-    const getGrade = (score: number) => {
-        if (score >= 90) return { letter: "A", color: "var(--success)" };
-        if (score >= 80) return { letter: "B", color: "var(--primary-500)" };
-        if (score >= 70) return { letter: "C", color: "var(--warning)" };
-        if (score >= 60) return { letter: "D", color: "#f97316" };
-        return { letter: "F", color: "var(--danger)" };
-    };
-    const grade = getGrade(scorePercent);
+    const gradeLetter = toLetterGrade(scorePercent);
+    const gradeColor = gradeLetter.startsWith("A")
+        ? "var(--success)"
+        : gradeLetter.startsWith("B")
+            ? "var(--primary-600)"
+            : gradeLetter.startsWith("C")
+                ? "var(--warning)"
+                : gradeLetter.startsWith("D")
+                    ? "#f97316"
+                    : "var(--danger)";
 
     return (
         <div>
@@ -100,6 +104,9 @@ export default function ExamResult() {
                 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg> Back to Dashboard</button>
                 <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--gray-900)", display: "flex", alignItems: "center", gap: "0.5rem" }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" /></svg> Exam Result</h1>
                 <p style={{ fontSize: "0.875rem", color: "var(--gray-500)", marginTop: "0.25rem" }}>{data.examTitle}</p>
+                <p style={{ fontSize: "0.8rem", color: "var(--gray-400)", marginTop: "0.4rem", lineHeight: 1.5 }}>
+                    Submitted: {submittedAtLabel} · Released: {releasedAtLabel}
+                </p>
             </div>
 
             {/* Score Overview */}
@@ -107,13 +114,13 @@ export default function ExamResult() {
                 <div style={{ position: "relative", width: 120, height: 120, flexShrink: 0 }}>
                     <svg width="120" height="120" viewBox="0 0 120 120">
                         <circle cx="60" cy="60" r="52" fill="none" stroke="var(--gray-100)" strokeWidth="8" />
-                        <circle cx="60" cy="60" r="52" fill="none" stroke={grade.color} strokeWidth="8"
+                        <circle cx="60" cy="60" r="52" fill="none" stroke={gradeColor} strokeWidth="8"
                             strokeDasharray={`${(scorePercent / 100) * 327} 327`}
                             strokeLinecap="round" transform="rotate(-90 60 60)" style={{ transition: "stroke-dasharray 1s ease" }} />
                     </svg>
                     <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                        <span style={{ fontSize: "2rem", fontWeight: 900, color: grade.color }}>{scorePercent}%</span>
-                        <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)" }}>Grade {grade.letter}</span>
+                        <span style={{ fontSize: "2rem", fontWeight: 900, color: gradeColor }}>{scorePercent}%</span>
+                        <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)" }}>Grade {gradeLetter}</span>
                     </div>
                 </div>
 

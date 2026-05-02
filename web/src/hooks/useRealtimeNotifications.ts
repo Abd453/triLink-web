@@ -27,11 +27,11 @@ export function useRealtimeNotifications(userId?: string, userName?: string) {
         });
 
         const unsubNotif = chatRealtime.on("notification:new", (payload) => {
-            showToast(`${payload.title}: ${payload.body.slice(0, 40)}...`, 'notification');
+            showToast(`${payload.title || 'Alert'}: ${(payload.body || '').slice(0, 40)}...`, 'notification');
         });
 
         const unsubAnnounce = chatRealtime.on("announcement:new", (payload) => {
-            showToast(`New Announcement: ${payload.title}`, 'announcement');
+            showToast(`New Announcement: ${payload.title || 'See Dashboard'}`, 'announcement');
         });
 
         const unsubError = chatRealtime.on("connection:error", (payload) => {

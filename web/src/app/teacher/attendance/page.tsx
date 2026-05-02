@@ -15,6 +15,7 @@ import {
     type AttendanceMark,
 } from "@/lib/admin-api";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { cachedFetch, invalidateCachePrefix } from "@/lib/cache";
 
 type AttendanceStatus = "present" | "absent" | "excused";
 type ExcuseEntry = { note: string; saved: boolean };
@@ -62,28 +63,39 @@ export default function TeacherAttendance() {
     const [err, setErr] = useState<string | null>(null);
 
     // ── UI state ──
+    const [viewMode, setViewMode] = useState<"mark" | "tabular">("mark");
     const [selectedOfferingId, setSelectedOfferingId] = useState("");
     const [showMoreDropdown, setShowMoreDropdown] = useState(false);
     const [drafts, setDrafts] = useState<Record<string, DraftState>>({});
     const [toast, setToast] = useState<string | null>(null);
     const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+    const [selectedStudent, setSelectedStudent] = useState<StudentRow | null>(null);
     const moreRef = useRef<HTMLDivElement>(null);
 
     const today = useMemo(() => new Date().toISOString().split("T")[0], []);
     const todayStr = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
     // ── Load data ──
-    const loadData = useCallback(async () => {
+    const loadData = useCallback(async (forceRefresh = false) => {
         setLoading(true);
         setErr(null);
         try {
-            const year = await getActiveAcademicYear();
+            if (forceRefresh) {
+                invalidateCachePrefix("active-year");
+                invalidateCachePrefix("offerings:");
+                invalidateCachePrefix("students:");
+                invalidateCachePrefix("sessions:");
+                invalidateCachePrefix("marks:");
+            }
+
+            const year = await cachedFetch("active-year", () => getActiveAcademicYear(), 120_000);
             if (!year?.id) {
                 setErr("No active academic year. Ask an admin to activate one.");
                 setLoading(false);
                 return;
             }
-            const mine = await listMyClassOfferings(year.id);
+
+            const mine = await cachedFetch(`offerings:${year.id}`, () => listMyClassOfferings(year.id), 60_000);
             const { filterOfferingsBySubject } = await import("@/lib/teacher-utils");
             const scoped = filterOfferingsBySubject(mine, user?.subject);
             setOfferings(scoped);
@@ -98,35 +110,42 @@ export default function TeacherAttendance() {
                 return;
             }
 
-            // Load enrolled students for each offering
-            const allUsers = await listUsers("student");
+            // Fetch all students once, then all offerings' enrollments + sessions in parallel
+            const [allUsers, ...offeringData] = await Promise.all([
+                cachedFetch("students:all", () => listUsers("student"), 120_000),
+                ...scoped.map(o => Promise.all([
+                    cachedFetch(`enroll:${o.id}:${year.id}`, () => listEnrollments({ classOfferingId: o.id, academicYearId: year.id }), 60_000),
+                    cachedFetch(`sessions:${o.id}`, () => listAttendanceSessions(o.id), 20_000),
+                ]).then(([enrollments, sessions]) => ({ o, enrollments, sessions }))),
+            ]);
+
             const userMap = new Map(allUsers.map(u => [u.id, u]));
-            const studentsMap: Record<string, StudentRow[]> = {};
-            const sessionsMap: Record<string, AttendanceSession[]> = {};
-            const marksMap: Record<string, AttendanceMark[]> = {};
+            const studentsMap: Record<string, any[]> = {};
+            const sessionsMap: Record<string, any[]> = {};
+            const marksMap: Record<string, any[]> = {};
 
-            for (const o of scoped) {
-                // Get enrolled students
-                const enrollments = await listEnrollments({ classOfferingId: o.id, academicYearId: year.id });
-                studentsMap[o.id] = enrollments.map(e => {
+            // Collect all session IDs across all offerings for parallel marks fetch
+            const allSessionIds: { offeringId: string; sessionId: string }[] = [];
+            for (const item of offeringData) {
+                const { o, enrollments, sessions } = item as any;
+                studentsMap[o.id] = enrollments.map((e: any) => {
                     const u = userMap.get(e.studentId);
-                    return {
-                        id: e.studentId,
-                        name: u ? `${u.firstName} ${u.lastName}` : e.studentId.slice(0, 8),
-                        email: u?.email ?? "",
-                    };
+                    return { id: e.studentId, name: u ? `${u.firstName} ${u.lastName}` : e.studentId.slice(0, 8), email: u?.email ?? "" };
                 });
-
-                // Get attendance sessions
-                const sessions = await listAttendanceSessions(o.id);
                 sessionsMap[o.id] = sessions;
+                for (const s of sessions) allSessionIds.push({ offeringId: o.id, sessionId: s.id });
+            }
 
-                // For today's session, load marks
-                const todaySession = sessions.find(s => s.date === today);
-                if (todaySession) {
-                    const marks = await getSessionMarks(todaySession.id);
-                    marksMap[todaySession.id] = marks;
-                }
+            // Fetch all marks in parallel
+            const marksResults = await Promise.all(
+                allSessionIds.map(({ sessionId }) =>
+                    cachedFetch(`marks:${sessionId}`, () => getSessionMarks(sessionId), 20_000)
+                        .then(marks => ({ sessionId, marks }))
+                        .catch(() => ({ sessionId, marks: [] }))
+                )
+            );
+            for (const { sessionId, marks } of marksResults) {
+                marksMap[sessionId] = marks;
             }
 
             setStudentsByOffering(studentsMap);
@@ -345,6 +364,61 @@ export default function TeacherAttendance() {
                 </div>
             )}
 
+
+
+            {selectedStudent && (
+                <div className="modal-overlay" onClick={() => setSelectedStudent(null)}>
+                    <div className="modal" style={{ maxWidth: 640, width: "92%" }} onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <div>
+                                <h3 className="modal-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                                    Attendance History
+                                </h3>
+                                <div style={{ fontSize: "0.85rem", color: "var(--gray-500)", marginTop: "0.2rem" }}>Records for: <span style={{ fontWeight: 600, color: "var(--gray-800)" }}>{selectedStudent.name}</span></div>
+                            </div>
+                            <button className="modal-close" onClick={() => setSelectedStudent(null)} aria-label="Close">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                            </button>
+                        </div>
+                        <div className="modal-body table-wrapper" style={{ maxHeight: "60vh", overflowY: "auto", padding: 0 }}>
+                            <table style={{ margin: 0, borderBottom: "none" }}>
+                                <thead>
+                                    <tr>
+                                        <th style={{ position: "sticky", top: 0, background: "#f8fafc", zIndex: 10, width: "30%" }}>Date</th>
+                                        <th style={{ position: "sticky", top: 0, background: "#f8fafc", zIndex: 10, width: "20%" }}>Status</th>
+                                        <th style={{ position: "sticky", top: 0, background: "#f8fafc", zIndex: 10, width: "50%" }}>Notes (Excused)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {sessions.sort((a,b) => -a.date.localeCompare(b.date)).map(s => {
+                                        const reqMarks = marksBySession[s.id] || [];
+                                        const m = reqMarks.find(mark => mark.studentId === selectedStudent.id);
+                                        const status = m?.status || "present";
+                                        return (
+                                            <tr key={s.id}>
+                                                <td style={{ fontWeight: 500, color: "var(--gray-900)" }}>{new Date(s.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</td>
+                                                <td>
+                                                    {status === "present" && <span style={{ color: "var(--success)", fontWeight: 700, background: "var(--success-light)", padding: "4px 8px", borderRadius: 6, fontSize: "0.75rem", display: "inline-block" }}>Present</span>}
+                                                    {status === "absent" && <span style={{ color: "var(--danger)", fontWeight: 700, background: "var(--danger-light)", padding: "4px 8px", borderRadius: 6, fontSize: "0.75rem", display: "inline-block" }}>Absent</span>}
+                                                    {status === "excused" && <span style={{ color: "#d97706", fontWeight: 700, background: "var(--warning-light)", padding: "4px 8px", borderRadius: 6, fontSize: "0.75rem", display: "inline-block" }}>Excused</span>}
+                                                </td>
+                                                <td style={{ color: "var(--gray-600)", fontSize: "0.85rem", fontStyle: status === "excused" && m?.note ? "italic" : "normal", whiteSpace: "pre-wrap" }}>
+                                                    {m?.note ? `"${m.note}"` : "-"}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {sessions.length === 0 && (
+                                        <tr><td colSpan={3} style={{ textAlign: "center", color: "var(--gray-500)", padding: "2rem" }}>No attendance sessions found.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Page header */}
             <div className="page-header">
                 <div>
@@ -437,6 +511,41 @@ export default function TeacherAttendance() {
             )}
 
             {students.length > 0 && (
+                <div style={{ display: "flex", gap: "1.5rem", marginBottom: "1.5rem", borderBottom: "1px solid var(--gray-200)" }}>
+                    <button
+                        onClick={() => setViewMode("mark")}
+                        style={{
+                            padding: "0.75rem 0.5rem",
+                            border: "none",
+                            background: "transparent",
+                            cursor: "pointer",
+                            fontSize: "0.95rem",
+                            fontWeight: viewMode === "mark" ? 600 : 500,
+                            color: viewMode === "mark" ? "var(--primary-600)" : "var(--gray-500)",
+                            borderBottom: viewMode === "mark" ? "2px solid var(--primary-500)" : "2px solid transparent",
+                        }}
+                    >
+                        Mark Attendance (Today)
+                    </button>
+                    <button
+                        onClick={() => setViewMode("tabular")}
+                        style={{
+                            padding: "0.75rem 0.5rem",
+                            border: "none",
+                            background: "transparent",
+                            cursor: "pointer",
+                            fontSize: "0.95rem",
+                            fontWeight: viewMode === "tabular" ? 600 : 500,
+                            color: viewMode === "tabular" ? "var(--primary-600)" : "var(--gray-500)",
+                            borderBottom: viewMode === "tabular" ? "2px solid var(--primary-500)" : "2px solid transparent",
+                        }}
+                    >
+                        Tabular / Historical View
+                    </button>
+                </div>
+            )}
+
+            {students.length > 0 && viewMode === "mark" && (
                 <>
                     {/* Stats Bar */}
                     <div className="stats-grid" style={{ marginBottom: "1.5rem" }}>
@@ -577,6 +686,69 @@ export default function TeacherAttendance() {
                     </div>
                 </>
             )}
+
+                        {/* Tabular View */}
+                        {students.length > 0 && viewMode === "tabular" && (
+                            <div className="card">
+                                <div className="card-header">
+                                    <h3 className="card-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2" /><line x1="16" x2="16" y1="2" y2="6" /><line x1="8" x2="8" y1="2" y2="6" /><line x1="3" x2="21" y1="10" y2="10" /></svg>
+                                        {offeringLabel(offerings.find(o => o.id === selectedOfferingId)!)} - Tabular History
+                                    </h3>
+                                </div>
+                                <div className="table-wrapper" style={{ overflowX: "auto" }}>
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th style={{ width: 48, minWidth: 48, position: "sticky", left: 0, zIndex: 20, background: "var(--gray-50)" }}>#</th>
+                                                <th style={{ minWidth: 200, position: "sticky", left: 48, zIndex: 20, background: "var(--gray-50)", borderRight: "1px solid var(--gray-200)", boxShadow: "2px 0 5px -2px rgba(0,0,0,0.05)" }}>Student</th>
+                                                {sessions.sort((a,b) => -a.date.localeCompare(b.date)).map(s => (
+                                                    <th key={s.id} style={{ textAlign: "center", minWidth: 70, borderLeft: "1px solid var(--gray-100)" }}>
+                                                        <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", fontWeight: 500 }}>
+                                                            {new Date(s.date).toLocaleDateString("en-US", { weekday: "short" })}
+                                                        </div>
+                                                        <div style={{ fontSize: "0.85rem", color: "var(--gray-800)" }}>
+                                                            {new Date(s.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                                        </div>
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {students.map((student, i) => (
+                                                <tr key={student.id} onClick={() => setSelectedStudent(student)} style={{ cursor: "pointer", transition: "background 0.2s" }} onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--gray-50)"} onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                                                    <td style={{ color: "var(--gray-500)", position: "sticky", left: 0, zIndex: 10, background: "#fff", transition: "background 0.2s" }}>{i + 1}</td>
+                                                    <td style={{ position: "sticky", left: 48, zIndex: 10, background: "#fff", borderRight: "1px solid var(--gray-200)", boxShadow: "2px 0 5px -2px rgba(0,0,0,0.05)", transition: "background 0.2s" }}>
+                                                        <div style={{ fontWeight: 600, color: "var(--primary-600)", textDecoration: "underline", textUnderlineOffset: "3px" }}>{student.name}</div>
+                                                        <div style={{ fontSize: "0.7rem", color: "var(--gray-500)", marginTop: 2 }}>{student.email ? student.email : "Click details"}</div>
+                                                    </td>
+                                                    {sessions.map(s => {
+                                                        const reqMarks = marksBySession[s.id] || [];
+                                                        const m = reqMarks.find(mark => mark.studentId === student.id);
+                                                        const isP = !m || m.status === "present";
+                                                        const isA = m && m.status === "absent";
+                                                        const isE = m && m.status === "excused";
+                                                        return (
+                                                            <td key={s.id} style={{ textAlign: "center", borderLeft: "1px solid var(--gray-100)" }}>
+                                                                {isP && <span style={{ color: "var(--success)", fontWeight: 800, background: "var(--success-light)", padding: "2px 6px", borderRadius: 4 }}>P</span>}
+                                                                {isA && <span style={{ color: "var(--danger)", fontWeight: 800, background: "var(--danger-light)", padding: "2px 6px", borderRadius: 4 }}>A</span>}
+                                                                {isE && <span style={{ color: "#d97706", fontWeight: 800, background: "var(--warning-light)", padding: "2px 6px", borderRadius: 4 }} title={m.note || undefined}>E</span>}
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {sessions.length === 0 && (
+                                    <div style={{ padding: "3rem", textAlign: "center", color: "var(--gray-500)" }}>
+                                        No attendance sessions have been recorded yet for this class.
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        
         </div>
     );
 }

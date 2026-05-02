@@ -48,6 +48,7 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
 
   const nav = [
     { label: "Home", href: "/parent/dashboard", icon: "🏠" },
+    { label: "My Children", href: "/parent/children", icon: "👨‍👩‍👧" },
     { label: "Chat", href: "/parent/chat", icon: "💬" },
     { label: "Profile", href: "/parent/profile", icon: "👤" },
     { label: "Settings", href: "/parent/settings", icon: "⚙️" },

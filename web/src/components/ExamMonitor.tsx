@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
     getExamStudentRoster, 
     controlExamAttempt, 
@@ -19,11 +19,31 @@ export default function ExamMonitor({ exam, onClose }: ExamMonitorProps) {
     const [error, setError] = useState<string | null>(null);
     const [showWarnModal, setShowWarnModal] = useState<{ attemptId: string; studentName: string } | null>(null);
     const [warnMsg, setWarnMsg] = useState("Please focus on your exam and avoid switching tabs.");
+    const [activity, setActivity] = useState<Array<{ id: string; text: string; at: string }>>([]);
+    const [rtStatus, setRtStatus] = useState<string>("idle");
+    const studentsRef = useRef<ExamRosterStudent[]>([]);
+
+    const resolveStudentName = (student: Partial<ExamRosterStudent> | null | undefined) => {
+        const full = `${student?.firstName || ""} ${student?.lastName || ""}`.trim();
+        return full || student?.email || "Unknown student";
+    };
+
+    const setStudentsWithRef = (next: ExamRosterStudent[] | ((prev: ExamRosterStudent[]) => ExamRosterStudent[])) => {
+        setStudents((prev) => {
+            const resolved = typeof next === "function" ? (next as (p: ExamRosterStudent[]) => ExamRosterStudent[])(prev) : next;
+            studentsRef.current = resolved;
+            return resolved;
+        });
+    };
+
+    const pushActivity = (text: string) => {
+        setActivity((prev) => [{ id: `${Date.now()}-${Math.random()}`, text, at: new Date().toLocaleTimeString() }, ...prev].slice(0, 20));
+    };
 
     const fetchRoster = async () => {
         try {
             const data = await getExamStudentRoster(exam.id);
-            setStudents(data.students);
+            setStudentsWithRef(data.students);
             setLoading(false);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to load roster");
@@ -33,16 +53,49 @@ export default function ExamMonitor({ exam, onClose }: ExamMonitorProps) {
 
     useEffect(() => {
         fetchRoster();
-        const interval = setInterval(fetchRoster, 30000); // Polling as fallback
+        const interval = setInterval(fetchRoster, 10000); // Polling fallback if realtime lags
+
+        const unsubStatus = chatRealtime.on("status", (status) => {
+            setRtStatus(status);
+        });
 
         const unsubViolation = chatRealtime.on("attempt:violation", (payload) => {
             if (payload.examId !== exam.id) return;
-            setStudents(prev => prev.map(s => {
+            setStudentsWithRef(prev => prev.map(s => {
                 if (s.studentId === payload.studentId) {
                     return { ...s, violationCount: payload.violationCount, status: "in_progress" };
                 }
                 return s;
             }));
+            const who = studentsRef.current.find((s) => s.studentId === payload.studentId);
+            const name = resolveStudentName(who);
+            const reason = payload.reason ? ` - ${payload.reason}` : "";
+            pushActivity(`Violation: ${name} (${payload.violationCount})${reason}`);
+        });
+
+        const unsubActivity = chatRealtime.on("attempt:activity", (payload) => {
+            if (payload.examId !== exam.id) return;
+            setStudentsWithRef((prev) => prev.map((s) => {
+                if (s.studentId !== payload.studentId) return s;
+                if (payload.kind === "submit" || payload.kind === "force_submit") {
+                    return { ...s, status: "submitted", isLocked: false } as ExamRosterStudent;
+                }
+                if (payload.kind === "locked") {
+                    return { ...s, status: "in_progress", isLocked: true, lockReason: payload.reason ?? "Locked by policy" } as ExamRosterStudent;
+                }
+                if (payload.kind === "allow_rejoin") {
+                    return { ...s, isLocked: false, reentryAllowed: true } as ExamRosterStudent;
+                }
+                if (payload.kind === "start" || payload.kind === "resume") {
+                    return { ...s, status: "in_progress" } as ExamRosterStudent;
+                }
+                return s;
+            }));
+            const label = payload.kind.replace(/_/g, " ");
+            const who = studentsRef.current.find((s) => s.studentId === payload.studentId);
+            const name = resolveStudentName(who);
+            const reason = payload.reason ? ` - ${payload.reason}` : "";
+            pushActivity(`${label.toUpperCase()}: ${name}${reason}`);
         });
 
         const unsubMessage = chatRealtime.on("message:new", () => {
@@ -51,17 +104,22 @@ export default function ExamMonitor({ exam, onClose }: ExamMonitorProps) {
 
         return () => {
             clearInterval(interval);
+            unsubStatus();
             unsubViolation();
+            unsubActivity();
             unsubMessage();
         };
     }, [exam.id]);
 
-    const handleControl = async (attemptId: string, action: "force_submit" | "warn") => {
+    const handleControl = async (attemptId: string, action: "force_submit" | "warn" | "allow_rejoin") => {
         if (!attemptId) return;
         try {
             await controlExamAttempt(attemptId, action, action === "warn" ? warnMsg : undefined);
             if (action === "warn") {
                 setShowWarnModal(null);
+            }
+            if (action === "allow_rejoin") {
+                pushActivity("Teacher allowed student rejoin.");
             }
             fetchRoster(); // Refresh status
         } catch (err) {
@@ -71,6 +129,7 @@ export default function ExamMonitor({ exam, onClose }: ExamMonitorProps) {
 
     const inProgressCount = students.filter(s => s.status === "in_progress").length;
     const submittedCount = students.filter(s => s.status === "submitted").length;
+    const activeStudents = students.filter((s) => s.status === "in_progress");
 
     return (
         <div style={{
@@ -95,6 +154,9 @@ export default function ExamMonitor({ exam, onClose }: ExamMonitorProps) {
                         <h2 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--gray-900)" }}>{exam.title}</h2>
                     </div>
                     <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
+                        <div style={{ fontSize: "0.72rem", fontWeight: 700, color: rtStatus === "open" ? "var(--success)" : "var(--warning)", textTransform: "uppercase" }}>
+                            {rtStatus === "open" ? "Realtime Connected" : `Realtime ${rtStatus}`}
+                        </div>
                         <div style={{ textAlign: "right" }}>
                             <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--gray-400)", textTransform: "uppercase" }}>Active Students</div>
                             <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--success)" }}>{inProgressCount} <span style={{ fontSize: "0.85rem", color: "var(--gray-300)" }}>/ {students.length}</span></div>
@@ -115,7 +177,24 @@ export default function ExamMonitor({ exam, onClose }: ExamMonitorProps) {
                     ) : error ? (
                         <div style={{ color: "var(--danger)", textAlign: "center", padding: "2rem" }}>{error}</div>
                     ) : (
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1.5rem" }}>
+                        <div style={{ display: "grid", gap: "1rem" }}>
+                            <div style={{ border: "1.5px solid var(--gray-100)", borderRadius: 14, background: "#fff", padding: "0.85rem 1rem" }}>
+                                <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase", marginBottom: "0.45rem" }}>Active Students</div>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
+                                    {activeStudents.length === 0 ? (
+                                        <span style={{ fontSize: "0.8rem", color: "var(--gray-400)" }}>No active students yet.</span>
+                                    ) : (
+                                        activeStudents.map((s) => (
+                                            <span key={s.studentId} style={{ padding: "0.35rem 0.65rem", borderRadius: 999, background: "var(--success-50)", color: "var(--success-600)", fontSize: "0.76rem", fontWeight: 700 }}>
+                                                {resolveStudentName(s)}
+                                            </span>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+
+                            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1.5rem", alignItems: "start" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1.5rem" }}>
                             {students.map(s => (
                                 <div key={s.studentId} style={{
                                     border: "1.5px solid var(--gray-100)", borderRadius: "20px", 
@@ -144,16 +223,22 @@ export default function ExamMonitor({ exam, onClose }: ExamMonitorProps) {
                                                 </div>
                                             </div>
                                         </div>
-                                        {s.violationCount > 0 && (
+                                        {(s.violationCount > 0 || s.isLocked) && (
                                             <div style={{ 
                                                 background: "var(--danger-light)", color: "var(--danger)", 
                                                 padding: "0.25rem 0.6rem", borderRadius: "8px", 
                                                 fontSize: "0.7rem", fontWeight: 800, animation: "pulse 2s infinite"
                                             }}>
-                                                {s.violationCount} {s.violationCount === 1 ? 'Violation' : 'Violations'}
+                                                {s.isLocked ? "Locked" : `${s.violationCount} ${s.violationCount === 1 ? 'Violation' : 'Violations'}`}
                                             </div>
                                         )}
                                     </div>
+
+                                    {s.isLocked && (
+                                        <div style={{ marginBottom: "0.8rem", fontSize: "0.78rem", color: "var(--danger)", fontWeight: 600 }}>
+                                            Locked: {s.lockReason || "Student left protected mode"}
+                                        </div>
+                                    )}
 
                                     {s.status === "in_progress" && s.attemptId && (
                                         <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
@@ -184,6 +269,19 @@ export default function ExamMonitor({ exam, onClose }: ExamMonitorProps) {
                                         </div>
                                     )}
 
+                                    {s.attemptId && s.isLocked && (
+                                        <button
+                                            onClick={() => handleControl(s.attemptId!, "allow_rejoin")}
+                                            style={{
+                                                width: "100%", marginTop: "0.6rem", padding: "0.6rem", borderRadius: "10px",
+                                                background: "var(--primary-500)", color: "#fff", border: "none", cursor: "pointer",
+                                                fontSize: "0.8rem", fontWeight: 700
+                                            }}
+                                        >
+                                            Allow Rejoin
+                                        </button>
+                                    )}
+
                                     {s.status === "submitted" && (
                                         <div style={{ 
                                             background: "var(--gray-100)", borderRadius: "10px", 
@@ -195,6 +293,24 @@ export default function ExamMonitor({ exam, onClose }: ExamMonitorProps) {
                                     )}
                                 </div>
                             ))}
+                            </div>
+
+                            <div style={{ border: "1.5px solid var(--gray-100)", borderRadius: 16, background: "#fff", padding: "1rem" }}>
+                                <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--gray-800)", marginBottom: "0.75rem" }}>Live Activity</div>
+                                <div style={{ display: "grid", gap: "0.55rem", maxHeight: "58vh", overflowY: "auto" }}>
+                                    {activity.length === 0 ? (
+                                        <div style={{ fontSize: "0.8rem", color: "var(--gray-400)" }}>Waiting for activity...</div>
+                                    ) : (
+                                        activity.map((a) => (
+                                            <div key={a.id} style={{ border: "1px solid var(--gray-100)", borderRadius: 10, padding: "0.55rem 0.6rem" }}>
+                                                <div style={{ fontSize: "0.78rem", color: "var(--gray-700)", fontWeight: 600 }}>{a.text}</div>
+                                                <div style={{ fontSize: "0.68rem", color: "var(--gray-400)", marginTop: 2 }}>{a.at}</div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                         </div>
                     )}
                 </div>
