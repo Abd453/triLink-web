@@ -110,7 +110,14 @@ export type Announcement = {
   title: string;
   body: string;
   audience: string;
+  targetGrade?: string | null;
+  targetSection?: string | null;
   classOfferingId?: string | null;
+  classOffering?: {
+    id: string;
+    class?: { name: string };
+    subject?: { name: string };
+  };
   authorId: string;
   createdAt: string;
 };
@@ -153,6 +160,7 @@ export async function patchMe(body: {
   lastName?: string;
   phone?: string;
   profileImageFileId?: string;
+  [key: string]: any;
 }): Promise<any> {
   return adminJson<any>("/api/users/me", { method: "PATCH", body: JSON.stringify(body) });
 }
@@ -312,6 +320,14 @@ export async function deleteClassOffering(id: string): Promise<void> {
   await adminJson<{ ok: boolean }>(`/api/class-offerings/${id}`, { method: "DELETE" });
 }
 
+export async function searchUsers(role?: "student" | "teacher" | "parent" | "admin", q?: string): Promise<PublicUser[]> {
+  const p = new URLSearchParams();
+  if (role) p.set("role", role);
+  if (q) p.set("q", q);
+  const qs = p.toString();
+  return adminJson<PublicUser[]>(`/api/users/search${qs ? `?${qs}` : ""}`, { method: "GET" });
+}
+
 export async function listUsers(role?: "student" | "teacher" | "parent" | "admin", q?: string): Promise<PublicUser[]> {
   const p = new URLSearchParams();
   if (role) p.set("role", role);
@@ -467,6 +483,8 @@ export async function createAnnouncement(body: {
   body: string;
   audience: string;
   classOfferingId?: string;
+  targetGrade?: string;
+  targetSection?: string;
 }): Promise<Announcement> {
   return adminJson<Announcement>("/api/announcements", { method: "POST", body: JSON.stringify(body) });
 }
@@ -587,9 +605,22 @@ export type Exam = {
   title: string;
   academicYearId: string;
   classOfferingId?: string | null;
+  /** Enriched class offering details returned by GET /exams */
+  classOffering?: {
+    classOfferingId: string;
+    displayName: string;
+    gradeName: string | null;
+    sectionName: string | null;
+    subjectName: string | null;
+    subjectId: string;
+    gradeId: string;
+    sectionId: string;
+    teacherId: string;
+  } | null;
   opensAt: string;
   closesAt: string;
   durationMinutes: number;
+  minStayMinutes?: number;
   maxPoints: number;
   published: boolean;
   createdById: string;
@@ -647,6 +678,8 @@ export type ExamRosterStudent = {
   releasedAt: string | null;
   attemptId: string | null;
   violationCount: number;
+  isLocked?: boolean;
+  lockReason?: string | null;
 };
 
 export type Violation = { reason: string; timestamp: string };
@@ -676,6 +709,7 @@ export async function createExam(body: {
   opensAt: string;
   closesAt: string;
   durationMinutes: number;
+  minStayMinutes?: number;
   maxPoints?: number;
 }): Promise<Exam> {
   return adminJson<Exam>("/api/exams", { method: "POST", body: JSON.stringify(body) });
@@ -718,7 +752,9 @@ export async function createQuestion(body: {
 
 export async function listQuestions(subjectId?: string): Promise<Question[]> {
   const q = subjectId ? `?subjectId=${encodeURIComponent(subjectId)}` : "";
-  return adminJson<Question[]>(`/api/questions${q}`, { method: "GET" });
+  // Legacy: returns flat array for backward compat. Use listQuestionsFiltered for pagination.
+  const res = await adminJson<Question[] | { items: Question[]; total: number }>(`/api/questions${q}`, { method: "GET" });
+  return Array.isArray(res) ? res : res.items;
 }
 
 export async function addQuestionsToExam(
@@ -750,8 +786,8 @@ export async function getAttemptForGrader(attemptId: string): Promise<unknown> {
 
 // ── Violation API ─────────────────────────────────────────────────────────────────
 
-export async function recordViolation(attemptId: string, reason: string): Promise<void> {
-  await adminJson(`/api/exams/attempts/${attemptId}/violations`, {
+export async function recordViolation(attemptId: string, reason: string): Promise<{ locked: boolean }> {
+  return adminJson<{locked: boolean}>(`/api/exams/attempts/${attemptId}/violations`, {
     method: "POST",
     body: JSON.stringify({ reason }),
   });
@@ -764,7 +800,7 @@ export async function getViolations(attemptId: string): Promise<Violation[]> {
 
 export async function controlExamAttempt(
   attemptId: string,
-  action: "force_submit" | "warn",
+  action: "force_submit" | "warn" | "allow_rejoin",
   message?: string,
 ): Promise<{ success: boolean }> {
   return adminJson<{ success: boolean }>(`/api/exams/attempts/${attemptId}/control`, {
@@ -864,4 +900,402 @@ export async function getAttemptResult(attemptId: string): Promise<AttemptResult
 /** List exams visible to the current student for a given academic year */
 export async function listStudentExams(academicYearId: string): Promise<Exam[]> {
   return adminJson<Exam[]>(`/api/exams?academicYearId=${academicYearId}`, { method: "GET" });
+}
+
+// ── Grades API ─────────────────────────────────────────────────────────────────
+
+export type GradeEntryType = "exam" | "assignment" | "quiz" | "project" | "other";
+
+export type GradeEntry = {
+  id: string;
+  classOfferingId: string;
+  studentId: string;
+  teacherId: string;
+  title: string;
+  type: GradeEntryType;
+  score: number | null;
+  maxScore: number;
+  note: string | null;
+  examAttemptId: string | null;
+  releasedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GradeGroup = {
+  title: string;
+  type: GradeEntryType;
+  maxScore: number;
+  releasedAt: string | null;
+  studentCount: number;
+  entries: Array<{
+    id: string;
+    studentId: string;
+    firstName: string | null;
+    lastName: string | null;
+    studentEmail: string | null;
+    score: number | null;
+    maxScore: number;
+    note: string | null;
+    releasedAt: string | null;
+    examAttemptId: string | null;
+  }>;
+};
+
+export type ClassGradesResponse = {
+  classOfferingId: string;
+  groups: GradeGroup[];
+};
+
+export async function bulkUpsertGrades(body: {
+  classOfferingId: string;
+  title: string;
+  type: GradeEntryType;
+  maxScore: number;
+  note?: string;
+  entries: { studentId: string; score: number | null }[];
+}): Promise<{ saved: number; entries: GradeEntry[] }> {
+  return adminJson("/api/grades/bulk", { method: "POST", body: JSON.stringify(body) });
+}
+/** Alias for bulkUpsertGrades */
+export const bulkGradeEntries = bulkUpsertGrades;
+
+export async function createGradeEntry(body: {
+  classOfferingId: string;
+  studentId: string;
+  title: string;
+  type: GradeEntryType;
+  score?: number | null;
+  maxScore?: number;
+  note?: string | null;
+}): Promise<GradeEntry> {
+  return adminJson<GradeEntry>("/api/grades", { method: "POST", body: JSON.stringify(body) });
+}
+
+export async function updateGradeEntry(
+  id: string,
+  body: { title?: string; type?: GradeEntryType; score?: number | null; maxScore?: number; note?: string | null },
+): Promise<GradeEntry> {
+  return adminJson<GradeEntry>(`/api/grades/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export async function releaseGrades(classOfferingId: string, title: string): Promise<{ released: number }> {
+  return adminJson("/api/grades/release", {
+    method: "POST",
+    body: JSON.stringify({ classOfferingId, title }),
+  });
+}
+
+export async function listGradesForClass(classOfferingId: string): Promise<ClassGradesResponse> {
+  return adminJson<ClassGradesResponse>(`/api/grades/class/${encodeURIComponent(classOfferingId)}`, { method: "GET" });
+}
+
+export async function listGradesForStudent(studentId: string): Promise<GradeEntry[]> {
+  return adminJson<GradeEntry[]>(`/api/grades/student/${encodeURIComponent(studentId)}`, { method: "GET" });
+}
+
+export async function listQuestionsFiltered(opts: {
+  subjectId?: string;
+  classOfferingId?: string;
+  skip?: number;
+  take?: number;
+}): Promise<{ items: Question[]; total: number; skip: number; take: number }> {
+  const params = new URLSearchParams();
+  if (opts.subjectId) params.set("subjectId", opts.subjectId);
+  if (opts.classOfferingId) params.set("classOfferingId", opts.classOfferingId);
+  if (opts.skip != null) params.set("skip", String(opts.skip));
+  if (opts.take != null) params.set("take", String(opts.take));
+  const q = params.toString() ? `?${params.toString()}` : "";
+  return adminJson(`/api/questions${q}`, { method: "GET" });
+}
+
+// ── Exam Summary API ────────────────────────────────────────────────────────────
+
+export type ExamSummaryStudentResult = {
+  attemptId: string;
+  studentId: string;
+  firstName: string | null;
+  lastName: string | null;
+  studentEmail: string | null;
+  submittedAt: string | null;
+  score: number | null;
+  autoScore: number | null;
+  maxPoints: number;
+  needsManualGrading: boolean;
+  releasedAt: string | null;
+  isLocked: boolean;
+};
+
+export type ExamSummary = {
+  examId: string;
+  title: string;
+  maxPoints: number;
+  opensAt: string;
+  closesAt: string;
+  durationMinutes: number;
+  published: boolean;
+  classOffering: {
+    classOfferingId: string;
+    displayName: string;
+    gradeName: string | null;
+    sectionName: string | null;
+    subjectName: string | null;
+  } | null;
+  questionsAsked: Array<{
+    examQuestionId: string;
+    questionId: string;
+    orderIndex: number;
+    points: number;
+    type: string;
+    stem: string;
+    optionsJson: string | null;
+    answerKey: string | null;
+  }>;
+  studentResults: ExamSummaryStudentResult[];
+  totalStudents: number;
+  submitted: number;
+  released: number;
+};
+
+export async function getExamSummary(examId: string): Promise<ExamSummary> {
+  return adminJson<ExamSummary>(`/api/exams/${examId}/summary`, { method: "GET" });
+}
+
+export async function listExamAttemptsPaginated(
+  examId: string,
+  skip = 0,
+  take = 20,
+): Promise<{ examId: string; total: number; skip: number; take: number; attempts: ExamAttemptSummary[] }> {
+  return adminJson(`/api/exams/${examId}/attempts?skip=${skip}&take=${take}`, { method: "GET" });
+}
+
+// ── Assignments API ───────────────────────────────────────────────────────────
+
+export type SubmissionType = "file" | "text" | "none";
+export type SubmissionStatus = "pending" | "submitted" | "graded" | "returned";
+
+export type AssignmentSubmission = {
+  id: string;
+  assignmentId: string;
+  studentId: string;
+  status: SubmissionStatus;
+  fileId: string | null;
+  textContent: string | null;
+  submittedAt: string | null;
+  score: number | null;
+  feedback: string | null;
+  releasedAt: string | null;
+  gradedById: string | null;
+  createdAt: string;
+  // enriched
+  student?: { id: string; firstName: string; lastName: string; email: string } | null;
+  file?: { id: string; filename: string; mime: string; path: string } | null;
+};
+
+export type Assignment = {
+  id: string;
+  classOfferingId: string;
+  teacherId: string;
+  title: string;
+  description: string | null;
+  submissionType: SubmissionType;
+  attachmentFileId: string | null;
+  deadline: string;
+  maxScore: number;
+  published: boolean;
+  createdAt: string;
+  // enriched
+  subject?: { id: string; name: string; code: string | null } | null;
+  grade?: { id: string; name: string } | null;
+  section?: { id: string; name: string } | null;
+  teacher?: { id: string; firstName: string; lastName: string; email: string } | null;
+  attachment?: { id: string; filename: string; mime: string; path: string } | null;
+  isOverdue?: boolean;
+  submission?: AssignmentSubmission | null;
+};
+
+export async function createAssignment(body: {
+  classOfferingId: string;
+  title: string;
+  description?: string;
+  submissionType: SubmissionType;
+  attachmentFileId?: string;
+  deadline: string;
+  maxScore?: number;
+}): Promise<Assignment> {
+  return adminJson<Assignment>("/api/assignments", { method: "POST", body: JSON.stringify(body) });
+}
+
+export async function updateAssignment(id: string, body: Partial<{
+  title: string; description: string; submissionType: SubmissionType;
+  attachmentFileId: string | null; deadline: string; maxScore: number;
+}>): Promise<Assignment> {
+  return adminJson<Assignment>(`/api/assignments/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export async function publishAssignment(id: string): Promise<{ ok: boolean; notified: number }> {
+  return adminJson(`/api/assignments/${id}/publish`, { method: "POST" });
+}
+
+export async function unpublishAssignment(id: string): Promise<Assignment> {
+  return adminJson(`/api/assignments/${id}/unpublish`, { method: "POST" });
+}
+
+export async function deleteAssignment(id: string): Promise<{ ok: boolean }> {
+  return adminJson(`/api/assignments/${id}`, { method: "DELETE" });
+}
+
+export async function listMyAssignments(classOfferingId?: string): Promise<Assignment[]> {
+  const q = classOfferingId ? `?classOfferingId=${encodeURIComponent(classOfferingId)}` : "";
+  return adminJson<Assignment[]>(`/api/assignments/teacher/mine${q}`, { method: "GET" });
+}
+
+export async function listAssignmentsForStudent(studentId: string): Promise<Assignment[]> {
+  return adminJson<Assignment[]>(`/api/assignments/student/${encodeURIComponent(studentId)}`, { method: "GET" });
+}
+
+export async function getAssignment(id: string): Promise<Assignment> {
+  return adminJson<Assignment>(`/api/assignments/${id}`, { method: "GET" });
+}
+
+export async function listSubmissions(assignmentId: string): Promise<AssignmentSubmission[]> {
+  return adminJson<AssignmentSubmission[]>(`/api/assignments/${assignmentId}/submissions`, { method: "GET" });
+}
+
+export async function submitAssignment(assignmentId: string, body: { fileId?: string; textContent?: string }): Promise<AssignmentSubmission> {
+  return adminJson<AssignmentSubmission>(`/api/assignments/${assignmentId}/submit`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export async function gradeSubmission(submissionId: string, body: { score: number; feedback?: string }): Promise<AssignmentSubmission> {
+  return adminJson<AssignmentSubmission>(`/api/assignments/submissions/${submissionId}/grade`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export async function releaseSubmissionGrade(submissionId: string): Promise<AssignmentSubmission> {
+  return adminJson<AssignmentSubmission>(`/api/assignments/submissions/${submissionId}/release`, { method: "POST" });
+}
+
+export async function releaseAllGrades(assignmentId: string): Promise<{ released: number }> {
+  return adminJson(`/api/assignments/${assignmentId}/release-all`, { method: "POST" });
+}
+
+// ── Teacher Feedback API ──────────────────────────────────────────────────────
+
+export type TeacherFeedbackItem = {
+  id: string;
+  authorId: string | null;
+  senderRole: string | null;
+  category: string;
+  message: string;
+  status: string;
+  subjectId: string | null;
+  teacherId: string | null;
+  isAnonymous: boolean;
+  createdAt: string;
+  /** Populated when isAnonymous = false */
+  sender?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    role: string;
+  } | null;
+  /** Populated when sender is a parent — their linked children */
+  children?: Array<{ studentId: string; firstName: string; lastName: string }> | null;
+};
+
+/** Feedback directed at the authenticated teacher (category = teacher) */
+export async function listFeedbackForTeacher(): Promise<TeacherFeedbackItem[]> {
+  return adminJson<TeacherFeedbackItem[]>("/api/feedback/for-teacher", { method: "GET" });
+}
+
+/** Feedback submitted by the authenticated user (non-anonymous only) */
+export async function listMyFeedback(): Promise<TeacherFeedbackItem[]> {
+  return adminJson<TeacherFeedbackItem[]>("/api/feedback/mine", { method: "GET" });
+}
+
+/** Submit feedback (teacher → school) */
+export async function submitFeedback(body: {
+  category: string;
+  message: string;
+  teacherId?: string;
+  subjectId?: string;
+  isAnonymous?: boolean;
+}): Promise<TeacherFeedbackItem> {
+  return adminJson<TeacherFeedbackItem>("/api/feedback", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// ── Parent: child upcoming ────────────────────────────────────────────────────
+
+export type ChildUpcomingExam = {
+  id: string;
+  title: string;
+  opensAt: string;
+  closesAt: string;
+  durationMinutes: number;
+  maxPoints: number;
+  status: "upcoming" | "available" | "submitted" | "graded" | "missed";
+  score: number | null;
+  releasedAt: string | null;
+  attemptId: string | null;
+  subjectName: string | null;
+  subjectCode: string | null;
+  gradeName: string | null;
+  sectionName: string | null;
+};
+
+export type ChildUpcomingAssignment = {
+  id: string;
+  title: string;
+  description: string | null;
+  submissionType: string;
+  deadline: string;
+  maxScore: number;
+  status: "pending" | "submitted" | "graded" | "overdue";
+  score: number | null;
+  releasedAt: string | null;
+  submittedAt: string | null;
+  submissionId: string | null;
+  subjectName: string | null;
+  subjectCode: string | null;
+  gradeName: string | null;
+  sectionName: string | null;
+};
+
+export type ChildUpcomingResponse = {
+  student: { id: string; firstName: string; lastName: string; email: string };
+  exams: ChildUpcomingExam[];
+  assignments: ChildUpcomingAssignment[];
+  summary: {
+    examsTotal: number;
+    examsUpcoming: number;
+    examsMissed: number;
+    assignmentsTotal: number;
+    assignmentsPending: number;
+    assignmentsOverdue: number;
+  };
+};
+
+export async function getChildUpcoming(studentId: string): Promise<ChildUpcomingResponse> {
+  return adminJson<ChildUpcomingResponse>(
+    `/api/parent-students/children/${encodeURIComponent(studentId)}/upcoming`,
+    { method: "GET" },
+  );
+}
+
+export async function myChildren(): Promise<Array<{
+  id: string;
+  parentId: string;
+  studentId: string;
+  relationship: string;
+  isPrimary: boolean;
+  student: { id: string; firstName: string; lastName: string; email: string } | null;
+}>> {
+  return adminJson("/api/parent-students/mychildren", { method: "GET" });
+}
+
+export async function getDirectFileUrl(fileId: string): Promise<{ url: string; filename: string; mime: string }> {
+  return adminJson<{ url: string; filename: string; mime: string }>(`/api/files/${encodeURIComponent(fileId)}/url`, { method: "GET" });
 }

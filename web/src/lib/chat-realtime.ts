@@ -49,8 +49,18 @@ export type RealtimeEventMap = {
   "read:update": ReadPayload;
   "conversation:update": { conversationId?: string };
   "connection:error": { message: string };
-  "attempt:control": { attemptId: string; action: string; message: string };
+  "attempt:control": { attemptId: string; action: "force_submit" | "warn" | "allow_rejoin" | string; message: string };
   "attempt:violation": { attemptId: string; examId: string; studentId: string; reason: string; timestamp: string; violationCount: number };
+  "attempt:activity": {
+    attemptId: string;
+    examId: string;
+    studentId: string;
+    kind: "start" | "resume" | "submit" | "force_submit" | "warn" | "violation" | "locked" | "allow_rejoin" | string;
+    status: "in_progress" | "submitted" | string;
+    reason?: string;
+    violationCount?: number;
+    timestamp: string;
+  };
 };
 
 type EventKey = keyof RealtimeEventMap;
@@ -85,6 +95,7 @@ class ChatRealtimeClient {
     "connection:error": new Set(),
     "attempt:control": new Set(),
     "attempt:violation": new Set(),
+    "attempt:activity": new Set(),
   };
 
   getStatus() {
@@ -193,6 +204,10 @@ class ChatRealtimeClient {
         }
         if (eventName.includes("attempt:violation")) {
           this.emit("attempt:violation", payload as any);
+          return;
+        }
+        if (eventName.includes("attempt:activity")) {
+          this.emit("attempt:activity", payload as any);
           return;
         }
       } catch {

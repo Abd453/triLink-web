@@ -61,6 +61,23 @@ export default function ParentDashboardPage() {
         }}
       >
         <Link
+          href="/parent/children"
+          style={{
+            padding: "1rem 1.25rem",
+            borderRadius: 12,
+            background: "#7c3aed",
+            border: "1px solid #7c3aed",
+            textDecoration: "none",
+            color: "#fff",
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+          }}
+        >
+          👨‍👩‍👧 View Children&apos;s Exams &amp; Assignments
+        </Link>
+        <Link
           href="/parent/chat"
           style={{
             padding: "1rem 1.25rem",

@@ -233,7 +233,7 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
             >
                 <div className="header-user">
-                    <div className="header-user-info">
+                    <div className="header-user-info" style={{ display: "var(--user-info-display, flex)" }}>
                         <div className="header-user-name">{userName}</div>
                         <div className="header-user-role">{userRole}</div>
                     </div>
@@ -294,8 +294,8 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
     );
 
     return (
-        <header className="top-header">
-            <div className="header-search">
+        <header className="top-header" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+            <div className="header-search" style={{ flex: "1 1 160px", minWidth: 0 }}>
                 <button type="button" className="header-search-btn" onClick={submitSearch} aria-label="Search">
                     <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="11" cy="11" r="8" />
@@ -316,7 +316,7 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
                 />
             </div>
 
-            <div className="header-actions">
+            <div className="header-actions" style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "nowrap" }}>
                 {/* Academic Year Control */}
                 {role === "admin" ? (
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginRight: "1rem" }}>
@@ -353,7 +353,7 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
                         </Select>
                     </div>
                 ) : (
-                    <div style={{ marginRight: "1rem", padding: "0.3rem 0.8rem", background: "var(--primary-50)", color: "var(--primary-600)", borderRadius: "20px", fontSize: "0.75rem", fontWeight: 700 }}>
+                    <div style={{ marginRight: "0.5rem", padding: "0.25rem 0.6rem", background: "var(--primary-50)", color: "var(--primary-600)", borderRadius: "20px", fontSize: "0.72rem", fontWeight: 700, whiteSpace: "nowrap", display: "var(--year-display, flex)" }}>
                         {portalYearLabel ?? currentSystemYear}
                     </div>
                 )}

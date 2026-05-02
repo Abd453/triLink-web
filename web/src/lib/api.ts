@@ -33,3 +33,24 @@ export const apiPath = {
   changePassword: "/api/auth/change-password",
   register: "/api/auth/register",
 } as const;
+
+/**
+ * Opens a file in a new tab using the direct Cloudinary URL.
+ * Use this for documents (PDF, DOCX, etc.) to avoid browser zip issues.
+ * Falls back to the /download redirect if the /url endpoint fails.
+ */
+export async function openFile(fileId: string | null | undefined): Promise<void> {
+  if (!fileId) return;
+  try {
+    const base = getApiBase() || "http://localhost:4000";
+    const { authFetch } = await import("./auth");
+    const res = await authFetch(`${base}/api/files/${fileId}/url`);
+    if (res.ok) {
+      const data = await res.json() as { url: string };
+      window.open(data.url, "_blank", "noopener,noreferrer");
+      return;
+    }
+  } catch { /* fall through */ }
+  // Fallback: use the redirect endpoint
+  window.open(getFileUrl(fileId), "_blank", "noopener,noreferrer");
+}

@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Select from "@/components/Select";
+import { useCurrentUser } from "@/lib/useCurrentUser";
 
 type ParentProfile = {
     firstName: string;

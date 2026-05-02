@@ -9,12 +9,15 @@ import {
     listExams,
     listExamAttempts,
     classAttendanceReport,
+    listGradesForStudent,
     type ClassOffering,
     type PublicUser,
     type Exam,
+    type GradeEntry,
 } from "@/lib/admin-api";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { filterOfferingsBySubject } from "@/lib/teacher-utils";
+import { cachedFetch } from "@/lib/cache";
 
 type StudentRow = {
     id: string;
@@ -59,6 +62,9 @@ export default function TeacherStudents() {
     const [students, setStudents] = useState<StudentRow[]>([]);
     const [selectedOffering, setSelectedOffering] = useState("");
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+    const [studentGrades, setStudentGrades] = useState<GradeEntry[]>([]);
+    const [gradesLoading, setGradesLoading] = useState(false);
+    const [detailTab, setDetailTab] = useState<"exams" | "grades">("grades");
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
 
@@ -67,12 +73,9 @@ export default function TeacherStudents() {
         setLoading(true);
         setErr(null);
         try {
-            const year = await getActiveAcademicYear();
-            if (!year) {
-                setErr("No active academic year");
-                return;
-            }
-            const mine = await listMyClassOfferings(year.id);
+            const year = await cachedFetch("active-year", () => getActiveAcademicYear(), 120_000);
+            if (!year) { setErr("No active academic year"); return; }
+            const mine = await cachedFetch(`offerings:${year.id}`, () => listMyClassOfferings(year.id), 60_000);
             const scoped = filterOfferingsBySubject(mine, user?.subject);
             setOfferings(scoped);
             setSelectedOffering((prev) => (prev && scoped.some((o) => o.id === prev) ? prev : scoped[0]?.id ?? ""));
@@ -91,106 +94,85 @@ export default function TeacherStudents() {
     useEffect(() => {
         if (!isClient || !selectedOffering) return;
         let cancelled = false;
-
         (async () => {
             setLoading(true);
             try {
-                const year = await getActiveAcademicYear();
+                const year = await cachedFetch("active-year", () => getActiveAcademicYear(), 120_000);
                 if (!year || cancelled) return;
-
                 const offering = offerings.find(o => o.id === selectedOffering);
                 if (!offering) return;
 
-                // Get enrolled students
-                const enrollments = await listEnrollments({ classOfferingId: selectedOffering, academicYearId: year.id });
-                const allUsers = await listUsers("student");
-                const userMap = new Map<string, PublicUser>(allUsers.map(u => [u.id, u]));
+                // Fetch enrollments, users, exams, and attendance in parallel
+                const [enrollments, allUsers, exams, attendanceReport] = await Promise.all([
+                    cachedFetch(`enroll:${selectedOffering}:${year.id}`, () => listEnrollments({ classOfferingId: selectedOffering, academicYearId: year.id }), 60_000),
+                    cachedFetch("students:all", () => listUsers("student"), 120_000),
+                    cachedFetch(`exams:${year.id}`, () => listExams(year.id), 30_000),
+                    cachedFetch(`attendance:${selectedOffering}`, () => classAttendanceReport(selectedOffering), 30_000).catch(() => null),
+                ]);
+                if (cancelled) return;
 
-                // Get exams for this class
-                const exams = await listExams(year.id);
+                const userMap = new Map<string, PublicUser>(allUsers.map(u => [u.id, u]));
                 const classExams = exams.filter(ex => ex.classOfferingId === selectedOffering && ex.published);
 
-                // Get attempts for these exams
+                // Fetch all exam attempts in parallel
                 const attemptsByExam: Record<string, Record<string, { score: number | null }>> = {};
-                for (const ex of classExams) {
-                    try {
-                        const res = await listExamAttempts(ex.id);
-                        const map: Record<string, { score: number | null }> = {};
-                        if (res?.attempts) {
-                            for (const a of res.attempts) {
-                                map[a.studentId] = { score: a.score };
-                            }
-                        }
-                        attemptsByExam[ex.id] = map;
-                    } catch { /* exam may not have attempts */ }
+                const attemptResults = await Promise.all(
+                    classExams.map(ex =>
+                        cachedFetch(`attempts:${ex.id}`, () => listExamAttempts(ex.id), 20_000)
+                            .then(res => ({ examId: ex.id, attempts: res?.attempts ?? [] }))
+                            .catch(() => ({ examId: ex.id, attempts: [] }))
+                    )
+                );
+                for (const { examId, attempts } of attemptResults) {
+                    const map: Record<string, { score: number | null }> = {};
+                    for (const a of attempts) map[a.studentId] = { score: a.score };
+                    attemptsByExam[examId] = map;
                 }
 
-                // Get attendance report for this class
+                // Build attendance map
                 let attendanceMap: Record<string, { present: number; total: number }> = {};
                 try {
-                    const report = await classAttendanceReport(selectedOffering);
-                    if (report?.sessions) {
-                        for (const session of report.sessions) {
-                            for (const mark of session.marks) {
-                                if (!attendanceMap[mark.studentId]) {
-                                    attendanceMap[mark.studentId] = { present: 0, total: 0 };
-                                }
-                                attendanceMap[mark.studentId].total += 1;
-                                if (mark.status === "present" || mark.status === "excused") {
-                                    attendanceMap[mark.studentId].present += 1;
-                                }
+                    if (attendanceReport?.sessions) {
+                        for (const session of attendanceReport.sessions) {
+                            for (const mark of session.marks ?? []) {
+                                if (!attendanceMap[mark.studentId]) attendanceMap[mark.studentId] = { present: 0, total: 0 };
+                                attendanceMap[mark.studentId].total++;
+                                if (mark.status === "present") attendanceMap[mark.studentId].present++;
                             }
                         }
                     }
-                } catch { /* no attendance data */ }
+                } catch { /* ignore */ }
 
-                // Build student rows
+                if (cancelled) return;
+
                 const rows: StudentRow[] = enrollments.map(e => {
                     const u = userMap.get(e.studentId);
-                    const name = u ? `${u.firstName} ${u.lastName}` : e.studentId.slice(0, 8);
-
-                    // Per-exam scores (treated as per-subject)
+                    const att = attendanceMap[e.studentId];
+                    const attPct = att && att.total > 0 ? Math.round((att.present / att.total) * 100) : 0;
                     const subjects = classExams.map(ex => {
-                        const att = attemptsByExam[ex.id]?.[e.studentId];
-                        return {
-                            name: ex.title,
-                            score: att?.score ?? null,
-                            attendance: 0, // filled below per student
-                        };
+                        const attempt = attemptsByExam[ex.id]?.[e.studentId];
+                        const subj = (offering as any).subjectName || (offering as any).subject?.name || "Subject";
+                        return { name: subj, score: attempt?.score ?? null, attendance: attPct };
                     });
-
-                    const scoredSubjects = subjects.filter(s => s.score !== null);
-                    const avg = scoredSubjects.length > 0
-                        ? Math.round(scoredSubjects.reduce((sum, s) => sum + (s.score ?? 0), 0) / scoredSubjects.length)
-                        : 0;
-
-                    const attData = attendanceMap[e.studentId];
-                    const attendanceRate = attData && attData.total > 0
-                        ? Math.round((attData.present / attData.total) * 100)
-                        : 100; // default 100% if no sessions
-
+                    const scores = subjects.map(s => s.score).filter((s): s is number => s != null);
+                    const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
                     return {
                         id: e.studentId,
-                        name,
+                        name: u ? `${u.firstName} ${u.lastName}` : e.studentId.slice(0, 8),
                         email: u?.email ?? "",
                         offeringLabel: offeringLabel(offering),
                         subjects,
                         avg,
-                        attendance: attendanceRate,
+                        attendance: attPct,
                     };
                 });
-
-                if (!cancelled) {
-                    setStudents(rows);
-                    setSelectedStudentId(null);
-                }
+                if (!cancelled) setStudents(rows);
             } catch (e) {
                 if (!cancelled) setErr(e instanceof Error ? e.message : "Failed to load students");
             } finally {
                 if (!cancelled) setLoading(false);
             }
         })();
-
         return () => { cancelled = true; };
     }, [selectedOffering, offerings]);
 
@@ -202,7 +184,7 @@ export default function TeacherStudents() {
 
     const selected = useMemo(() => rankedStudents.find(s => s.id === selectedStudentId), [rankedStudents, selectedStudentId]);
 
-    if (!isClient || (loading && offerings.length === 0)) {
+    if (!isClient || loading) {
         return <TeacherStudentsSkeleton />;
     }
 
@@ -249,14 +231,22 @@ export default function TeacherStudents() {
                     <div style={{ fontSize: "0.85rem" }}>Students will appear once enrolled by the admin.</div>
                 </div>
             ) : (
-                <div style={{ display: "grid", gridTemplateColumns: selected ? "1fr 1.5fr" : "1fr", gap: "1.5rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: selected ? "minmax(0,1fr) minmax(0,1.5fr)" : "1fr", gap: "1.25rem" }}>
                     <div className="card">
                         <div className="table-wrapper">
                             <table>
                                 <thead><tr><th>Student</th><th>Avg</th><th>Attendance</th><th>Rank</th></tr></thead>
                                 <tbody>
                                     {rankedStudents.map(s => (
-                                        <tr key={s.id} onClick={() => setSelectedStudentId(s.id)} style={{ cursor: "pointer", background: selectedStudentId === s.id ? "var(--primary-50)" : undefined }}>
+                                        <tr key={s.id} onClick={() => {
+                                            setSelectedStudentId(s.id);
+                                            setDetailTab("grades");
+                                            setGradesLoading(true);
+                                            listGradesForStudent(s.id)
+                                                .then(g => setStudentGrades(g))
+                                                .catch(() => setStudentGrades([]))
+                                                .finally(() => setGradesLoading(false));
+                                        }} style={{ cursor: "pointer", background: selectedStudentId === s.id ? "var(--primary-50)" : undefined }}>
                                             <td style={{ fontWeight: 600 }}>
                                                 {s.name}<br />
                                                 <span style={{ fontSize: "0.7rem", color: "var(--gray-400)" }}>{s.email}</span>
@@ -275,71 +265,147 @@ export default function TeacherStudents() {
                         </div>
                     </div>
 
-                    {selected && (
-                        <div>
-                            <div className="card" style={{ marginBottom: "1rem" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1rem" }}>
-                                    <div className="avatar avatar-initials avatar-lg" style={{ fontSize: "1rem" }}>{selected.name.split(" ").map(n => n[0]).join("")}</div>
-                                    <div>
-                                        <h3 style={{ fontSize: "1.125rem", fontWeight: 700 }}>{selected.name}</h3>
-                                        <p style={{ fontSize: "0.8rem", color: "var(--gray-500)" }}>{selected.offeringLabel} · Rank #{selected.rank}</p>
+                                        {selected && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                            {/* ── Student header ── */}
+                            <div className="card">
+                                <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+                                    <div className="avatar avatar-initials avatar-lg" style={{ fontSize: "1rem", flexShrink: 0 }}>
+                                        {selected.name.split(" ").map((n: string) => n[0]).join("")}
+                                    </div>
+                                    <div style={{ minWidth: 0 }}>
+                                        <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selected.name}</h3>
+                                        <p style={{ fontSize: "0.78rem", color: "var(--gray-500)", margin: "0.1rem 0 0" }}>{selected.offeringLabel} · Rank #{selected.rank}</p>
+                                        <p style={{ fontSize: "0.72rem", color: "var(--gray-400)", margin: 0 }}>{selected.email}</p>
                                     </div>
                                 </div>
 
-                                <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3,1fr)", marginBottom: "1rem" }}>
-                                    <div className="stat-card">
-                                        <div className="stat-icon blue"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" /></svg></div>
-                                        <div className="stat-info"><div className="stat-label">Avg Score</div><div className="stat-value">{selected.avg > 0 ? `${selected.avg}%` : "-"}</div></div>
-                                    </div>
-                                    <div className="stat-card">
-                                        <div className="stat-icon green"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg></div>
-                                        <div className="stat-info"><div className="stat-label">Attendance</div><div className="stat-value">{selected.attendance}%</div></div>
-                                    </div>
-                                    <div className="stat-card">
-                                        <div className="stat-icon orange"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="6" /><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" /></svg></div>
-                                        <div className="stat-info"><div className="stat-label">Class Rank</div><div className="stat-value">#{selected.rank}</div></div>
-                                    </div>
+                                {/* Stats row */}
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "0.5rem", marginBottom: "1rem" }}>
+                                    {[
+                                        { label: "Avg Score", value: selected.avg > 0 ? `${selected.avg}%` : "—", color: selected.avg >= 80 ? "var(--success)" : selected.avg >= 60 ? "var(--primary-600)" : "var(--warning)" },
+                                        { label: "Attendance", value: `${selected.attendance}%`, color: selected.attendance >= 80 ? "var(--success)" : selected.attendance >= 60 ? "var(--warning)" : "var(--danger)" },
+                                        { label: "Rank", value: `#${selected.rank}`, color: "var(--gray-700)" },
+                                    ].map(stat => (
+                                        <div key={stat.label} style={{ background: "var(--gray-50)", borderRadius: 8, padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                                            <div style={{ fontSize: "0.68rem", color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.2rem" }}>{stat.label}</div>
+                                            <div style={{ fontWeight: 800, fontSize: "1rem", color: stat.color }}>{stat.value}</div>
+                                        </div>
+                                    ))}
                                 </div>
 
-                                {selected.subjects.length > 0 && (
-                                    <>
-                                        <h4 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.5rem" }}>📊 Exam Performance</h4>
-                                        <div className="table-wrapper">
-                                            <table>
-                                                <thead><tr><th>Exam</th><th>Score</th><th>Status</th></tr></thead>
+                                {/* Tabs */}
+                                <div className="tabs" style={{ marginBottom: "1rem" }}>
+                                    <button className={`tab ${detailTab === "grades" ? "active" : ""}`} onClick={() => setDetailTab("grades")}>Grades</button>
+                                    <button className={`tab ${detailTab === "exams" ? "active" : ""}`} onClick={() => setDetailTab("exams")}>Exams</button>
+                                </div>
+
+                                {/* ── Grades tab ── */}
+                                {detailTab === "grades" && (
+                                    gradesLoading ? (
+                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem", gap: "0.5rem", color: "var(--gray-400)" }}>
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+                                            Loading…
+                                        </div>
+                                    ) : studentGrades.length === 0 ? (
+                                        <div style={{ padding: "1.25rem", textAlign: "center", color: "var(--gray-400)", fontSize: "0.85rem", border: "1.5px dashed var(--gray-200)", borderRadius: 4 }}>
+                                            No grade entries yet.
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {(() => {
+                                                const released = studentGrades.filter(g => g.releasedAt);
+                                                const withScore = released.filter(g => g.score != null);
+                                                const avg = withScore.length > 0 ? Math.round(withScore.reduce((s, g) => s + (g.score! / g.maxScore) * 100, 0) / withScore.length) : null;
+                                                return (
+                                                    <div style={{ display: "flex", gap: "1rem", marginBottom: "0.6rem", fontSize: "0.8rem", color: "var(--gray-500)", flexWrap: "wrap" }}>
+                                                        <span><strong>{studentGrades.length}</strong> entries</span>
+                                                        <span><strong>{released.length}</strong> released</span>
+                                                        {avg != null && <span style={{ fontWeight: 700, color: avg >= 80 ? "var(--success)" : avg >= 60 ? "var(--warning)" : "var(--danger)" }}>Avg {avg}%</span>}
+                                                    </div>
+                                                );
+                                            })()}
+                                            <div style={{ overflowX: "auto" }}>
+                                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                                                    <thead>
+                                                        <tr style={{ background: "var(--gray-50)" }}>
+                                                            <th style={{ padding: "0.5rem 0.6rem", textAlign: "left", fontWeight: 700, fontSize: "0.72rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)" }}>Title</th>
+                                                            <th style={{ padding: "0.5rem 0.4rem", textAlign: "center", fontWeight: 700, fontSize: "0.72rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 60 }}>Type</th>
+                                                            <th style={{ padding: "0.5rem 0.4rem", textAlign: "center", fontWeight: 700, fontSize: "0.72rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 70 }}>Score</th>
+                                                            <th style={{ padding: "0.5rem 0.4rem", textAlign: "center", fontWeight: 700, fontSize: "0.72rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 70 }}>Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {studentGrades.map(g => {
+                                                            const pct = g.score != null ? Math.round((g.score / g.maxScore) * 100) : null;
+                                                            return (
+                                                                <tr key={g.id} style={{ borderBottom: "1px solid var(--gray-100)" }}>
+                                                                    <td style={{ padding: "0.4rem 0.6rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{g.title}</td>
+                                                                    <td style={{ padding: "0.4rem 0.4rem", textAlign: "center" }}>
+                                                                        <span className={`badge ${g.type === "exam" ? "badge-primary" : g.type === "quiz" ? "badge-warning" : "badge-success"}`} style={{ fontSize: "0.65rem" }}>{g.type}</span>
+                                                                    </td>
+                                                                    <td style={{ padding: "0.4rem 0.4rem", textAlign: "center", fontWeight: 700, fontSize: "0.82rem", color: pct != null ? (pct >= 80 ? "var(--success)" : pct >= 60 ? "var(--warning)" : "var(--danger)") : "var(--gray-400)" }}>
+                                                                        {g.score != null ? `${g.score}/${g.maxScore}` : "—"}
+                                                                    </td>
+                                                                    <td style={{ padding: "0.4rem 0.4rem", textAlign: "center" }}>
+                                                                        {g.releasedAt ? <span className="badge badge-success" style={{ fontSize: "0.65rem" }}>✓</span> : <span style={{ fontSize: "0.72rem", color: "var(--gray-400)" }}>—</span>}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </>
+                                    )
+                                )}
+
+                                {/* ── Exams tab ── */}
+                                {detailTab === "exams" && (
+                                    selected.subjects.length === 0 ? (
+                                        <div style={{ padding: "1.25rem", textAlign: "center", color: "var(--gray-400)", fontSize: "0.85rem", border: "1.5px dashed var(--gray-200)", borderRadius: 4 }}>
+                                            No published exams yet.
+                                        </div>
+                                    ) : (
+                                        <div style={{ overflowX: "auto" }}>
+                                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                                                <thead>
+                                                    <tr style={{ background: "var(--gray-50)" }}>
+                                                        <th style={{ padding: "0.5rem 0.6rem", textAlign: "left", fontWeight: 700, fontSize: "0.72rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)" }}>Exam</th>
+                                                        <th style={{ padding: "0.5rem 0.4rem", textAlign: "center", fontWeight: 700, fontSize: "0.72rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 80 }}>Score</th>
+                                                        <th style={{ padding: "0.5rem 0.4rem", textAlign: "center", fontWeight: 700, fontSize: "0.72rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 80 }}>Status</th>
+                                                    </tr>
+                                                </thead>
                                                 <tbody>
                                                     {selected.subjects.map((sub, i) => (
-                                                        <tr key={i}>
-                                                            <td style={{ fontWeight: 500 }}>{sub.name}</td>
-                                                            <td>
-                                                                {sub.score !== null ? (
-                                                                    <span className={`badge ${sub.score >= 90 ? "badge-success" : sub.score >= 80 ? "badge-primary" : sub.score >= 60 ? "badge-warning" : "badge-danger"}`}>{sub.score}%</span>
-                                                                ) : (
-                                                                    <span className="badge" style={{ background: "var(--gray-100)", color: "var(--gray-500)" }}>Not taken</span>
-                                                                )}
+                                                        <tr key={i} style={{ borderBottom: "1px solid var(--gray-100)" }}>
+                                                            <td style={{ padding: "0.4rem 0.6rem", fontWeight: 500 }}>{sub.name}</td>
+                                                            <td style={{ padding: "0.4rem 0.4rem", textAlign: "center", fontWeight: 700, color: sub.score != null ? (sub.score >= 80 ? "var(--success)" : sub.score >= 60 ? "var(--warning)" : "var(--danger)") : "var(--gray-400)" }}>
+                                                                {sub.score != null ? `${sub.score}%` : "—"}
                                                             </td>
-                                                            <td style={{ color: sub.score === null ? "var(--gray-400)" : sub.score >= 85 ? "var(--success)" : sub.score >= 75 ? "var(--warning)" : "var(--danger)" }}>
-                                                                {sub.score === null ? "-" : sub.score >= 85 ? "✅ Good" : sub.score >= 75 ? "⚠ Needs attention" : "❌ At risk"}
+                                                            <td style={{ padding: "0.4rem 0.4rem", textAlign: "center", fontSize: "0.78rem", color: sub.score == null ? "var(--gray-400)" : sub.score >= 85 ? "var(--success)" : sub.score >= 75 ? "var(--warning)" : "var(--danger)" }}>
+                                                                {sub.score == null ? "—" : sub.score >= 85 ? "✅" : sub.score >= 75 ? "⚠" : "❌"}
                                                             </td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
                                             </table>
                                         </div>
-                                    </>
+                                    )
                                 )}
                             </div>
 
-                            <div className="card" style={{ padding: "1rem" }}>
-                                <h4 style={{ fontWeight: 600, color: "var(--primary-600)", marginBottom: "0.5rem" }}>🤖 AI Recommendation</h4>
-                                <p style={{ fontSize: "0.85rem", color: "var(--gray-600)" }}>
+                            {/* AI recommendation — separate card */}
+                            <div style={{ background: "var(--primary-50)", border: "1.5px solid var(--primary-100)", borderRadius: 8, padding: "0.85rem 1rem" }}>
+                                <div style={{ fontWeight: 700, color: "var(--primary-700)", fontSize: "0.82rem", marginBottom: "0.35rem" }}>🤖 AI Recommendation</div>
+                                <p style={{ fontSize: "0.82rem", color: "var(--primary-800)", margin: 0, lineHeight: 1.5 }}>
                                     {selected.avg >= 85
-                                        ? `${selected.name} is performing well overall. Continue providing challenging material to maintain engagement.`
+                                        ? `${selected.name} is performing well. Keep providing challenging material.`
                                         : selected.avg >= 60
-                                        ? `${selected.name} needs additional support in exams with scores below 80%. Consider scheduling extra practice sessions.`
+                                        ? `${selected.name} needs support. Consider extra practice sessions.`
                                         : selected.avg > 0
-                                        ? `${selected.name} is at risk with an average below 60%. Immediate intervention is recommended, including one-on-one tutoring and parent communication.`
-                                        : `${selected.name} hasn't taken any exams yet. Make sure they are participating in upcoming assessments.`}
+                                        ? `${selected.name} is at risk (avg below 60%). Immediate intervention recommended.`
+                                        : `${selected.name} hasn't taken any exams yet.`}
                                 </p>
                             </div>
                         </div>

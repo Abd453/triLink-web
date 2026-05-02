@@ -2,7 +2,8 @@
 
 import { useRef, useState, useEffect } from "react";
 import { useCurrentUser } from "@/lib/useCurrentUser";
-import { getApiBase, getFileUrl } from "@/lib/api";
+import { adminJson, patchMe, uploadProfileImage } from "@/lib/admin-api";
+import { refreshStoredProfile } from "@/lib/auth";
 import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
 
 type TeacherProfile = {
@@ -81,24 +82,55 @@ export default function TeacherProfilePage() {
     const user = useCurrentUser("teacher");
     const [profile, setProfile] = useState<TeacherProfile>(initialProfile);
     const [draft, setDraft] = useState<TeacherProfile>(initialProfile);
+    const [profileImageFileId, setProfileImageFileId] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
 
-    // Hydrate profile correctly avoiding SSR mismatch
+    // Load current profile from backend so edits and avatar always use persisted data.
     useEffect(() => {
-        if (user && user.email) {
-            const nextProfile = {
-                ...profile,
-                firstName: user.firstName || profile.firstName,
-                lastName: user.lastName || profile.lastName,
-                email: user.email || profile.email,
-                subject: user.subject || profile.subject,
-                department: user.department || profile.department,
-            };
-            setProfile(nextProfile);
-            if (!isEditing) {
+        let cancelled = false;
+
+        async function loadProfile() {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const me = await adminJson<Record<string, unknown>>("/api/auth/me", { method: "GET" });
+                if (cancelled) return;
+
+                const nextProfile: TeacherProfile = {
+                    firstName: typeof me.firstName === "string" ? me.firstName : "",
+                    lastName: typeof me.lastName === "string" ? me.lastName : "",
+                    email: typeof me.email === "string" ? me.email : "",
+                    phone: typeof me.phone === "string" ? me.phone : "",
+                    subject: typeof me.subject === "string" ? me.subject : "",
+                    department: typeof me.department === "string" ? me.department : "",
+                    homeroomClass: typeof me.homeroomClass === "string" ? me.homeroomClass : "",
+                    experience: typeof me.experience === "string" ? me.experience : "",
+                    country: typeof me.country === "string" ? me.country : "",
+                    cityState: typeof me.cityState === "string" ? me.cityState : "",
+                    postalCode: typeof me.postalCode === "string" ? me.postalCode : "",
+                    officeRoom: typeof me.officeRoom === "string" ? me.officeRoom : "",
+                };
+
+                setProfile(nextProfile);
                 setDraft(nextProfile);
+                setProfileImageFileId(typeof me.profileImageFileId === "string" ? me.profileImageFileId : null);
+            } catch (e) {
+                if (cancelled) return;
+                setError(e instanceof Error ? e.message : "Failed to load profile.");
+            } finally {
+                if (!cancelled) setIsLoading(false);
             }
         }
-    }, [user, isEditing]);
+
+        void loadProfile();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const initials = `${profile.firstName.charAt(0)}${profile.lastName.charAt(0)}`.toUpperCase();
     const fullName = `${profile.firstName} ${profile.lastName}`;
@@ -124,13 +156,106 @@ export default function TeacherProfilePage() {
             return;
         }
 
-        setProfile({
+        const normalized = {
             ...draft,
             firstName: draft.firstName.trim(),
             lastName: draft.lastName.trim(),
             email: draft.email.trim(),
-        });
-        setIsEditing(false);
+            phone: draft.phone.trim(),
+            subject: draft.subject.trim(),
+            department: draft.department.trim(),
+            homeroomClass: draft.homeroomClass.trim(),
+            experience: draft.experience.trim(),
+            country: draft.country.trim(),
+            cityState: draft.cityState.trim(),
+            postalCode: draft.postalCode.trim(),
+            officeRoom: draft.officeRoom.trim(),
+        };
+
+        setIsSaving(true);
+        setError(null);
+        setSuccess(null);
+
+        void patchMe({
+            firstName: normalized.firstName,
+            lastName: normalized.lastName,
+            phone: normalized.phone || undefined,
+            subject: normalized.subject || undefined,
+            department: normalized.department || undefined,
+            homeroomClass: normalized.homeroomClass || undefined,
+            experience: normalized.experience || undefined,
+            country: normalized.country || undefined,
+            cityState: normalized.cityState || undefined,
+            postalCode: normalized.postalCode || undefined,
+            officeRoom: normalized.officeRoom || undefined,
+        })
+            .then(async (updated) => {
+                const nextProfile = {
+                    ...normalized,
+                    subject: typeof updated.subject === "string" ? updated.subject : normalized.subject,
+                    department: typeof updated.department === "string" ? updated.department : normalized.department,
+                    homeroomClass: typeof updated.homeroomClass === "string" ? updated.homeroomClass : normalized.homeroomClass,
+                    experience: typeof updated.experience === "string" ? updated.experience : normalized.experience,
+                    country: typeof updated.country === "string" ? updated.country : normalized.country,
+                    cityState: typeof updated.cityState === "string" ? updated.cityState : normalized.cityState,
+                    postalCode: typeof updated.postalCode === "string" ? updated.postalCode : normalized.postalCode,
+                    officeRoom: typeof updated.officeRoom === "string" ? updated.officeRoom : normalized.officeRoom,
+                };
+                setProfile(nextProfile);
+                setDraft(nextProfile);
+                setIsEditing(false);
+                await refreshStoredProfile();
+                setSuccess("Profile updated successfully.");
+                setTimeout(() => setSuccess(null), 3000);
+            })
+            .catch((e) => {
+                setError(e instanceof Error ? e.message : "Failed to save profile.");
+            })
+            .finally(() => {
+                setIsSaving(false);
+            });
+    }
+
+    async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setError(null);
+        setSuccess(null);
+
+        if (!file.type.startsWith("image/")) {
+            setError("Please select a valid image file.");
+            e.target.value = "";
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            setError("Image must be 10MB or less.");
+            e.target.value = "";
+            return;
+        }
+
+        try {
+            setIsUploading(true);
+            const uploaded = await uploadProfileImage(file);
+            const updated = await patchMe({ profileImageFileId: uploaded.id });
+            setProfileImageFileId(typeof updated.profileImageFileId === "string" ? updated.profileImageFileId : uploaded.id);
+            await refreshStoredProfile();
+            setSuccess("Profile photo updated successfully.");
+            setTimeout(() => setSuccess(null), 3000);
+        } catch (e2) {
+            setError(e2 instanceof Error ? e2.message : "Failed to upload photo.");
+        } finally {
+            setIsUploading(false);
+            e.target.value = "";
+        }
+    }
+
+    if (isLoading) {
+        return (
+            <div className="page-wrapper" style={{ padding: "2rem 1rem" }}>
+                <div className="card" style={{ textAlign: "center", color: "var(--gray-600)" }}>Loading profile...</div>
+            </div>
+        );
     }
 
     return (
@@ -142,16 +267,23 @@ export default function TeacherProfilePage() {
                 ) : (
                     <div style={{ display: "flex", gap: "0.5rem" }}>
                         <button className="btn btn-secondary" onClick={cancelEditing}>Cancel</button>
-                        <button className="btn btn-primary" onClick={saveProfile}>Save Changes</button>
+                        <button className="btn btn-primary" onClick={saveProfile} disabled={isSaving}>{isSaving ? "Saving..." : "Save Changes"}</button>
                     </div>
                 )}
             </div>
+
+            {error && (
+                <div className="card" style={{ marginTop: 0, marginBottom: "1rem", color: "var(--danger)" }}>{error}</div>
+            )}
+            {success && (
+                <div className="card" style={{ marginTop: 0, marginBottom: "1rem", color: "var(--success)" }}>{success}</div>
+            )}
 
             <div className="card">
                 <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.9fr)", gap: "1rem", alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
                         <AuthenticatedAvatar
-                            fileId={user.profileImageFileId}
+                            fileId={profileImageFileId}
                             initials={initials || "T"}
                             size={110}
                             alt={user.fullName || "User"}
@@ -177,10 +309,10 @@ export default function TeacherProfilePage() {
 
                         {isEditing && (
                             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                                <button className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()}>
-                                    Upload Photo
+                                <button className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                                    {isUploading ? "Uploading..." : "Upload Photo"}
                                 </button>
-                                <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} />
+                                <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhotoUpload} />
                             </div>
                         )}
                     </div>
