@@ -160,13 +160,7 @@ export async function patchMe(body: {
   lastName?: string;
   phone?: string;
   profileImageFileId?: string;
-  experience?: string;
-  officeRoom?: string;
-  country?: string;
-  cityState?: string;
-  postalCode?: string;
-  department?: string;
-  homeroomClass?: string;
+  [key: string]: any;
 }): Promise<any> {
   return adminJson<any>("/api/users/me", { method: "PATCH", body: JSON.stringify(body) });
 }

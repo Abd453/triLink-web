@@ -1,11 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
-import { useCurrentUser } from "@/lib/useCurrentUser";
-import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
-import { useToastStore } from "@/store/toastStore";
-import { patchMe, uploadProfileImage } from "@/lib/admin-api";
-import { refreshStoredProfile } from "@/lib/auth";
+import { useEffect, useRef, useState } from "react";
 import Select from "@/components/Select";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 
