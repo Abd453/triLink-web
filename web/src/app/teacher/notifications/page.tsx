@@ -12,6 +12,7 @@ import {
     markAllNotificationsRead,
     type BackendNotification,
 } from "@/lib/admin-api";
+import { PageHeader, EmptyState } from "@/components/ui";
 
 // ─── category meta ────────────────────────────────────────────────────────────
 type Category = "message" | "calendar" | "announcement" | "exam" | "other";
@@ -139,36 +140,25 @@ export default function TeacherNotifications() {
 
     return (
         <div className="page-wrapper">
-            {/* ── header ── */}
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">Notifications</h1>
-                    <p className="page-subtitle">
-                        {loading && <span className="admin-loading-shimmer" style={{ display: "inline-block", width: 100, height: 16, borderRadius: 4 }} />}
-                        {!loading && (totalUnread > 0 ? `${totalUnread} unread notification${totalUnread !== 1 ? "s" : ""}` : "All caught up!")}
-                    </p>
-                </div>
-                <div style={{ display: "flex", gap: "0.5rem" }}>
-                    {totalUnread > 0 && (
-                        <button
-                            className="btn btn-secondary"
-                            style={{ fontSize: "0.8rem", display: "flex", alignItems: "center", gap: 6 }}
-                            onClick={() => void handleMarkAll()}
-                        >
-                            <CheckCheck size={14} strokeWidth={2} />
-                            Mark all as read
-                        </button>
-                    )}
-                    <Link
-                        href="/teacher/calendar"
-                        className="btn btn-outline"
-                        style={{ fontSize: "0.8rem", display: "flex", alignItems: "center", gap: 6 }}
-                    >
-                        <Calendar size={14} strokeWidth={2} />
-                        View Calendar
-                    </Link>
-                </div>
-            </div>
+            <PageHeader
+                kicker="Inbox"
+                title="Notifications"
+                subtitle={loading ? "Loading…" : (totalUnread > 0 ? `${totalUnread} unread notification${totalUnread !== 1 ? "s" : ""}` : "All caught up!")}
+                icon={<Bell size={22} />}
+                variant="light"
+                actions={(
+                    <div style={{ display: "flex", gap: 8 }}>
+                        {totalUnread > 0 && (
+                            <button className="btn btn-secondary" style={{ fontSize: "0.8rem", display: "flex", alignItems: "center", gap: 6, borderRadius: 12 }} onClick={() => void handleMarkAll()}>
+                                <CheckCheck size={14} strokeWidth={2} /> Mark all read
+                            </button>
+                        )}
+                        <Link href="/teacher/calendar" className="btn btn-outline" style={{ fontSize: "0.8rem", display: "flex", alignItems: "center", gap: 6, borderRadius: 12 }}>
+                            <Calendar size={14} strokeWidth={2} /> Calendar
+                        </Link>
+                    </div>
+                )}
+            />
 
             {err && <div className="card" style={{ marginBottom: "1rem", color: "var(--danger)" }}>{err}</div>}
 
@@ -241,22 +231,11 @@ export default function TeacherNotifications() {
                     Loading notifications…
                 </div>
             ) : filtered.length === 0 ? (
-                <div
-                    className="card"
-                    style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: "3rem",
-                        gap: "0.75rem",
-                        color: "var(--gray-400)",
-                    }}
-                >
-                    <Bell size={40} strokeWidth={1.5} />
-                    <p style={{ fontSize: "1rem", fontWeight: 600, color: "var(--gray-600)" }}>No notifications</p>
-                    <p style={{ fontSize: "0.875rem" }}>You&apos;re all caught up in this category.</p>
-                </div>
+                <EmptyState
+                    icon={<Bell size={26} />}
+                    title="No notifications"
+                    description="You're all caught up in this category."
+                />
             ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                     {filtered.map((notif) => {

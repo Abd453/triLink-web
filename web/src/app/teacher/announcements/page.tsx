@@ -2,14 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Select from "@/components/Select";
+import TermSelector from "@/components/TermSelector";
 import {
   announcementsForMe,
   createAnnouncement,
   getActiveAcademicYear,
   listMyClassOfferings as listOfferings,
+  listTerms,
   type Announcement,
   type ClassOffering,
+  type TermRow,
 } from "@/lib/admin-api";
+import { useTermStore } from "@/store/termStore";
+import { PageHeader } from "@/components/ui";
+import { Megaphone, Plus } from "lucide-react";
 
 function offeringLabel(o: ClassOffering) {
   let gradeStr = "";
@@ -43,9 +49,11 @@ function TeacherAnnouncementsSkeleton() {
 }
 
 export default function TeacherAnnouncements() {
+  const { selectedTermId } = useTermStore();
   const [rows, setRows] = useState<Announcement[]>([]);
   const [offerings, setOfferings] = useState<ClassOffering[]>([]);
   const [yearId, setYearId] = useState<string | null>(null);
+  const [terms, setTerms] = useState<TermRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -60,6 +68,7 @@ export default function TeacherAnnouncements() {
   const [availableGrades, setAvailableGrades] = useState<string[]>([]);
   const [availableSections, setAvailableSections] = useState<string[]>([]);
   const [classOfferingId, setClassOfferingId] = useState("");
+  const [announcementTermId, setAnnouncementTermId] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Announcement | null>(null);
 
@@ -72,11 +81,13 @@ export default function TeacherAnnouncements() {
     setErr(null);
     setLoading(true);
     try {
-      const [ann, year] = await Promise.all([announcementsForMe(), getActiveAcademicYear()]);
+      const [ann, year] = await Promise.all([announcementsForMe(selectedTermId ?? undefined), getActiveAcademicYear()]);
       setRows(ann);
       setYearId(year?.id ?? null);
       if (year?.id) {
         const mine = await listOfferings(year.id);
+        const yearTerms = await listTerms(year.id);
+        setTerms(yearTerms);
         const grades = new Set<string>();
         const sects = new Set<string>();
         mine.forEach((o: any) => {
@@ -89,9 +100,12 @@ export default function TeacherAnnouncements() {
         setAvailableSections(Array.from(sects).sort());
         setOfferings(mine);
         setClassOfferingId((prev) => (prev && mine.some((o) => o.id === prev) ? prev : mine[0]?.id ?? ""));
+        setAnnouncementTermId((prev) => prev || selectedTermId || yearTerms[0]?.id || "");
       } else {
         setOfferings([]);
+        setTerms([]);
         setClassOfferingId("");
+        setAnnouncementTermId("");
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Load failed");
@@ -99,7 +113,7 @@ export default function TeacherAnnouncements() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedTermId]);
 
   useEffect(() => {
     load();
@@ -128,6 +142,7 @@ export default function TeacherAnnouncements() {
         classOfferingId: isClassMode ? classOfferingId : undefined,
         targetGrade: !isClassMode && targetGrade ? targetGrade : undefined,
         targetSection: !isClassMode && targetSection ? targetSection : undefined,
+        termId: announcementTermId || undefined,
       });
       setTitle("");
       setBody("");
@@ -135,6 +150,7 @@ export default function TeacherAnnouncements() {
       setIsClassMode(false);
       setTargetGrade("");
       setTargetSection("");
+      setAnnouncementTermId(selectedTermId ?? "");
       setShowCreateModal(false);
       await load();
       showToast("Published.");
@@ -174,15 +190,21 @@ export default function TeacherAnnouncements() {
         </div>
       )}
 
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Announcements</h1>
-          <p className="page-subtitle">School-wide feed from the API · publish to your audiences</p>
-        </div>
-        <button type="button" className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-          + New announcement
-        </button>
-      </div>
+      <PageHeader
+        kicker="Communication"
+        title="Announcements"
+        subtitle="School-wide feed from the API · publish to your audiences"
+        icon={<Megaphone size={22} />}
+        variant="light"
+        actions={(
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+            <TermSelector academicYearId={yearId} readOnly={false} />
+            <button type="button" className="btn btn-primary" onClick={() => setShowCreateModal(true)} style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Plus size={14} /> New announcement
+            </button>
+          </div>
+        )}
+      />
 
       {err && <div className="card" style={{ marginBottom: "1rem", color: "var(--danger)" }}>{err}</div>}
 
@@ -217,6 +239,17 @@ export default function TeacherAnnouncements() {
               <label>Title</label>
               <div className="input-field">
                 <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+              </div>
+            </div>
+            <div className="input-group" style={{ marginBottom: "1rem" }}>
+              <label>Term Scope</label>
+              <div className="input-field">
+                <Select value={announcementTermId} onChange={(e) => setAnnouncementTermId(e.target.value)}>
+                  <option value="">Global announcement</option>
+                  {terms.map((term) => (
+                    <option key={term.id} value={term.id}>{term.name} · {new Date(term.startDate).toLocaleDateString([], { month: "short", day: "numeric" })} – {new Date(term.endDate).toLocaleDateString([], { month: "short", day: "numeric" })}</option>
+                  ))}
+                </Select>
               </div>
             </div>
             <div className="input-group" style={{ marginBottom: "1rem" }}>
