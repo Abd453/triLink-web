@@ -2,12 +2,10 @@
 
 import { useRef, useState, useEffect } from "react";
 import { useCurrentUser } from "@/lib/useCurrentUser";
-import { adminJson, patchMe, uploadProfileImage } from "@/lib/admin-api";
+import { patchMe, uploadProfileImage } from "@/lib/admin-api";
 import { refreshStoredProfile } from "@/lib/auth";
 import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
 import { useToastStore } from "@/store/toastStore";
-import { patchMe, uploadProfileImage } from "@/lib/admin-api";
-import { refreshStoredProfile } from "@/lib/auth";
 
 type TeacherProfile = {
     firstName: string;
@@ -86,56 +84,33 @@ export default function TeacherProfilePage() {
     const [isEditing, setIsEditing] = useState(false);
     const user = useCurrentUser("teacher");
     const [profile, setProfile] = useState<TeacherProfile>(initialProfile);
-    const [draft, setDraft] = useState<TeacherProfile>(initialProfile);
-    const [profileImageFileId, setProfileImageFileId] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false);
-    const [isUploading, setIsUploading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [success, setSuccess] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [avatarUploading, setAvatarUploading] = useState(false);
+    const { showToast } = useToastStore();
 
-    // Load current profile from backend so edits and avatar always use persisted data.
+    // Hydrate profile
     useEffect(() => {
-        let cancelled = false;
-
-        async function loadProfile() {
-            setIsLoading(true);
-            setError(null);
-            try {
-                const me = await adminJson<Record<string, unknown>>("/api/auth/me", { method: "GET" });
-                if (cancelled) return;
-
-                const nextProfile: TeacherProfile = {
-                    firstName: typeof me.firstName === "string" ? me.firstName : "",
-                    lastName: typeof me.lastName === "string" ? me.lastName : "",
-                    email: typeof me.email === "string" ? me.email : "",
-                    phone: typeof me.phone === "string" ? me.phone : "",
-                    subject: typeof me.subject === "string" ? me.subject : "",
-                    department: typeof me.department === "string" ? me.department : "",
-                    homeroomClass: typeof me.homeroomClass === "string" ? me.homeroomClass : "",
-                    experience: typeof me.experience === "string" ? me.experience : "",
-                    country: typeof me.country === "string" ? me.country : "",
-                    cityState: typeof me.cityState === "string" ? me.cityState : "",
-                    postalCode: typeof me.postalCode === "string" ? me.postalCode : "",
-                    officeRoom: typeof me.officeRoom === "string" ? me.officeRoom : "",
-                };
-
-                setProfile(nextProfile);
+        if (user && user.email) {
+            const nextProfile: TeacherProfile = {
+                firstName: user.firstName || "",
+                lastName: user.lastName || "",
+                email: user.email || "",
+                phone: user.phone || "",
+                subject: user.subject || "",
+                department: user.department || "",
+                homeroomClass: user.homeroomClass || "",
+                experience: user.experience || "",
+                country: user.country || "",
+                cityState: user.cityState || "",
+                postalCode: user.postalCode || "",
+                officeRoom: user.officeRoom || "",
+            };
+            setProfile(nextProfile);
+            if (!isEditing) {
                 setDraft(nextProfile);
-                setProfileImageFileId(typeof me.profileImageFileId === "string" ? me.profileImageFileId : null);
-            } catch (e) {
-                if (cancelled) return;
-                setError(e instanceof Error ? e.message : "Failed to load profile.");
-            } finally {
-                if (!cancelled) setIsLoading(false);
             }
         }
-
-        void loadProfile();
-        return () => {
-            cancelled = true;
-        };
-    }, []);
+    }, [user, isEditing]);
 
     const initials = `${profile.firstName.charAt(0)}${profile.lastName.charAt(0)}`.toUpperCase();
     const fullName = `${profile.firstName} ${profile.lastName}`;
@@ -161,106 +136,48 @@ export default function TeacherProfilePage() {
             return;
         }
 
-        const normalized = {
-            ...draft,
-            firstName: draft.firstName.trim(),
-            lastName: draft.lastName.trim(),
-            email: draft.email.trim(),
-            phone: draft.phone.trim(),
-            subject: draft.subject.trim(),
-            department: draft.department.trim(),
-            homeroomClass: draft.homeroomClass.trim(),
-            experience: draft.experience.trim(),
-            country: draft.country.trim(),
-            cityState: draft.cityState.trim(),
-            postalCode: draft.postalCode.trim(),
-            officeRoom: draft.officeRoom.trim(),
-        };
-
-        setIsSaving(true);
-        setError(null);
-        setSuccess(null);
-
-        void patchMe({
-            firstName: normalized.firstName,
-            lastName: normalized.lastName,
-            phone: normalized.phone || undefined,
-            subject: normalized.subject || undefined,
-            department: normalized.department || undefined,
-            homeroomClass: normalized.homeroomClass || undefined,
-            experience: normalized.experience || undefined,
-            country: normalized.country || undefined,
-            cityState: normalized.cityState || undefined,
-            postalCode: normalized.postalCode || undefined,
-            officeRoom: normalized.officeRoom || undefined,
-        })
-            .then(async (updated) => {
-                const nextProfile = {
-                    ...normalized,
-                    subject: typeof updated.subject === "string" ? updated.subject : normalized.subject,
-                    department: typeof updated.department === "string" ? updated.department : normalized.department,
-                    homeroomClass: typeof updated.homeroomClass === "string" ? updated.homeroomClass : normalized.homeroomClass,
-                    experience: typeof updated.experience === "string" ? updated.experience : normalized.experience,
-                    country: typeof updated.country === "string" ? updated.country : normalized.country,
-                    cityState: typeof updated.cityState === "string" ? updated.cityState : normalized.cityState,
-                    postalCode: typeof updated.postalCode === "string" ? updated.postalCode : normalized.postalCode,
-                    officeRoom: typeof updated.officeRoom === "string" ? updated.officeRoom : normalized.officeRoom,
-                };
-                setProfile(nextProfile);
-                setDraft(nextProfile);
-                setIsEditing(false);
-                await refreshStoredProfile();
-                setSuccess("Profile updated successfully.");
-                setTimeout(() => setSuccess(null), 3000);
-            })
-            .catch((e) => {
-                setError(e instanceof Error ? e.message : "Failed to save profile.");
-            })
-            .finally(() => {
-                setIsSaving(false);
+        try {
+            setSaving(true);
+            // Sending fields the user wants editable. 
+            // Note: If the backend throws "property should not exist", these fields may need to be enabled on the server.
+            await patchMe({
+                phone: draft.phone.trim(),
+                experience: draft.experience.trim(),
+                officeRoom: draft.officeRoom.trim(),
+                country: draft.country.trim(),
+                cityState: draft.cityState.trim(),
+                postalCode: draft.postalCode.trim(),
+                department: draft.department.trim(),
+                homeroomClass: draft.homeroomClass.trim(),
             });
+            await refreshStoredProfile();
+            setProfile(draft);
+            setIsEditing(false);
+            showToast("Profile updated successfully", "success", true);
+        } catch (e) {
+            showToast(e instanceof Error ? e.message : "Failed to update profile", "error", false);
+        } finally {
+            setSaving(false);
+        }
     }
 
-    async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        setError(null);
-        setSuccess(null);
-
-        if (!file.type.startsWith("image/")) {
-            setError("Please select a valid image file.");
-            e.target.value = "";
-            return;
-        }
-        if (file.size > 10 * 1024 * 1024) {
-            setError("Image must be 10MB or less.");
-            e.target.value = "";
-            return;
-        }
-
         try {
-            setIsUploading(true);
-            const uploaded = await uploadProfileImage(file);
-            const updated = await patchMe({ profileImageFileId: uploaded.id });
-            setProfileImageFileId(typeof updated.profileImageFileId === "string" ? updated.profileImageFileId : uploaded.id);
+            setAvatarUploading(true);
+            const res = await uploadProfileImage(file);
+            await patchMe({ profileImageFileId: res.id });
             await refreshStoredProfile();
-            setSuccess("Profile photo updated successfully.");
-            setTimeout(() => setSuccess(null), 3000);
-        } catch (e2) {
-            setError(e2 instanceof Error ? e2.message : "Failed to upload photo.");
+            showToast("Profile photo updated successfully", "success", true);
+            // The useCurrentUser hook and AuthenticatedAvatar will react to the localStorage change
+        } catch (e) {
+            showToast("Failed to upload photo", "error", false);
         } finally {
-            setIsUploading(false);
-            e.target.value = "";
+            setAvatarUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
         }
-    }
-
-    if (isLoading) {
-        return (
-            <div className="page-wrapper" style={{ padding: "2rem 1rem" }}>
-                <div className="card" style={{ textAlign: "center", color: "var(--gray-600)" }}>Loading profile...</div>
-            </div>
-        );
     }
 
     return (
@@ -271,24 +188,17 @@ export default function TeacherProfilePage() {
                     <button className="btn btn-primary" onClick={startEditing}>Edit</button>
                 ) : (
                     <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <button className="btn btn-secondary" onClick={cancelEditing}>Cancel</button>
-                        <button className="btn btn-primary" onClick={saveProfile} disabled={isSaving}>{isSaving ? "Saving..." : "Save Changes"}</button>
+                        <button className="btn btn-secondary" onClick={cancelEditing} disabled={saving}>Cancel</button>
+                        <button className="btn btn-primary" onClick={saveProfile} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>
                     </div>
                 )}
             </div>
-
-            {error && (
-                <div className="card" style={{ marginTop: 0, marginBottom: "1rem", color: "var(--danger)" }}>{error}</div>
-            )}
-            {success && (
-                <div className="card" style={{ marginTop: 0, marginBottom: "1rem", color: "var(--success)" }}>{success}</div>
-            )}
 
             <div className="card">
                 <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.9fr)", gap: "1rem", alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
                         <AuthenticatedAvatar
-                            fileId={profileImageFileId}
+                            fileId={user.profileImageFileId}
                             initials={initials || "T"}
                             size={110}
                             alt={fullName || "User"}
@@ -316,10 +226,10 @@ export default function TeacherProfilePage() {
 
                         {isEditing && (
                             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                                <button className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
-                                    {isUploading ? "Uploading..." : "Upload Photo"}
+                                <button className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()} disabled={avatarUploading}>
+                                    {avatarUploading ? "Uploading..." : "Upload Photo"}
                                 </button>
-                                <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhotoUpload} />
+                                <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleAvatarUpload} />
                             </div>
                         )}
                     </div>
