@@ -348,13 +348,28 @@ export function TextbooksPage({ admin = false }: { admin?: boolean }) {
   const [subject, setSubject] = useState("");
   const [grade, setGrade] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const { state, data, error, reload } = useBasicLoad(() => listTextbooks({ subject: subject || undefined, grade: grade ? Number(grade) : undefined }), [subject, grade]);
   const books = data ?? [];
   async function onUpload(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setUploadError(null);
+    setUploadSuccess(null);
     const form = new FormData(e.currentTarget);
     const file = form.get("file");
-    if (!(file instanceof File) || file.size === 0) return;
+    if (!(file instanceof File) || file.size === 0) {
+      setUploadError("Choose a PDF textbook before uploading.");
+      return;
+    }
+    if (file.type && file.type !== "application/pdf") {
+      setUploadError("Only PDF files are accepted for textbooks.");
+      return;
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      setUploadError("Textbook PDFs must be 25 MB or smaller.");
+      return;
+    }
     setUploading(true);
     try {
       await uploadTextbook({
@@ -365,7 +380,15 @@ export function TextbooksPage({ admin = false }: { admin?: boolean }) {
         file,
       });
       e.currentTarget.reset();
+      setUploadSuccess("Textbook uploaded successfully.");
       reload();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      setUploadError(
+        message === "Internal server error"
+          ? "The server could not store this PDF. Check backend storage configuration and try again."
+          : message,
+      );
     } finally {
       setUploading(false);
     }
@@ -388,6 +411,16 @@ export function TextbooksPage({ admin = false }: { admin?: boolean }) {
         <Card style={{ marginTop: "1rem" }}>
           <CardHeader title="Upload textbook" subtitle="PDF uploads are available to admins." />
           <CardSection>
+            {uploadError ? (
+              <div role="alert" className="portal-upload-alert portal-upload-alert-error">
+                {uploadError}
+              </div>
+            ) : null}
+            {uploadSuccess ? (
+              <div role="status" className="portal-upload-alert portal-upload-alert-success">
+                {uploadSuccess}
+              </div>
+            ) : null}
             <form onSubmit={onUpload} className="ui-grid ui-grid-3">
               <input name="title" required placeholder="Title" style={{ padding: "0.65rem 0.8rem" }} />
               <input name="subject" required placeholder="Subject" style={{ padding: "0.65rem 0.8rem" }} />
