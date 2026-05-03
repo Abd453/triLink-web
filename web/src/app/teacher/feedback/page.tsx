@@ -6,6 +6,8 @@ import {
     submitFeedback,
     type TeacherFeedbackItem,
 } from "@/lib/admin-api";
+import { PageHeader, ListSkeleton } from "@/components/ui";
+import { MessageSquare } from "lucide-react";
 
 const CATEGORY_LABELS: Record<string, string> = {
     teacher: "About Me",
@@ -81,15 +83,13 @@ export default function TeacherFeedbackPage() {
                 </div>
             )}
 
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                        Feedback
-                    </h1>
-                    <p className="page-subtitle">View feedback from students and submit feedback to school admin</p>
-                </div>
-            </div>
+            <PageHeader
+                kicker="Feedback"
+                title="Feedback"
+                subtitle="View feedback from students and submit feedback to school admin."
+                icon={<MessageSquare size={22} />}
+                variant="light"
+            />
 
             {/* Tabs */}
             <div className="tabs" style={{ marginBottom: "1.5rem" }}>
@@ -105,19 +105,19 @@ export default function TeacherFeedbackPage() {
             </div>
 
             {loading ? (
-                <div className="card" style={{ display: "flex", justifyContent: "center", padding: "3rem" }}>
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                </div>
+                <ListSkeleton rows={4} />
             ) : (
                 <>
                     {/* ── Received tab ── */}
                     {tab === "received" && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                             {received.length === 0 ? (
-                                <div className="card" style={{ padding: "3rem", textAlign: "center", color: "var(--gray-400)" }}>
-                                    <div style={{ fontSize: "2.5rem", marginBottom: "0.5rem" }}>💬</div>
-                                    <div style={{ fontWeight: 600 }}>No feedback received yet</div>
-                                    <div style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>Students and parents can send you feedback anonymously.</div>
+                                <div style={{ background: "#fff", borderRadius: 20, padding: "4rem 2rem", textAlign: "center", border: "1.5px solid var(--gray-100)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+                                    <div style={{ width: 64, height: 64, borderRadius: "50%", background: "var(--primary-50)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary-400)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                    </div>
+                                    <div style={{ fontWeight: 700, fontSize: "1rem", color: "var(--gray-700)", marginBottom: "0.25rem" }}>No feedback received yet</div>
+                                    <div style={{ fontSize: "0.875rem", color: "var(--gray-400)" }}>Students and parents can send you feedback anonymously.</div>
                                 </div>
                             ) : received.map(f => (
                                 <div key={f.id} className="card" style={{ padding: "1.25rem" }}>
@@ -166,10 +166,12 @@ export default function TeacherFeedbackPage() {
                     {tab === "sent" && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                             {sent.length === 0 ? (
-                                <div className="card" style={{ padding: "3rem", textAlign: "center", color: "var(--gray-400)" }}>
-                                    <div style={{ fontSize: "2.5rem", marginBottom: "0.5rem" }}>📤</div>
-                                    <div style={{ fontWeight: 600 }}>No feedback sent yet</div>
-                                    <div style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>Use the "Submit Feedback" tab to send feedback to school admin.</div>
+                                <div style={{ background: "#fff", borderRadius: 20, padding: "4rem 2rem", textAlign: "center", border: "1.5px solid var(--gray-100)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+                                    <div style={{ width: 64, height: 64, borderRadius: "50%", background: "var(--gray-50)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--gray-400)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                    </div>
+                                    <div style={{ fontWeight: 700, fontSize: "1rem", color: "var(--gray-700)", marginBottom: "0.25rem" }}>No feedback sent yet</div>
+                                    <div style={{ fontSize: "0.875rem", color: "var(--gray-400)" }}>Use the "Submit Feedback" tab to send feedback to school admin.</div>
                                 </div>
                             ) : sent.map(f => (
                                 <div key={f.id} className="card" style={{ padding: "1.25rem" }}>

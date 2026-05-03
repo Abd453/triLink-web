@@ -420,11 +420,9 @@ export default function TeacherSettings() {
 
     return (
         <div className="page-wrapper">
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">Settings</h1>
-                    <p className="page-subtitle">Manage your account preferences and configurations.</p>
-                </div>
+            <div style={{ background: "#fff", borderRadius: 20, padding: "1.5rem 2rem", marginBottom: "1.5rem", border: "1.5px solid var(--gray-100)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+                <h1 style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--gray-900)", margin: 0 }}>Settings</h1>
+                <p style={{ fontSize: "0.875rem", color: "var(--gray-500)", margin: "0.25rem 0 0" }}>Manage your account preferences and configurations.</p>
             </div>
 
             <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start" }}>

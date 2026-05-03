@@ -2,10 +2,11 @@
 
 import { useRef, useState, useEffect } from "react";
 import { useCurrentUser } from "@/lib/useCurrentUser";
-import { patchMe, uploadProfileImage } from "@/lib/admin-api";
+import { adminJson, patchMe, uploadProfileImage } from "@/lib/admin-api";
 import { refreshStoredProfile } from "@/lib/auth";
 import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
-import { useToastStore } from "@/store/toastStore";
+import { PageHeader, CardSkeleton, PageHeaderSkeleton } from "@/components/ui";
+import { UserCircle2, Pencil } from "lucide-react";
 
 type TeacherProfile = {
     firstName: string;
@@ -49,7 +50,7 @@ function StaticField({ label, value }: { label: string; value: string }) {
             }}
         >
             <div style={{ fontSize: "0.78rem", color: "var(--gray-500)", marginBottom: "0.35rem", fontWeight: 600 }}>{label}</div>
-            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--gray-900)", lineHeight: 1.35 }}>{value || "—"}</div>
+            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--gray-900)", lineHeight: 1.35 }}>{value}</div>
         </div>
     );
 }
@@ -60,20 +61,18 @@ function EditableField({
     onChange,
     type = "text",
     placeholder,
-    disabled = false,
 }: {
     label: string;
     value: string;
     onChange: (value: string) => void;
     type?: string;
     placeholder?: string;
-    disabled?: boolean;
 }) {
     return (
         <div className="input-group">
             <label>{label}</label>
             <div className="input-field">
-                <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} disabled={disabled} />
+                <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
             </div>
         </div>
     );
@@ -85,33 +84,55 @@ export default function TeacherProfilePage() {
     const user = useCurrentUser("teacher");
     const [profile, setProfile] = useState<TeacherProfile>(initialProfile);
     const [draft, setDraft] = useState<TeacherProfile>(initialProfile);
-    const [saving, setSaving] = useState(false);
-    const [avatarUploading, setAvatarUploading] = useState(false);
-    const { showToast } = useToastStore();
+    const [profileImageFileId, setProfileImageFileId] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
 
-    // Hydrate profile
+    // Load current profile from backend so edits and avatar always use persisted data.
     useEffect(() => {
-        if (user && user.email) {
-            const nextProfile: TeacherProfile = {
-                firstName: user.firstName || "",
-                lastName: user.lastName || "",
-                email: user.email || "",
-                phone: user.phone || "",
-                subject: user.subject || "",
-                department: user.department || "",
-                homeroomClass: user.homeroomClass || "",
-                experience: user.experience || "",
-                country: user.country || "",
-                cityState: user.cityState || "",
-                postalCode: user.postalCode || "",
-                officeRoom: user.officeRoom || "",
-            };
-            setProfile(nextProfile);
-            if (!isEditing) {
+        let cancelled = false;
+
+        async function loadProfile() {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const me = await adminJson<Record<string, unknown>>("/api/auth/me", { method: "GET" });
+                if (cancelled) return;
+
+                const nextProfile: TeacherProfile = {
+                    firstName: typeof me.firstName === "string" ? me.firstName : "",
+                    lastName: typeof me.lastName === "string" ? me.lastName : "",
+                    email: typeof me.email === "string" ? me.email : "",
+                    phone: typeof me.phone === "string" ? me.phone : "",
+                    subject: typeof me.subject === "string" ? me.subject : "",
+                    department: typeof me.department === "string" ? me.department : "",
+                    homeroomClass: typeof me.homeroomClass === "string" ? me.homeroomClass : "",
+                    experience: typeof me.experience === "string" ? me.experience : "",
+                    country: typeof me.country === "string" ? me.country : "",
+                    cityState: typeof me.cityState === "string" ? me.cityState : "",
+                    postalCode: typeof me.postalCode === "string" ? me.postalCode : "",
+                    officeRoom: typeof me.officeRoom === "string" ? me.officeRoom : "",
+                };
+
+                setProfile(nextProfile);
                 setDraft(nextProfile);
+                setProfileImageFileId(typeof me.profileImageFileId === "string" ? me.profileImageFileId : null);
+            } catch (e) {
+                if (cancelled) return;
+                setError(e instanceof Error ? e.message : "Failed to load profile.");
+            } finally {
+                if (!cancelled) setIsLoading(false);
             }
         }
-    }, [user, isEditing]);
+
+        void loadProfile();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const initials = `${profile.firstName.charAt(0)}${profile.lastName.charAt(0)}`.toUpperCase();
     const fullName = `${profile.firstName} ${profile.lastName}`;
@@ -131,87 +152,159 @@ export default function TeacherProfilePage() {
         setIsEditing(false);
     }
 
-    async function saveProfile() {
+    function saveProfile() {
         if (!draft.firstName.trim() || !draft.lastName.trim() || !draft.email.trim()) {
-            showToast("First name, last name, and email are required.", "error", false);
+            window.alert("First name, last name, and email are required.");
+            return;
+        }
+
+        const normalized = {
+            ...draft,
+            firstName: draft.firstName.trim(),
+            lastName: draft.lastName.trim(),
+            email: draft.email.trim(),
+            phone: draft.phone.trim(),
+            subject: draft.subject.trim(),
+            department: draft.department.trim(),
+            homeroomClass: draft.homeroomClass.trim(),
+            experience: draft.experience.trim(),
+            country: draft.country.trim(),
+            cityState: draft.cityState.trim(),
+            postalCode: draft.postalCode.trim(),
+            officeRoom: draft.officeRoom.trim(),
+        };
+
+        setIsSaving(true);
+        setError(null);
+        setSuccess(null);
+
+        void patchMe({
+            firstName: normalized.firstName,
+            lastName: normalized.lastName,
+            phone: normalized.phone || undefined,
+            subject: normalized.subject || undefined,
+            department: normalized.department || undefined,
+            homeroomClass: normalized.homeroomClass || undefined,
+            experience: normalized.experience || undefined,
+            country: normalized.country || undefined,
+            cityState: normalized.cityState || undefined,
+            postalCode: normalized.postalCode || undefined,
+            officeRoom: normalized.officeRoom || undefined,
+        })
+            .then(async (updated) => {
+                const nextProfile = {
+                    ...normalized,
+                    subject: typeof updated.subject === "string" ? updated.subject : normalized.subject,
+                    department: typeof updated.department === "string" ? updated.department : normalized.department,
+                    homeroomClass: typeof updated.homeroomClass === "string" ? updated.homeroomClass : normalized.homeroomClass,
+                    experience: typeof updated.experience === "string" ? updated.experience : normalized.experience,
+                    country: typeof updated.country === "string" ? updated.country : normalized.country,
+                    cityState: typeof updated.cityState === "string" ? updated.cityState : normalized.cityState,
+                    postalCode: typeof updated.postalCode === "string" ? updated.postalCode : normalized.postalCode,
+                    officeRoom: typeof updated.officeRoom === "string" ? updated.officeRoom : normalized.officeRoom,
+                };
+                setProfile(nextProfile);
+                setDraft(nextProfile);
+                setIsEditing(false);
+                await refreshStoredProfile();
+                setSuccess("Profile updated successfully.");
+                setTimeout(() => setSuccess(null), 3000);
+            })
+            .catch((e) => {
+                setError(e instanceof Error ? e.message : "Failed to save profile.");
+            })
+            .finally(() => {
+                setIsSaving(false);
+            });
+    }
+
+    async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setError(null);
+        setSuccess(null);
+
+        if (!file.type.startsWith("image/")) {
+            setError("Please select a valid image file.");
+            e.target.value = "";
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            setError("Image must be 10MB or less.");
+            e.target.value = "";
             return;
         }
 
         try {
-            setSaving(true);
-            // Sending fields the user wants editable. 
-            // Note: If the backend throws "property should not exist", these fields may need to be enabled on the server.
-            await patchMe({
-                phone: draft.phone.trim(),
-                experience: draft.experience.trim(),
-                officeRoom: draft.officeRoom.trim(),
-                country: draft.country.trim(),
-                cityState: draft.cityState.trim(),
-                postalCode: draft.postalCode.trim(),
-                department: draft.department.trim(),
-                homeroomClass: draft.homeroomClass.trim(),
-            });
+            setIsUploading(true);
+            const uploaded = await uploadProfileImage(file);
+            const updated = await patchMe({ profileImageFileId: uploaded.id });
+            setProfileImageFileId(typeof updated.profileImageFileId === "string" ? updated.profileImageFileId : uploaded.id);
             await refreshStoredProfile();
-            setProfile(draft);
-            setIsEditing(false);
-            showToast("Profile updated successfully", "success", true);
-        } catch (e) {
-            showToast(e instanceof Error ? e.message : "Failed to update profile", "error", false);
+            setSuccess("Profile photo updated successfully.");
+            setTimeout(() => setSuccess(null), 3000);
+        } catch (e2) {
+            setError(e2 instanceof Error ? e2.message : "Failed to upload photo.");
         } finally {
-            setSaving(false);
+            setIsUploading(false);
+            e.target.value = "";
         }
     }
 
-    async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        try {
-            setAvatarUploading(true);
-            const res = await uploadProfileImage(file);
-            await patchMe({ profileImageFileId: res.id });
-            await refreshStoredProfile();
-            showToast("Profile photo updated successfully", "success", true);
-            // The useCurrentUser hook and AuthenticatedAvatar will react to the localStorage change
-        } catch (e) {
-            showToast("Failed to upload photo", "error", false);
-        } finally {
-            setAvatarUploading(false);
-            if (fileInputRef.current) fileInputRef.current.value = "";
-        }
+    if (isLoading) {
+        return (
+            <div className="page-wrapper">
+                <PageHeaderSkeleton withActions={false} />
+                <CardSkeleton lines={4} />
+                <div style={{ height: 12 }} />
+                <CardSkeleton lines={6} />
+            </div>
+        );
     }
 
     return (
         <div className="page-wrapper">
-            <div className="page-header" style={{ marginBottom: "1rem" }}>
-                <h1 className="page-title">My Profile</h1>
-                {!isEditing ? (
-                    <button className="btn btn-primary" onClick={startEditing}>Edit</button>
+            <PageHeader
+                kicker="Profile"
+                title="My Profile"
+                subtitle="View and update your personal details and teaching context."
+                icon={<UserCircle2 size={22} />}
+                variant="light"
+                actions={!isEditing ? (
+                    <button className="btn btn-primary" onClick={startEditing} style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        <Pencil size={14} /> Edit Profile
+                    </button>
                 ) : (
                     <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <button className="btn btn-secondary" onClick={cancelEditing} disabled={saving}>Cancel</button>
-                        <button className="btn btn-primary" onClick={saveProfile} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>
+                        <button className="btn btn-secondary" onClick={cancelEditing} style={{ borderRadius: 12 }}>Cancel</button>
+                        <button className="btn btn-primary" onClick={saveProfile} disabled={isSaving} style={{ borderRadius: 12 }}>{isSaving ? "Saving..." : "Save Changes"}</button>
                     </div>
                 )}
-            </div>
+            />
+
+            {error && (
+                <div className="card" style={{ marginTop: 0, marginBottom: "1rem", color: "var(--danger)" }}>{error}</div>
+            )}
+            {success && (
+                <div className="card" style={{ marginTop: 0, marginBottom: "1rem", color: "var(--success)" }}>{success}</div>
+            )}
 
             <div className="card">
                 <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.9fr)", gap: "1rem", alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
                         <AuthenticatedAvatar
-                            fileId={user.profileImageFileId}
+                            fileId={profileImageFileId}
                             initials={initials || "T"}
                             size={110}
-                            alt={fullName || "User"}
+                            alt={user.fullName || "User"}
                             style={{ border: "4px solid #fff", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
                         />
 
                         <div>
                             <h2 style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--gray-900)" }}>{fullName}</h2>
-                            <p style={{ color: "var(--gray-500)", fontSize: "0.95rem", marginTop: "0.2rem" }}>
-                                {profile.subject ? `${profile.subject} Teacher` : "Teacher"}
-                            </p>
-                            <p style={{ color: "var(--gray-400)", fontSize: "0.9rem", marginTop: "0.2rem" }}>{profile.cityState}{profile.cityState && profile.country ? ", " : ""}{profile.country}</p>
+                            <p style={{ color: "var(--gray-500)", fontSize: "0.95rem", marginTop: "0.2rem" }}>{profile.subject} Teacher</p>
+                            <p style={{ color: "var(--gray-400)", fontSize: "0.9rem", marginTop: "0.2rem" }}>{profile.cityState}, {profile.country}</p>
                         </div>
                     </div>
 
@@ -220,17 +313,17 @@ export default function TeacherProfilePage() {
                             {quickStats.map((item) => (
                                 <div key={item.label} style={{ padding: "0.75rem 0.85rem", border: "1px solid var(--gray-200)", background: "#fff", borderRadius: "var(--radius-md)" }}>
                                     <div style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.04em", color: "var(--gray-400)", textTransform: "uppercase" }}>{item.label}</div>
-                                    <div style={{ marginTop: "0.35rem", fontSize: "0.9rem", fontWeight: 600, color: "var(--gray-800)" }}>{item.value || "—"}</div>
+                                    <div style={{ marginTop: "0.35rem", fontSize: "0.9rem", fontWeight: 600, color: "var(--gray-800)" }}>{item.value}</div>
                                 </div>
                             ))}
                         </div>
 
                         {isEditing && (
                             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                                <button className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()} disabled={avatarUploading}>
-                                    {avatarUploading ? "Uploading..." : "Upload Photo"}
+                                <button className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                                    {isUploading ? "Uploading..." : "Upload Photo"}
                                 </button>
-                                <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleAvatarUpload} />
+                                <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhotoUpload} />
                             </div>
                         )}
                     </div>
@@ -255,12 +348,12 @@ export default function TeacherProfilePage() {
                         </div>
                     ) : (
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.85rem" }}>
-                            <EditableField label="First Name" value={draft.firstName} onChange={(value) => setDraft((prev) => ({ ...prev, firstName: value }))} placeholder="First name" disabled={true} />
-                            <EditableField label="Last Name" value={draft.lastName} onChange={(value) => setDraft((prev) => ({ ...prev, lastName: value }))} placeholder="Last name" disabled={true} />
-                            <EditableField label="Email Address" type="email" value={draft.email} onChange={(value) => setDraft((prev) => ({ ...prev, email: value }))} placeholder="teacher@school.edu" disabled={true} />
-                            <EditableField label="Phone no" value={draft.phone} onChange={(value) => setDraft((prev) => ({ ...prev, phone: value }))} placeholder="+251 9XX XXX XXX" disabled={saving} />
-                            <EditableField label="Subject" value={draft.subject} onChange={(value) => setDraft((prev) => ({ ...prev, subject: value }))} placeholder="Mathematics" disabled={true} />
-                            <EditableField label="Experience" value={draft.experience} onChange={(value) => setDraft((prev) => ({ ...prev, experience: value }))} placeholder="Years of experience" disabled={saving} />
+                            <EditableField label="First Name" value={draft.firstName} onChange={(value) => setDraft((prev) => ({ ...prev, firstName: value }))} placeholder="First name" />
+                            <EditableField label="Last Name" value={draft.lastName} onChange={(value) => setDraft((prev) => ({ ...prev, lastName: value }))} placeholder="Last name" />
+                            <EditableField label="Email Address" type="email" value={draft.email} onChange={(value) => setDraft((prev) => ({ ...prev, email: value }))} placeholder="teacher@school.edu" />
+                            <EditableField label="Phone no" value={draft.phone} onChange={(value) => setDraft((prev) => ({ ...prev, phone: value }))} placeholder="+251 9XX XXX XXX" />
+                            <EditableField label="Subject" value={draft.subject} onChange={(value) => setDraft((prev) => ({ ...prev, subject: value }))} placeholder="Mathematics" />
+                            <EditableField label="Experience" value={draft.experience} onChange={(value) => setDraft((prev) => ({ ...prev, experience: value }))} placeholder="Years of experience" />
                         </div>
                     )}
                 </div>
@@ -282,12 +375,12 @@ export default function TeacherProfilePage() {
                         </div>
                     ) : (
                         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "0.85rem" }}>
-                            <EditableField label="Department" value={draft.department} onChange={(value) => setDraft((prev) => ({ ...prev, department: value }))} placeholder="Mathematics" disabled={saving} />
-                            <EditableField label="Homeroom Class" value={draft.homeroomClass} onChange={(value) => setDraft((prev) => ({ ...prev, homeroomClass: value }))} placeholder="Grade 11-A" disabled={saving} />
-                            <EditableField label="Country" value={draft.country} onChange={(value) => setDraft((prev) => ({ ...prev, country: value }))} placeholder="Country" disabled={saving} />
-                            <EditableField label="City / State" value={draft.cityState} onChange={(value) => setDraft((prev) => ({ ...prev, cityState: value }))} placeholder="City / State" disabled={saving} />
-                            <EditableField label="Postal Code" value={draft.postalCode} onChange={(value) => setDraft((prev) => ({ ...prev, postalCode: value }))} placeholder="Postal code" disabled={saving} />
-                            <EditableField label="Office Room" value={draft.officeRoom} onChange={(value) => setDraft((prev) => ({ ...prev, officeRoom: value }))} placeholder="Office room" disabled={saving} />
+                            <EditableField label="Department" value={draft.department} onChange={(value) => setDraft((prev) => ({ ...prev, department: value }))} placeholder="Mathematics" />
+                            <EditableField label="Homeroom Class" value={draft.homeroomClass} onChange={(value) => setDraft((prev) => ({ ...prev, homeroomClass: value }))} placeholder="Grade 11-A" />
+                            <EditableField label="Country" value={draft.country} onChange={(value) => setDraft((prev) => ({ ...prev, country: value }))} placeholder="Country" />
+                            <EditableField label="City / State" value={draft.cityState} onChange={(value) => setDraft((prev) => ({ ...prev, cityState: value }))} placeholder="City / State" />
+                            <EditableField label="Postal Code" value={draft.postalCode} onChange={(value) => setDraft((prev) => ({ ...prev, postalCode: value }))} placeholder="Postal code" />
+                            <EditableField label="Office Room" value={draft.officeRoom} onChange={(value) => setDraft((prev) => ({ ...prev, officeRoom: value }))} placeholder="Office room" />
                         </div>
                     )}
                 </div>
