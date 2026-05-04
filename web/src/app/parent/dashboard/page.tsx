@@ -1,111 +1,184 @@
 "use client";
-
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import {
+    Bell,
+    CalendarDays,
+    Home,
+    MessageSquare,
+    Settings,
+    Users,
+} from "lucide-react";
 import { parentDashboard } from "@/lib/admin-api";
+import { useCurrentUser } from "@/lib/useCurrentUser";
+import {
+    Badge,
+    Card,
+    CardHeader,
+    CardSection,
+    EmptyState,
+    PageHeader,
+    Skeleton,
+    StatTile,
+} from "@/components/ui";
+
+type Dash = { linkedChildren: number; unreadNotifications: number };
 
 export default function ParentDashboardPage() {
-  const [dash, setDash] = useState<{ linkedChildren: number; unreadNotifications: number } | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+    const user = useCurrentUser("parent");
+    const [dash, setDash] = useState<Dash | null>(null);
+    const [err, setErr] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let c = false;
-    parentDashboard()
-      .then((d) => {
-        if (!c) setDash(d);
-      })
-      .catch((e) => {
-        if (!c) setErr(e instanceof Error ? e.message : "Could not load summary");
-      });
-    return () => {
-      c = true;
-    };
-  }, []);
+    useEffect(() => {
+        let cancelled = false;
+        parentDashboard()
+            .then(d => {
+                if (!cancelled) setDash(d);
+            })
+            .catch(e => {
+                if (!cancelled) setErr(e instanceof Error ? e.message : "Could not load summary");
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
-  return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: "2rem 1.5rem" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--gray-900)", marginBottom: "0.5rem" }}>Welcome</h1>
-      <p style={{ color: "var(--gray-600)", marginBottom: "1.25rem", lineHeight: 1.6 }}>
-        Linked children and notifications are loaded from your TriLink account.
-      </p>
+    const greeting = user.firstName ? `Welcome, ${user.firstName}` : "Welcome";
+    const subtitle = user.childName
+        ? `Quick overview for ${user.childName}.`
+        : "Quick overview of your child's school activity.";
 
-      {err && (
-        <div style={{ padding: "0.75rem 1rem", borderRadius: 10, background: "var(--danger-light)", color: "#991b1b", marginBottom: "1rem" }}>
-          {err}
+    return (
+        <div className="ui-page">
+            <PageHeader
+                title={greeting}
+                description={subtitle}
+                icon={<Home size={22} />}
+                action={
+                    <Link href="/parent/chat" className="btn btn-primary">
+                        <MessageSquare size={16} /> Open chat
+                    </Link>
+                }
+            />
+
+            {err ? (
+                <Card padded>
+                    <div role="alert" className="ui-badge ui-badge-danger" style={{ marginBottom: "0.5rem" }}>
+                        Error
+                    </div>
+                    <p style={{ margin: 0, color: "var(--gray-700)" }}>{err}</p>
+                </Card>
+            ) : null}
+
+            <div className="ui-grid ui-grid-3" style={{ marginTop: "1rem" }}>
+                {loading ? (
+                    <>
+                        <Skeleton height={92} radius={14} />
+                        <Skeleton height={92} radius={14} />
+                        <Skeleton height={92} radius={14} />
+                    </>
+                ) : (
+                    <>
+                        <StatTile
+                            label="Linked children"
+                            value={dash?.linkedChildren ?? 0}
+                            icon={<Users size={16} />}
+                            tone="primary"
+                        />
+                        <StatTile
+                            label="Unread notifications"
+                            value={dash?.unreadNotifications ?? 0}
+                            icon={<Bell size={16} />}
+                            tone={(dash?.unreadNotifications ?? 0) > 0 ? "warning" : "info"}
+                        />
+                        <StatTile
+                            label="Upcoming events"
+                            value="—"
+                            icon={<CalendarDays size={16} />}
+                            tone="purple"
+                        />
+                    </>
+                )}
+            </div>
+
+            <div style={{ marginTop: "1.25rem" }}>
+                <Card>
+                    <CardHeader
+                        title="Quick actions"
+                        subtitle="Jump straight into the things you do most often."
+                    />
+                    <CardSection>
+                        <div className="ui-grid ui-grid-3">
+                            <QuickLink
+                                href="/parent/chat"
+                                icon={<MessageSquare size={18} />}
+                                label="Messages"
+                                hint="Talk to teachers"
+                            />
+                            <QuickLink
+                                href="/parent/grades"
+                                icon={<Users size={18} />}
+                                label="Grades"
+                                hint="Latest marks"
+                            />
+                            <QuickLink
+                                href="/parent/settings"
+                                icon={<Settings size={18} />}
+                                label="Account"
+                                hint="Profile & preferences"
+                            />
+                        </div>
+                    </CardSection>
+                </Card>
+            </div>
+
+            {!loading && !err && (dash?.linkedChildren ?? 0) === 0 ? (
+                <div style={{ marginTop: "1.25rem" }}>
+                    <Card padded>
+                        <EmptyState
+                            icon={<Users size={28} />}
+                            title="No linked children yet"
+                            description="Once the school links a student to your account, you'll see grades, attendance, and announcements here."
+                            action={<Badge tone="info" dot>Pending school setup</Badge>}
+                        />
+                    </Card>
+                </div>
+            ) : null}
         </div>
-      )}
+    );
+}
 
-      <div
-        style={{
-          display: "grid",
-          gap: "0.75rem",
-          gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <div style={{ padding: "1rem", borderRadius: 12, background: "#fff", border: "1px solid var(--gray-200)" }}>
-          <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", fontWeight: 600 }}>Linked children</div>
-          <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--gray-900)" }}>{dash ? dash.linkedChildren : "—"}</div>
-        </div>
-        <div style={{ padding: "1rem", borderRadius: 12, background: "#fff", border: "1px solid var(--gray-200)" }}>
-          <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", fontWeight: 600 }}>Unread notifications</div>
-          <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--gray-900)" }}>{dash ? dash.unreadNotifications : "—"}</div>
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gap: "0.75rem",
-          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-        }}
-      >
+function QuickLink({ href, icon, label, hint }: { href: string; icon: React.ReactNode; label: string; hint: string }) {
+    return (
         <Link
-          href="/parent/children"
-          style={{
-            padding: "1rem 1.25rem",
-            borderRadius: 12,
-            background: "#7c3aed",
-            border: "1px solid #7c3aed",
-            textDecoration: "none",
-            color: "#fff",
-            fontWeight: 700,
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-          }}
+            href={href}
+            className="ui-card ui-card-padded ui-card-interactive"
+            style={{ textDecoration: "none", color: "inherit", display: "flex", alignItems: "center", gap: "0.75rem" }}
         >
-          👨‍👩‍👧 View Children&apos;s Exams &amp; Assignments
+            <span
+                aria-hidden
+                style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: "var(--role-accent-50)",
+                    color: "var(--role-accent-600)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                }}
+            >
+                {icon}
+            </span>
+            <span>
+                <span style={{ display: "block", fontSize: "0.95rem", fontWeight: 600, color: "var(--gray-900)" }}>{label}</span>
+                <span style={{ display: "block", fontSize: "0.8125rem", color: "var(--gray-500)" }}>{hint}</span>
+            </span>
         </Link>
-        <Link
-          href="/parent/chat"
-          style={{
-            padding: "1rem 1.25rem",
-            borderRadius: 12,
-            background: "#fff",
-            border: "1px solid var(--gray-200)",
-            textDecoration: "none",
-            color: "#7c3aed",
-            fontWeight: 700,
-          }}
-        >
-          Messages
-        </Link>
-        <Link
-          href="/parent/settings"
-          style={{
-            padding: "1rem 1.25rem",
-            borderRadius: 12,
-            background: "#fff",
-            border: "1px solid var(--gray-200)",
-            textDecoration: "none",
-            color: "var(--gray-800)",
-            fontWeight: 700,
-          }}
-        >
-          Account settings
-        </Link>
-      </div>
-    </div>
-  );
+    );
 }

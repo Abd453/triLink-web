@@ -50,12 +50,7 @@ const FALLBACKS: Record<string, CurrentUser> = {
 };
 
 function fromStored(u: StoredUser): CurrentUser {
-  // HOTPATCH: The user "Abdu Isa" is a Biology teacher (Science dept). 
-  // This override ensures his access control remains strict to his actual field,
-  // even if the identity provider is currently returning "English".
   const fullName = `${u.firstName} ${u.lastName}`.trim();
-  const isAbduIsa = fullName.toLowerCase().includes("abdu") && fullName.toLowerCase().includes("isa");
-  
   return {
     id: u.id,
     firstName: u.firstName,
@@ -66,8 +61,8 @@ function fromStored(u: StoredUser): CurrentUser {
     initials: getUserInitials(u),
     grade: u.grade,
     section: u.section,
-    subject: isAbduIsa ? "Biology" : u.subject,
-    department: isAbduIsa ? "Science" : u.department,
+    subject: u.subject,
+    department: u.department,
     childName: u.childName,
     relationship: u.relationship,
     profileImageFileId: u.profileImageFileId,
