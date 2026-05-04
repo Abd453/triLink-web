@@ -30,13 +30,25 @@ export function setTokens(accessToken: string, refreshToken?: string) {
   if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
 }
 
+/** localStorage keys used by zustand persist middleware. Cleared on logout
+ *  so a new login can't see the previous user's notifications, exams, etc. */
+const PERSISTED_STORE_KEYS = [
+  "trilink-academic-year-v1",
+  "trilink-notif-v1",
+  "trilink-calendar-v1",
+  "trilink-exam-v1",
+  "announcement-store",
+];
+
 export function clearAuth() {
+  if (typeof window === "undefined") return;
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(USER_KEY);
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("trilink-auth"));
+  for (const key of PERSISTED_STORE_KEYS) {
+    localStorage.removeItem(key);
   }
+  window.dispatchEvent(new Event("trilink-auth"));
 }
 
 // ─── User profile helpers ─────────────────────────────────────────────────────
@@ -169,6 +181,9 @@ async function refreshAccessToken(): Promise<string | null> {
       clearAuth();
       return null;
     } catch {
+      // Network failure (offline, DNS, CORS). The caller will see a null token
+      // and either redirect to login or surface the original 401 — the user
+      // gets a clear "session expired" path either way.
       return null;
     } finally {
       refreshPromise = null;
@@ -190,23 +205,28 @@ export async function authFetch(
 
   let response = await fetch(input, { ...init, headers });
 
-  // If 401, try to refresh and retry once
+  // 401 → refresh access token and retry once
   if (response.status === 401) {
     const newToken = await refreshAccessToken();
     if (newToken) {
       headers.set("Authorization", `Bearer ${newToken}`);
       response = await fetch(input, { ...init, headers });
-    } else {
-      // Refresh failed — redirect to appropriate login page
-      if (typeof window !== "undefined") {
-        const path = window.location.pathname;
-        const role = path.split("/").filter(Boolean)[0] ?? "admin";
-        const loginPath = `/${role}/login`;
-        if (!window.location.pathname.includes("/login")) {
-          window.location.href = loginPath;
-        }
+    } else if (typeof window !== "undefined") {
+      const path = window.location.pathname;
+      const role = path.split("/").filter(Boolean)[0] ?? "admin";
+      if (!path.includes("/login")) {
+        window.location.href = `/${role}/login`;
       }
     }
+  }
+
+  // 5xx → idempotent methods get a single retry after a short backoff.
+  // Mutations are skipped to avoid double-applying side effects.
+  const method = (init.method ?? "GET").toUpperCase();
+  const isIdempotent = method === "GET" || method === "HEAD" || method === "OPTIONS";
+  if (isIdempotent && response.status >= 500 && response.status < 600) {
+    await new Promise(r => setTimeout(r, 350));
+    response = await fetch(input, { ...init, headers });
   }
 
   return response;
