@@ -12,9 +12,11 @@ import {
 } from "lucide-react";
 import { apiPath, getApiBase } from "@/lib/api";
 import { authFetch, getAccessToken } from "@/lib/auth";
-import { listUsers, type PublicUser } from "@/lib/admin-api";
+import { getSectionsForGrade, listGrades, listUsers, type Grade, type PublicUser, type Section } from "@/lib/admin-api";
 import Select from "@/components/Select";
 import { useToastStore } from "@/store/toastStore";
+import { PageHeader } from "@/components/ui";
+import { UserPlus, ShieldCheck as ShieldCheckIcon } from "lucide-react";
 
 type RegistrationType = "student" | "teacher" | "parent";
 
@@ -88,6 +90,10 @@ export default function AdminRegistration() {
     const [emailStatus, setEmailStatus] = useState<"idle" | "sent" | "failed" | "skipped">("idle");
     const [studentOptions, setStudentOptions] = useState<PublicUser[]>([]);
     const [loadingStudents, setLoadingStudents] = useState(false);
+    const [gradeOptions, setGradeOptions] = useState<Grade[]>([]);
+    const [sectionOptions, setSectionOptions] = useState<Section[]>([]);
+    const [loadingCatalog, setLoadingCatalog] = useState(false);
+    const [selectedGradeId, setSelectedGradeId] = useState("");
 
     const [formData, setFormData] = useState({
         firstName: "",
@@ -102,6 +108,49 @@ export default function AdminRegistration() {
         linkedStudentId: "",
         relationship: "Father",
     });
+
+    useEffect(() => {
+        let cancelled = false;
+        setLoadingCatalog(true);
+
+        (async () => {
+            try {
+                const grades = await listGrades();
+                if (cancelled) return;
+
+                setGradeOptions(grades);
+
+                const initialGrade = grades[0];
+                if (!initialGrade) {
+                    setSelectedGradeId("");
+                    setSectionOptions([]);
+                    return;
+                }
+
+                setSelectedGradeId(initialGrade.id);
+                setFormData((fd) => ({ ...fd, grade: initialGrade.name }));
+
+                const sections = await getSectionsForGrade(initialGrade.id);
+                if (cancelled) return;
+
+                setSectionOptions(sections);
+                const initialSection = sections[0];
+                setFormData((fd) => ({ ...fd, section: initialSection?.name ?? "" }));
+            } catch {
+                if (!cancelled) {
+                    setGradeOptions([]);
+                    setSectionOptions([]);
+                    setSelectedGradeId("");
+                }
+            } finally {
+                if (!cancelled) setLoadingCatalog(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         if (regType !== "parent") return;
@@ -127,6 +176,35 @@ export default function AdminRegistration() {
             c = true;
         };
     }, [regType]);
+
+    const handleGradeChange = async (gradeId: string) => {
+        setSelectedGradeId(gradeId);
+        const grade = gradeOptions.find((g) => g.id === gradeId);
+        setFormData((prev) => ({ ...prev, grade: grade?.name ?? "", section: "" }));
+
+        if (!gradeId) {
+            setSectionOptions([]);
+            return;
+        }
+
+        try {
+            const sections = await getSectionsForGrade(gradeId);
+            setSectionOptions(sections);
+            const firstSection = sections[0];
+            setFormData((prev) => ({
+                ...prev,
+                section: firstSection?.name ?? "",
+            }));
+        } catch {
+            setSectionOptions([]);
+            setFormData((prev) => ({ ...prev, section: "" }));
+        }
+    };
+
+    const handleSectionChange = (sectionId: string) => {
+        const section = sectionOptions.find((s) => s.id === sectionId);
+        setFormData((prev) => ({ ...prev, section: section?.name ?? "" }));
+    };
 
     const validateEmail = (email: string): boolean =>
         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -276,20 +354,17 @@ export default function AdminRegistration() {
 
     return (
         <div className="page-wrapper">
-            <div className="registration-hero">
-                <div>
-                    <p className="registration-kicker">
-                        <Sparkles size={14} />
-                        Onboarding Studio
-                    </p>
-                    <h1 className="registration-title">Registration</h1>
-                    <p className="registration-subtitle">Register students, teachers, and parents with role-specific data</p>
-                </div>
-                <div className="admin-dash-pill">
-                    <ShieldCheck size={15} />
-                    Admin-only flow
-                </div>
-            </div>
+            <PageHeader
+                kicker="Onboarding Studio"
+                title="Registration"
+                subtitle="Register students, teachers, and parents with role-specific data."
+                icon={<UserPlus size={22} />}
+                actions={(
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0.4rem 0.85rem", borderRadius: 999, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)", fontSize: "0.78rem", fontWeight: 700, color: "#fff" }}>
+                        <ShieldCheckIcon size={13} /> Admin-only flow
+                    </span>
+                )}
+            />
 
             {/* Role tabs */}
             <div className="registration-role-tabs">
@@ -546,9 +621,9 @@ export default function AdminRegistration() {
                                     <label htmlFor="grade">Grade <span style={{ color: "var(--red-500)" }}>*</span></label>
                                     <Select
                                         id="grade"
-                                        value={formData.grade}
-                                        onChange={(e) => handleInputChange("grade", e.target.value)}
-                                        disabled={loading}
+                                        value={selectedGradeId}
+                                        onChange={(e) => void handleGradeChange(e.target.value)}
+                                        disabled={loading || loadingCatalog || gradeOptions.length === 0}
                                         style={{
                                             padding: "0.75rem",
                                             background: "var(--primary-50)",
@@ -558,10 +633,17 @@ export default function AdminRegistration() {
                                             fontFamily: "inherit",
                                         }}
                                     >
-                                        <option>Grade 9</option>
-                                        <option>Grade 10</option>
-                                        <option>Grade 11</option>
-                                        <option>Grade 12</option>
+                                        {loadingCatalog ? (
+                                            <option value="">Loading grades…</option>
+                                        ) : gradeOptions.length === 0 ? (
+                                            <option value="">No grades available</option>
+                                        ) : (
+                                            gradeOptions.map((grade) => (
+                                                <option key={grade.id} value={grade.id}>
+                                                    {grade.name}
+                                                </option>
+                                            ))
+                                        )}
                                     </Select>
                                     {errors.grade && <p style={{ color: "var(--red-500)", fontSize: "0.875rem", marginTop: "0.25rem" }}>{errors.grade}</p>}
                                 </div>
@@ -570,9 +652,9 @@ export default function AdminRegistration() {
                                     <label htmlFor="section">Section <span style={{ color: "var(--red-500)" }}>*</span></label>
                                     <Select
                                         id="section"
-                                        value={formData.section}
-                                        onChange={(e) => handleInputChange("section", e.target.value)}
-                                        disabled={loading}
+                                        value={sectionOptions.find((s) => s.name === formData.section)?.id ?? ""}
+                                        onChange={(e) => handleSectionChange(e.target.value)}
+                                        disabled={loading || loadingCatalog || sectionOptions.length === 0}
                                         style={{
                                             padding: "0.75rem",
                                             background: "var(--primary-50)",
@@ -582,9 +664,17 @@ export default function AdminRegistration() {
                                             fontFamily: "inherit",
                                         }}
                                     >
-                                        <option>A</option>
-                                        <option>B</option>
-                                        <option>C</option>
+                                        {loadingCatalog ? (
+                                            <option value="">Loading sections…</option>
+                                        ) : sectionOptions.length === 0 ? (
+                                            <option value="">No sections available</option>
+                                        ) : (
+                                            sectionOptions.map((section) => (
+                                                <option key={section.id} value={section.id}>
+                                                    {section.name}
+                                                </option>
+                                            ))
+                                        )}
                                     </Select>
                                     {errors.section && <p style={{ color: "var(--red-500)", fontSize: "0.875rem", marginTop: "0.25rem" }}>{errors.section}</p>}
                                 </div>
