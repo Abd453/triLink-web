@@ -1016,14 +1016,15 @@ export default function TeacherExams() {
         if (item.rawType === "truefalse") qType = "truefalse";
         else if (item.rawType === "fillin") qType = "fillin";
 
-        const newQ: Question = { 
-            ...blankQ(), 
+        const c = item.correct;
+        const newQ: Question = {
+            ...blankQ(),
             bankId: item.id,
             edited: false,
             text: item.q,
             type: qType,
             options: item.options ? { ...item.options } : { A: "", B: "", C: "", D: "" },
-            correct: (item.correct as "" | "A" | "B" | "C" | "D") || ""
+            correct: (c === "A" || c === "B" || c === "C" || c === "D") ? c : "",
         };
         setQuestions(p => { const next = [...p, newQ]; setActiveQ(next.length - 1); return next; });
         setBank(p => p.map(b => b.id === item.id ? { ...b, used: b.used + 1 } : b));
@@ -1325,8 +1326,8 @@ export default function TeacherExams() {
                 const { getAttemptForGrader } = await import("@/lib/admin-api");
                 const details = await getAttemptForGrader(res._attemptId);
                 setEvalAttemptDetails(details);
-            } catch (err) {
-                console.error("Failed to load attempt details:", err);
+            } catch {
+                /* eval modal will fall back to summary data */
             } finally {
                 setEvalLoading(false);
             }
@@ -1943,7 +1944,9 @@ export default function TeacherExams() {
 
                                 {q.type === "fillin" && (
                                     <div className="input-field">
-                                        <input value={q.correct} onChange={e => updateQ({ correct: e.target.value as any })} placeholder="Correct word(s)" style={{ background: "#fff" }} />
+                                        {/* fill-in re-uses the `correct` field as free-form text; the union type
+                                            stays narrow for MCQ where it represents A/B/C/D. */}
+                                        <input value={q.correct} onChange={e => updateQ({ correct: e.target.value as Question["correct"] })} placeholder="Correct word(s)" style={{ background: "#fff" }} />
                                     </div>
                                 )}
 
