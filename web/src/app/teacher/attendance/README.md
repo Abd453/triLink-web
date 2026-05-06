@@ -9,6 +9,7 @@ Daily attendance marking per class with present, absent, and excused states.
 | Class selection | API-backed teacher class offerings |
 | Student list | API-backed active enrollments per class |
 | Daily submission | Creates attendance session and bulk-upserts marks |
+| Submitted-session edits | Existing daily sessions can be updated with corrected marks |
 | Excuse notes | Sent to backend with excused marks |
 | History | API-backed session/mark history per student |
 
@@ -17,5 +18,4 @@ Daily attendance marking per class with present, absent, and excused states.
 | Item | Status |
 |---|---|
 | Historical date picker | Deferred |
-| Edit/unlock submitted attendance | Deferred; current sessions lock after submission |
-| Admin override workflow | Deferred |
+| Admin override audit trail | Deferred |
