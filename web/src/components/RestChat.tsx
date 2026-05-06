@@ -189,17 +189,24 @@ export default function RestChat() {
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
   return (
-    <div style={{ display: "flex", height: "calc(100vh - 64px)", background: "#f0f2f5", overflow: "hidden", fontFamily: "inherit" }}>
+    <div className="tg-shell" style={{ display: "flex", height: "calc(100vh - 112px)", overflow: "hidden", fontFamily: "inherit" }}>
       <style>{`
-        .tg-sidebar { width: 320px; min-width: 280px; max-width: 360px; background: #fff; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; flex-shrink: 0; }
-        .tg-conv-item { display: flex; align-items: center; gap: 12px; padding: 10px 16px; cursor: pointer; transition: background 0.12s; border-radius: 0; }
-        .tg-conv-item:hover { background: #f3f4f6; }
-        .tg-conv-item.active { background: #eff6ff; }
-        .tg-msg-bubble { max-width: 72%; padding: 8px 12px; border-radius: 18px; font-size: 0.9rem; line-height: 1.45; word-break: break-word; }
-        .tg-msg-mine { background: #2563eb; color: #fff; border-bottom-right-radius: 4px; margin-left: auto; }
-        .tg-msg-other { background: #fff; color: #111; border-bottom-left-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
-        .tg-input { resize: none; border: none; outline: none; background: transparent; font-family: inherit; font-size: 0.92rem; width: 100%; max-height: 120px; overflow-y: auto; line-height: 1.5; }
+        .tg-shell { margin: 1.5rem; border: 1px solid var(--line-soft); border-radius: 30px; background: rgba(255,255,255,0.9); box-shadow: var(--shadow-premium), var(--shadow-inner-line); backdrop-filter: blur(18px); }
+        .tg-sidebar { width: 350px; min-width: 310px; max-width: 390px; background: rgba(255,255,255,0.94); border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; flex-shrink: 0; }
+        .tg-sidebar > div:first-child { padding: 1rem !important; border-bottom: 1px solid var(--line-faint) !important; background: linear-gradient(180deg, var(--role-accent-50, #eef2ff), #fff); }
+        .tg-sidebar input { color: var(--text-strong) !important; font-weight: 650; }
+        .tg-sidebar button[title="New chat"] { border-radius: 15px !important; background: linear-gradient(135deg, var(--role-accent-500, #6366f1), var(--role-accent-700, #4338ca)) !important; box-shadow: 0 14px 30px color-mix(in srgb, var(--role-accent-600, #4f46e5) 24%, transparent); }
+        .tg-conv-item { display: flex; align-items: center; gap: 12px; margin: 0.35rem 0.75rem; padding: 0.72rem 0.75rem; cursor: pointer; transition: background 0.16s, transform 0.16s, box-shadow 0.16s; border-radius: 18px; }
+        .tg-conv-item:hover { background: #f8fafc; transform: translateY(-1px); }
+        .tg-conv-item.active { background: var(--role-accent-50, #eef2ff); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--role-accent-500, #6366f1) 18%, transparent); }
+        .tg-main { background: linear-gradient(180deg, #fbfdff 0%, #f4f7fe 100%) !important; }
+        .tg-main > div:first-child:not(:only-child) { border-bottom: 1px solid var(--line-soft) !important; background: rgba(255,255,255,0.9) !important; padding: 0.95rem 1.1rem !important; }
+        .tg-msg-bubble { max-width: 72%; padding: 0.72rem 0.9rem; border-radius: 19px; font-size: 0.92rem; line-height: 1.5; word-break: break-word; font-weight: 560; }
+        .tg-msg-mine { background: linear-gradient(135deg, var(--role-accent-500, #6366f1), var(--role-accent-700, #4338ca)); color: #fff; border-bottom-right-radius: 6px; margin-left: auto; box-shadow: 0 12px 28px color-mix(in srgb, var(--role-accent-600, #4f46e5) 18%, transparent); }
+        .tg-msg-other { background: #fff; color: var(--text-strong); border: 1px solid var(--line-faint); border-bottom-left-radius: 6px; box-shadow: 0 12px 28px rgba(15,23,42,0.055); }
+        .tg-input { resize: none; border: none; outline: none; background: transparent; font-family: inherit; font-size: 0.92rem; width: 100%; max-height: 120px; overflow-y: auto; line-height: 1.5; color: var(--text-strong); font-weight: 650; }
         @media (max-width: 767px) {
+          .tg-shell { height: calc(100vh - 76px) !important; margin: 0; border-radius: 0; border-left: 0; border-right: 0; }
           .tg-sidebar { position: absolute; left: 0; top: 0; bottom: 0; z-index: 10; transform: translateX(-100%); transition: transform 0.25s; width: 100% !important; max-width: 100% !important; }
           .tg-sidebar.open { transform: translateX(0); }
           .tg-main { width: 100% !important; }
@@ -283,7 +290,7 @@ export default function RestChat() {
       </div>
 
       {/* ── Main chat area ── */}
-      <div className="tg-main" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, background: "#f0f2f5" }}>
+      <div className="tg-main" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {!activeConv ? (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#9ca3af", gap: "1rem" }}>
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>

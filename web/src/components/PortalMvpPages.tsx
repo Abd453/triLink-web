@@ -94,7 +94,7 @@ function fullName(first?: string | null, last?: string | null) {
 
 function ErrorCard({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <Card padded>
+    <Card padded className="portal-error-card">
       <Badge tone="danger">Error</Badge>
       <p style={{ margin: "0.75rem 0 0", color: "var(--gray-700)" }}>{message}</p>
       {onRetry ? <Button variant="outline" size="sm" onClick={onRetry} leftIcon={<RefreshCw size={14} />} style={{ marginTop: "0.75rem" }}>Retry</Button> : null}
@@ -104,7 +104,7 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry?: () => void
 
 function LoadingGrid({ count = 4 }: { count?: number }) {
   return (
-    <div className="ui-grid ui-grid-2">
+    <div className="ui-grid ui-grid-2 portal-loading-grid">
       {Array.from({ length: count }).map((_, i) => <Skeleton key={i} height={136} radius={12} />)}
     </div>
   );
@@ -112,15 +112,15 @@ function LoadingGrid({ count = 4 }: { count?: number }) {
 
 function DataCard({ title, meta, body, href, action }: { title: string; meta?: string; body?: string | null; href?: string; action?: React.ReactNode }) {
   const content = (
-    <Card padded interactive={Boolean(href)} style={{ height: "100%" }}>
+    <Card padded interactive={Boolean(href)} className="portal-data-card" style={{ height: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "flex-start" }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: "1rem", color: "var(--gray-900)" }}>{title}</h3>
-          {meta ? <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--gray-500)" }}>{meta}</p> : null}
+          <h3 className="portal-data-title" style={{ margin: 0 }}>{title}</h3>
+          {meta ? <p className="portal-data-meta" style={{ margin: "0.25rem 0 0" }}>{meta}</p> : null}
         </div>
-        {action}
+        {action ? <div className="portal-data-action">{action}</div> : null}
       </div>
-      {body ? <p style={{ margin: "0.75rem 0 0", color: "var(--gray-700)", fontSize: "0.9rem", lineHeight: 1.5 }}>{body}</p> : null}
+      {body ? <p className="portal-data-body" style={{ margin: "0.75rem 0 0" }}>{body}</p> : null}
     </Card>
   );
   return href ? <a href={href} target="_blank" rel="noreferrer" style={{ textDecoration: "none", color: "inherit" }}>{content}</a> : content;
