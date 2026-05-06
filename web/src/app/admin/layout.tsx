@@ -1,6 +1,6 @@
 "use client";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
@@ -27,9 +27,9 @@ const adminNavItems = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
-    const [isClient, setIsClient] = (require("react").useState)(false);
+    const [isClient, setIsClient] = useState(false);
     
-    (require("react").useEffect)(() => {
+    useEffect(() => {
         setIsClient(true);
     }, []);
 
@@ -39,7 +39,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const stored = getStoredUser();
     const isAuthorized = isLoginRoute || (!!token && !!stored && stored.role === "admin");
 
-    (require("react").useEffect)(() => {
+    useEffect(() => {
         if (isClient && !isLoginRoute && !isAuthorized) {
             clearAuth();
             router.replace("/admin/login");

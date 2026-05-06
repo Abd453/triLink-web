@@ -22,6 +22,50 @@ interface HeaderProps {
     userId?: string;
 }
 
+const ROLE_ROUTES: Record<string, Array<{ href: string; keywords: string[] }>> = {
+    teacher: [
+        { href: "/teacher/dashboard", keywords: ["dashboard", "home", "overview"] },
+        { href: "/teacher/attendance", keywords: ["attendance", "present", "absent"] },
+        { href: "/teacher/announcements", keywords: ["announcement", "announcements", "notice"] },
+        { href: "/teacher/exams", keywords: ["exam", "exams", "quiz", "bank", "grade"] },
+        { href: "/teacher/students", keywords: ["student", "students", "learner"] },
+        { href: "/teacher/notifications", keywords: ["notification", "notifications", "alerts"] },
+        { href: "/teacher/chat", keywords: ["chat", "message", "messages", "conversation"] },
+        { href: "/teacher/calendar", keywords: ["calendar", "event", "events", "schedule"] },
+        { href: "/teacher/settings", keywords: ["setting", "settings", "security", "password", "2fa"] },
+        { href: "/teacher/profile", keywords: ["profile", "account"] },
+    ],
+    admin: [
+        { href: "/admin/dashboard", keywords: ["dashboard", "home", "overview"] },
+        { href: "/admin/school-setup", keywords: ["school", "setup", "configuration", "config"] },
+        { href: "/admin/students", keywords: ["student", "students"] },
+        { href: "/admin/teachers", keywords: ["teacher", "teachers", "staff"] },
+        { href: "/admin/parents", keywords: ["parent", "parents", "guardian"] },
+        { href: "/admin/attendance", keywords: ["attendance", "present", "absent"] },
+        { href: "/admin/announcements", keywords: ["announcement", "announcements", "notice"] },
+        { href: "/admin/classes", keywords: ["class", "classes"] },
+        { href: "/admin/registration", keywords: ["registration", "register", "enroll"] },
+        { href: "/admin/chat", keywords: ["chat", "message", "messages", "conversation"] },
+        { href: "/admin/feedback", keywords: ["feedback", "review"] },
+        { href: "/admin/audit", keywords: ["audit", "log", "activity", "history"] },
+        { href: "/admin/settings", keywords: ["setting", "settings", "security"] },
+        { href: "/admin/profile", keywords: ["profile", "account"] },
+    ],
+    student: [
+        { href: "/student/dashboard", keywords: ["dashboard", "home", "overview"] },
+        { href: "/student/chat", keywords: ["chat", "message", "messages"] },
+        { href: "/student/profile", keywords: ["profile", "account"] },
+        { href: "/student/settings", keywords: ["settings", "security"] },
+        { href: "/student/login", keywords: ["login", "sign in"] },
+    ],
+    parent: [
+        { href: "/parent/dashboard", keywords: ["dashboard", "home", "overview"] },
+        { href: "/parent/chat", keywords: ["chat", "message", "messages"] },
+        { href: "/parent/profile", keywords: ["profile", "account"] },
+        { href: "/parent/settings", keywords: ["settings", "security"] },
+    ],
+};
+
 export default function Header({ userName, userRole, userInitials, userProfileHref, userProfileImageFileId, userId }: HeaderProps) {
     const router = useRouter();
     const pathname = usePathname();
@@ -112,7 +156,7 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
             setSuggestions([]);
             return;
         }
-        const rts = roleRoutes[role] || [];
+        const rts = ROLE_ROUTES[role] || [];
         const filtered = rts.filter(r => 
             r.href.toLowerCase().includes(q) || 
             r.keywords.some(k => k.toLowerCase().includes(q)) ||
@@ -135,50 +179,6 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
     const notificationsHref = quickActionRoutes[role]?.notifications;
     const messagesHref = quickActionRoutes[role]?.messages;
 
-    const roleRoutes: Record<string, Array<{ href: string; keywords: string[] }>> = {
-        teacher: [
-            { href: "/teacher/dashboard", keywords: ["dashboard", "home", "overview"] },
-            { href: "/teacher/attendance", keywords: ["attendance", "present", "absent"] },
-            { href: "/teacher/announcements", keywords: ["announcement", "announcements", "notice"] },
-            { href: "/teacher/exams", keywords: ["exam", "exams", "quiz", "bank", "grade"] },
-            { href: "/teacher/students", keywords: ["student", "students", "learner"] },
-            { href: "/teacher/notifications", keywords: ["notification", "notifications", "alerts"] },
-            { href: "/teacher/chat", keywords: ["chat", "message", "messages", "conversation"] },
-            { href: "/teacher/calendar", keywords: ["calendar", "event", "events", "schedule"] },
-            { href: "/teacher/settings", keywords: ["setting", "settings", "security", "password", "2fa"] },
-            { href: "/teacher/profile", keywords: ["profile", "account"] },
-        ],
-        admin: [
-            { href: "/admin/dashboard", keywords: ["dashboard", "home", "overview"] },
-            { href: "/admin/school-setup", keywords: ["school", "setup", "configuration", "config"] },
-            { href: "/admin/students", keywords: ["student", "students"] },
-            { href: "/admin/teachers", keywords: ["teacher", "teachers", "staff"] },
-            { href: "/admin/parents", keywords: ["parent", "parents", "guardian"] },
-            { href: "/admin/attendance", keywords: ["attendance", "present", "absent"] },
-            { href: "/admin/announcements", keywords: ["announcement", "announcements", "notice"] },
-            { href: "/admin/classes", keywords: ["class", "classes"] },
-            { href: "/admin/registration", keywords: ["registration", "register", "enroll"] },
-            { href: "/admin/chat", keywords: ["chat", "message", "messages", "conversation"] },
-            { href: "/admin/feedback", keywords: ["feedback", "review"] },
-            { href: "/admin/audit", keywords: ["audit", "log", "activity", "history"] },
-            { href: "/admin/settings", keywords: ["setting", "settings", "security"] },
-            { href: "/admin/profile", keywords: ["profile", "account"] },
-        ],
-        student: [
-            { href: "/student/dashboard", keywords: ["dashboard", "home", "overview"] },
-            { href: "/student/chat", keywords: ["chat", "message", "messages"] },
-            { href: "/student/profile", keywords: ["profile", "account"] },
-            { href: "/student/settings", keywords: ["settings", "security"] },
-            { href: "/student/login", keywords: ["login", "sign in"] },
-        ],
-        parent: [
-            { href: "/parent/dashboard", keywords: ["dashboard", "home", "overview"] },
-            { href: "/parent/chat", keywords: ["chat", "message", "messages"] },
-            { href: "/parent/profile", keywords: ["profile", "account"] },
-            { href: "/parent/settings", keywords: ["settings", "security"] },
-        ],
-    };
-
     function getSearchTarget(query: string) {
         const q = query.trim().toLowerCase().replace(/\s+/g, " ");
         if (!q) return null;
@@ -188,7 +188,7 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
             return q;
         }
 
-        const routes = roleRoutes[role] ?? [];
+        const routes = ROLE_ROUTES[role] ?? [];
 
         // First pass: exact/contains match against route path.
         const byPath = routes.find((item) => item.href.toLowerCase().includes(q.replace(/\s+/g, "-")));

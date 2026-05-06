@@ -793,7 +793,7 @@ export async function getAttemptForGrader(attemptId: string): Promise<unknown> {
 // ── Violation API ─────────────────────────────────────────────────────────────────
 
 export async function recordViolation(attemptId: string, reason: string): Promise<{ locked: boolean }> {
-  return adminJson<{locked: boolean}>(`/api/exams/attempts/${attemptId}/violations`, {
+  return adminJson<{locked: boolean}>(`/api/attempts/${attemptId}/violations`, {
     method: "POST",
     body: JSON.stringify({ reason }),
   });
@@ -801,7 +801,7 @@ export async function recordViolation(attemptId: string, reason: string): Promis
 
 /** Called by teacher when monitoring active exams or from grading modal */
 export async function getViolations(attemptId: string): Promise<Violation[]> {
-  return adminJson<Violation[]>(`/api/exams/attempts/${attemptId}/violations`, { method: "GET" });
+  return adminJson<Violation[]>(`/api/attempts/${attemptId}/violations`, { method: "GET" });
 }
 
 export async function controlExamAttempt(
@@ -809,7 +809,7 @@ export async function controlExamAttempt(
   action: "force_submit" | "warn" | "allow_rejoin",
   message?: string,
 ): Promise<{ success: boolean }> {
-  return adminJson<{ success: boolean }>(`/api/exams/attempts/${attemptId}/control`, {
+  return adminJson<{ success: boolean }>(`/api/attempts/${attemptId}/control`, {
     method: "POST",
     body: JSON.stringify({ action, message }),
   });
