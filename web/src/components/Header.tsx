@@ -3,15 +3,15 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAcademicYearStore } from "@/store/academicYearStore";
-import { clearAuth, authFetch } from "@/lib/auth";
-import { X } from "lucide-react";
+import { clearAuth } from "@/lib/auth";
+import { ArrowRight, Search } from "lucide-react";
 import { getActiveAcademicYear, listAcademicYears } from "@/lib/admin-api";
-import { getFileUrl, getApiBase } from "@/lib/api";
 import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
 import { useToastStore } from "@/store/toastStore";
 import RealtimeToast from "@/components/RealtimeToast";
 import Select from "@/components/Select";
 import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
+import { navSearchIndex, type NavRole } from "@/lib/role-nav";
 
 interface HeaderProps {
     userName: string;
@@ -73,6 +73,7 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [suggestions, setSuggestions] = useState<{ href: string; label: string }[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const [searchMessage, setSearchMessage] = useState("");
     const searchRef = useRef<HTMLDivElement>(null);
     const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -85,13 +86,13 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
                 setShowUserMenu(false);
             }
         }
-        if (showUserMenu) {
+        if (showUserMenu || showSuggestions) {
             document.addEventListener("mousedown", handleClickOutside);
         }
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
-    }, [showUserMenu]);
+    }, [showUserMenu, showSuggestions]);
     
     // Academic year: admin dropdown is loaded from API (not the static list in the store).
     const { currentSystemYear, adminSelectedYear, setAdminSelectedYear } = useAcademicYearStore();
@@ -154,9 +155,10 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
         const q = searchText.trim().toLowerCase();
         if (q.length < 2) {
             setSuggestions([]);
+            setSearchMessage("");
             return;
         }
-        const rts = ROLE_ROUTES[role] || [];
+        const rts = navSearchIndex[role as NavRole] || ROLE_ROUTES[role] || [];
         const filtered = rts.filter(r => 
             r.href.toLowerCase().includes(q) || 
             r.keywords.some(k => k.toLowerCase().includes(q)) ||
@@ -166,6 +168,7 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
             label: r.href.split("/").pop()?.replace(/-/g, " ").replace(/^\w/, c => c.toUpperCase()) || "Page"
         }));
         setSuggestions(filtered.slice(0, 5));
+        setSearchMessage(filtered.length === 0 ? "No matching page. Try students, exams, grades, chat, or settings." : "");
         setShowSuggestions(true);
     }, [searchText, role]);
 
@@ -188,7 +191,7 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
             return q;
         }
 
-        const routes = ROLE_ROUTES[role] ?? [];
+        const routes = navSearchIndex[role as NavRole] ?? ROLE_ROUTES[role] ?? [];
 
         // First pass: exact/contains match against route path.
         const byPath = routes.find((item) => item.href.toLowerCase().includes(q.replace(/\s+/g, "-")));
@@ -216,10 +219,14 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
         if (!query) return;
         const target = getSearchTarget(query);
         if (!target) {
-            window.alert("No matching page found for your search.");
+            setSearchMessage("No matching page. Try students, exams, grades, chat, or settings.");
+            setShowSuggestions(true);
             return;
         }
         router.push(target);
+        setSearchText("");
+        setShowSuggestions(false);
+        setSearchMessage("");
     }
 
     function handleLogout() {
@@ -301,25 +308,52 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
 
     return (
         <header className="top-header" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-            <div className="header-search" style={{ flex: "1 1 160px", minWidth: 0 }}>
+            <div className="header-search-wrap" ref={searchRef} style={{ flex: "1 1 260px", minWidth: 0 }}>
+            <div className="header-search">
                 <button type="button" className="header-search-btn" onClick={submitSearch} aria-label="Search">
-                    <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="11" cy="11" r="8" />
-                        <path d="m21 21-4.3-4.3" />
-                    </svg>
+                    <Search className="search-icon" size={16} />
                 </button>
                 <input
                     type="text"
-                    placeholder="Search anything..."
+                    placeholder="Search pages, people, classes..."
                     value={searchText}
                     onChange={(e) => setSearchText(e.target.value)}
+                    onFocus={() => {
+                        if (searchText.trim().length >= 2) setShowSuggestions(true);
+                    }}
                     onKeyDown={(e) => {
                         if (e.key === "Enter") {
                             e.preventDefault();
                             submitSearch();
+                        } else if (e.key === "Escape") {
+                            setShowSuggestions(false);
                         }
                     }}
                 />
+            </div>
+            {showSuggestions && (suggestions.length > 0 || searchMessage) ? (
+                <div className="header-search-panel" role="listbox" aria-label="Search suggestions">
+                    <div className="header-search-panel-title">Quick navigation</div>
+                    {suggestions.map((item) => (
+                        <button
+                            key={item.href}
+                            type="button"
+                            className="header-search-result"
+                            onClick={() => {
+                                router.push(item.href);
+                                setSearchText("");
+                                setShowSuggestions(false);
+                                setSearchMessage("");
+                            }}
+                        >
+                            <span>{item.label}</span>
+                            <small>{item.href}</small>
+                            <ArrowRight size={15} />
+                        </button>
+                    ))}
+                    {searchMessage ? <div className="header-search-empty">{searchMessage}</div> : null}
+                </div>
+            ) : null}
             </div>
 
             <div className="header-actions" style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "nowrap" }}>

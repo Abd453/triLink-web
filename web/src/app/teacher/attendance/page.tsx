@@ -164,7 +164,8 @@ export default function TeacherAttendance() {
     const students = studentsByOffering[selectedOfferingId] ?? [];
     const sessions = sessionsByOffering[selectedOfferingId] ?? [];
     const currentSession = useMemo(() => sessions.find(s => s.date === today), [sessions, today]);
-    const isLocked = !!currentSession; // already submitted today
+    const hasSubmittedToday = !!currentSession;
+    const isLocked = false;
     const currentMarks = currentSession ? (marksBySession[currentSession.id] ?? []) : [];
 
     // Derive attendance from draft, else from API marks for today, else default present
@@ -252,9 +253,7 @@ export default function TeacherAttendance() {
     const confirmSubmit = async () => {
         setSubmitting(true);
         try {
-            // Create session for today
-            const session = await createAttendanceSession({ classOfferingId: selectedOfferingId, date: today });
-            // Submit marks
+            const session = currentSession ?? await createAttendanceSession({ classOfferingId: selectedOfferingId, date: today });
             const marks = students.map(s => {
                 const status = attendance[s.id] ?? "present";
                 let note: string | undefined = undefined;
@@ -264,12 +263,10 @@ export default function TeacherAttendance() {
                 return { studentId: s.id, status, note };
             });
             await putSessionMarks(session.id, marks);
-            // Clear draft
             setDrafts(prev => { const n = { ...prev }; delete n[selectedOfferingId]; return n; });
-            showToast("Attendance submitted successfully!");
+            showToast(currentSession ? "Attendance updated successfully!" : "Attendance submitted successfully!");
             setShowSubmitConfirm(false);
-            // Reload
-            await loadData();
+            await loadData(true);
         } catch (e) {
             showToast(e instanceof Error ? e.message : "Submit failed");
         } finally {
@@ -354,11 +351,11 @@ export default function TeacherAttendance() {
                             </button>
                         </div>
                         <div className="modal-body" style={{ fontSize: "0.9rem", color: "var(--gray-700)", lineHeight: 1.7 }}>
-                            Submit attendance for {offeringLabel(offerings.find(o => o.id === selectedOfferingId)!)} on {today}. After submission, this session will be locked.
+                            {currentSession ? "Update" : "Submit"} attendance for {offeringLabel(offerings.find(o => o.id === selectedOfferingId)!)} on {today}. Existing marks are saved as an attendance override.
                         </div>
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={() => setShowSubmitConfirm(false)} disabled={submitting}>Cancel</button>
-                            <button className="btn btn-primary" onClick={() => void confirmSubmit()} disabled={submitting}>{submitting ? "Submitting…" : "Confirm Submit"}</button>
+                            <button className="btn btn-primary" onClick={() => void confirmSubmit()} disabled={submitting}>{submitting ? "Saving…" : currentSession ? "Confirm Update" : "Confirm Submit"}</button>
                         </div>
                     </div>
                 </div>
@@ -428,7 +425,7 @@ export default function TeacherAttendance() {
                     </h1>
                     <p className="page-subtitle">{todayStr}</p>
                 </div>
-                {!isLocked && students.length > 0 && (
+                {students.length > 0 && (
                     <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                         <button className="btn btn-secondary" onClick={markAll} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                             {allPresent ? (
@@ -439,19 +436,19 @@ export default function TeacherAttendance() {
                         </button>
                         <button className="btn btn-primary" onClick={handleSubmit} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
-                            Submit Attendance
+                            {hasSubmittedToday ? "Save Attendance Changes" : "Submit Attendance"}
                         </button>
                     </div>
                 )}
             </div>
 
-            {/* Locked banner */}
-            {isLocked && (
+            {/* Submitted banner */}
+            {hasSubmittedToday && (
                 <div style={{ marginBottom: "1.25rem", padding: "0.875rem 1.25rem", borderRadius: 12, background: "var(--warning-light)", border: "1.5px solid var(--warning)", display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#92400e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#92400e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                     <div>
-                        <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "#92400e" }}>Attendance Submitted &amp; Locked</div>
-                        <div style={{ fontSize: "0.8rem", color: "#78350f", marginTop: 2 }}>This attendance session has been submitted and is read-only. Contact the admin to request an edit unlock.</div>
+                        <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "#92400e" }}>Attendance Submitted</div>
+                        <div style={{ fontSize: "0.8rem", color: "#78350f", marginTop: 2 }}>You can edit this session and save corrections. Updates are recorded through the attendance marks API.</div>
                     </div>
                 </div>
             )}
@@ -582,8 +579,8 @@ export default function TeacherAttendance() {
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2" /><line x1="16" x2="16" y1="2" y2="6" /><line x1="8" x2="8" y1="2" y2="6" /><line x1="3" x2="21" y1="10" y2="10" /></svg>
                                 {offeringLabel(offerings.find(o => o.id === selectedOfferingId)!)} - {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
                             </h3>
-                            <div style={{ fontSize: "0.8rem", color: isLocked ? "var(--warning)" : "var(--gray-500)" }}>
-                                {isLocked ? "Read-only - submitted" : "Click the checkbox to toggle present/absent"}
+                            <div style={{ fontSize: "0.8rem", color: hasSubmittedToday ? "var(--warning)" : "var(--gray-500)" }}>
+                                {hasSubmittedToday ? "Submitted - edits enabled" : "Click the checkbox to toggle present/absent"}
                             </div>
                         </div>
                         <div className="table-wrapper">

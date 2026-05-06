@@ -175,10 +175,10 @@ export default function TeacherDashboard() {
             Institutional Context
           </p>
           <h1 className="admin-dash-title" style={{ fontSize: "2.2rem", fontWeight: 800, color: "var(--gray-900)", marginBottom: "0.5rem" }}>
-            Hello, {user.firstName || "Teacher"}! 👋
+            Today&apos;s teaching workspace
           </h1>
           <p className="admin-dash-subtitle" style={{ fontSize: "1.05rem", color: "var(--gray-500)" }}>
-            Welcome back to {user.subject || "Biology"} Academic Management.
+            {user.firstName ? `${user.firstName}, ` : ""}your classes, grading, attendance, and broadcasts are organized for the current academic day.
           </p>
         </div>
         <div className="admin-dash-pill" style={{ height: "fit-content", background: "#fff", border: "1.5px solid var(--gray-100)", padding: "0.5rem 1rem", borderRadius: 12, display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 600, fontSize: "0.85rem", color: "var(--gray-600)" }}>
