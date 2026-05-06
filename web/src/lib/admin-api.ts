@@ -25,7 +25,14 @@ export async function adminFetch(path: string, init?: RequestInit): Promise<Resp
 export async function adminJson<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await adminFetch(path, init);
   const text = await r.text();
-  const data = text ? JSON.parse(text) : null;
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: text };
+    }
+  }
   if (!r.ok) throw new Error(errMessage(data));
   return data as T;
 }

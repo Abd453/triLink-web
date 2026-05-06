@@ -104,7 +104,7 @@ function questionInTeacherSubjectBank(
 
 function TeacherExamsSkeleton() {
     return (
-        <div className="page-wrapper">
+        <div className="page-wrapper teacher-exams-page">
             <div className="page-header admin-dash-skeleton-block">
                 <div style={{ width: "100%", maxWidth: 380 }}>
                     <div className="admin-skeleton shimmer" style={{ width: 200, height: 12, marginBottom: 12 }} />
@@ -1734,7 +1734,7 @@ export default function TeacherExams() {
 
             {/* ── CSV Column Picker Modal removed ── */}
 
-            <div className="page-header">
+            <div className="page-header teacher-exams-hero">
                 <div>
                     <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
@@ -1750,7 +1750,7 @@ export default function TeacherExams() {
                 </div>
             )}
 
-            <div className="tabs" style={{ marginBottom: "1.5rem" }}>
+            <div className="tabs teacher-exams-tabs" style={{ marginBottom: "1.5rem" }}>
                 <button className={`tab ${activeTab === "create" ? "active" : ""}`} onClick={() => setActiveTab("create")}>Create Quiz</button>
                 <button className={`tab ${activeTab === "bank" ? "active" : ""}`} onClick={() => setActiveTab("bank")}>Exam Bank ({bank.length})</button>
                 <button className={`tab ${activeTab === "results" ? "active" : ""}`} onClick={() => setActiveTab("results")}>Results &amp; Grades</button>
@@ -1758,7 +1758,7 @@ export default function TeacherExams() {
 
             {/* ── CREATE ── */}
             {activeTab === "create" && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: "1.25rem", alignItems: "start" }}>
+                <div className="teacher-exams-create-grid" style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: "1.25rem", alignItems: "start" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                         {/* Meta */}
                         <div className="card">

@@ -26,6 +26,8 @@ export default function Sidebar({ role, items, roleColor }: SidebarProps) {
         const previousSection = index > 0 ? items[index - 1]?.section : undefined;
         return item.section && item.section !== previousSection ? item.section : null;
     });
+    const roleTone = roleColor || "var(--role-accent-600)";
+    const portalLabel = `${role} workspace`;
 
     // Close sidebar on route change
     useEffect(() => {
@@ -64,16 +66,19 @@ export default function Sidebar({ role, items, roleColor }: SidebarProps) {
             <aside className={`sidebar ${mobileOpen ? "open" : ""}`}>
                 <div className="sidebar-header">
                     <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.75rem", textDecoration: "none", color: "inherit" }} aria-label="Go to home page">
-                        <div className="sidebar-logo" style={{ overflow: "hidden", borderRadius: "10px", padding: 0, background: "transparent" }}>
-                            <img src="https://avatars.githubusercontent.com/u/261413181?s=200&v=4" alt="TriLink" width={36} height={36} style={{ width: 36, height: 36, objectFit: "contain", display: "block" }} />
+                        <div className="sidebar-logo" style={{ overflow: "hidden", padding: 0 }}>
+                            <img src="/trilink-logo.png" alt="TriLink" width={40} height={40} style={{ width: 40, height: 40, objectFit: "contain", display: "block" }} />
                         </div>
                         <div>
                             <div className="sidebar-brand">Tri<span>Link</span></div>
-                            <div style={{ fontSize: "0.7rem", color: "var(--gray-400)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                                {role} Portal
+                            <div className="sidebar-portal-label">
+                                {portalLabel}
                             </div>
                         </div>
                     </Link>
+                    <div className="sidebar-role-chip" style={{ color: roleTone }}>
+                        Live
+                    </div>
                 </div>
 
                 <nav className="sidebar-nav">
@@ -99,6 +104,13 @@ export default function Sidebar({ role, items, roleColor }: SidebarProps) {
                 </nav>
 
                 <div className="sidebar-footer">
+                    <div className="sidebar-status-card">
+                        <div>
+                            <span className="sidebar-status-dot" />
+                            Secure session
+                        </div>
+                        <small>Synced with school data</small>
+                    </div>
                     <button
                         type="button"
                         className="nav-item"
