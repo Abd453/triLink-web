@@ -2,17 +2,20 @@
 
 Three-tab page: Create Quiz, Exam Bank, and Results & Grades.
 
-## Fixes Applied
+## Current Status
 
-| Issue | Status |
+| Area | Status |
 |---|---|
-| Correct Answer selector (A/B/C/D) had no active state — clicking buttons did nothing visible | ✅ Fixed — added `correctAnswer` state; selected button turns `btn-primary` (blue), shows a green checkmark badge, and a confirmation message appears below |
+| Multi-question quiz builder | Implemented with per-question state |
+| Publish/schedule | API-backed; creates exams, creates/reuses questions, attaches questions, publishes |
+| Exam bank | API-backed with filtering and pagination controls |
+| Results and grading | API-backed roster/results, grading, release, and PDF export |
+| Live monitor | API-backed roster refresh plus Socket.IO activity/violation listeners |
 
-## Known / Remaining
+## Known Remaining Work
 
 | Item | Status |
 |---|---|
-| Create Quiz form has no question list / multi-question management | ⬜ Needs state for question array |
-| "Publish Quiz" button has no action | ⬜ Needs API |
-| Exam Bank search input has no filter logic | ⬜ Needs state |
-| Results table grades are hardcoded | ⬜ Needs API |
+| Attempt violation/control API path | Fixed to use backend `/api/attempts/:id/...` routes |
+| Question bank usage counts | Local display only; not a persisted backend metric |
+| Complete lint/type cleanup | Deferred unless it blocks build/runtime |

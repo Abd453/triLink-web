@@ -1011,7 +1011,7 @@ export default function TeacherExams() {
     };
 
     // Add a bank question into the current quiz
-    const useFromBank = (item: BankQ) => {
+    const addFromBank = (item: BankQ) => {
         let qType: "mcq"|"truefalse"|"fillin" = "mcq";
         if (item.rawType === "truefalse") qType = "truefalse";
         else if (item.rawType === "fillin") qType = "fillin";
@@ -2069,7 +2069,7 @@ export default function TeacherExams() {
                                         <td>
                                             <div style={{ display: "flex", gap: "0.375rem" }}>
                                                 <button className="btn btn-outline btn-sm" onClick={() => editFromBank(item)}>Edit</button>
-                                                <button className="btn btn-secondary btn-sm" onClick={() => useFromBank(item)}>Use</button>
+                                                <button className="btn btn-secondary btn-sm" onClick={() => addFromBank(item)}>Use</button>
                                             </div>
                                         </td>
                                     </tr>

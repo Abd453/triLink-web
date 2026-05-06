@@ -84,6 +84,7 @@ export default function TeacherProfilePage() {
     const [isEditing, setIsEditing] = useState(false);
     const user = useCurrentUser("teacher");
     const [profile, setProfile] = useState<TeacherProfile>(initialProfile);
+    const [draft, setDraft] = useState<TeacherProfile>(initialProfile);
     const [saving, setSaving] = useState(false);
     const [avatarUploading, setAvatarUploading] = useState(false);
     const { showToast } = useToastStore();

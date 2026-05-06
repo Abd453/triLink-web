@@ -22,7 +22,10 @@ export default function Sidebar({ role, items, roleColor }: SidebarProps) {
     const pathname = usePathname();
     const router = useRouter();
     const [mobileOpen, setMobileOpen] = useState(false);
-    let currentSection = "";
+    const sectionByIndex = items.map((item, index) => {
+        const previousSection = index > 0 ? items[index - 1]?.section : undefined;
+        return item.section && item.section !== previousSection ? item.section : null;
+    });
 
     // Close sidebar on route change
     useEffect(() => {
@@ -75,14 +78,13 @@ export default function Sidebar({ role, items, roleColor }: SidebarProps) {
 
                 <nav className="sidebar-nav">
                     {items.map((item, i) => {
-                        const showSection = item.section && item.section !== currentSection;
-                        if (item.section) currentSection = item.section;
+                        const sectionLabel = sectionByIndex[i];
                         const isActive = pathname === item.href || (item.href !== `/${role.toLowerCase()}/dashboard` && pathname.startsWith(item.href));
 
                         return (
                             <div key={i}>
-                                {showSection && (
-                                    <div className="sidebar-section">{item.section}</div>
+                                {sectionLabel && (
+                                    <div className="sidebar-section">{sectionLabel}</div>
                                 )}
                                 <Link href={item.href} className={`nav-item ${isActive ? "active" : ""}`}>
                                     <span className="nav-icon">{item.icon}</span>
