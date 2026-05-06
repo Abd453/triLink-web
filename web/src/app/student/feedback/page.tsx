@@ -1,13 +1,6 @@
 "use client";
-import { MessageCircleHeart } from "lucide-react";
-import ComingSoon from "@/components/ComingSoon";
+import { StudentFeedbackPage } from "@/components/PortalMvpPages";
 
 export default function Page() {
-    return (
-        <ComingSoon
-            title="Feedback"
-            description="Share feedback with teachers and the school."
-            icon={<MessageCircleHeart size={22} />}
-        />
-    );
+    return <StudentFeedbackPage />;
 }

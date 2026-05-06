@@ -1,13 +1,6 @@
 "use client";
-import { Megaphone } from "lucide-react";
-import ComingSoon from "@/components/ComingSoon";
+import { StudentAnnouncementsPage } from "@/components/PortalMvpPages";
 
 export default function Page() {
-    return (
-        <ComingSoon
-            title="Announcements"
-            description="School-wide and class-level announcements."
-            icon={<Megaphone size={22} />}
-        />
-    );
+    return <StudentAnnouncementsPage />;
 }

@@ -1,13 +1,6 @@
 "use client";
-import { Bell } from "lucide-react";
-import ComingSoon from "@/components/ComingSoon";
+import { ParentNotificationsPage } from "@/components/PortalMvpPages";
 
 export default function Page() {
-    return (
-        <ComingSoon
-            title="Notifications"
-            description="Updates about your child and the school."
-            icon={<Bell size={22} />}
-        />
-    );
+    return <ParentNotificationsPage />;
 }
