@@ -183,6 +183,122 @@ export type CalendarEventRecord = {
   createdById?: string;
 };
 
+export type TextbookRecord = {
+  id: string;
+  title: string;
+  subject: string;
+  grade: number;
+  description: string | null;
+  pageCount: number | null;
+  sizeBytes: number | null;
+  isActive: boolean;
+  fileRecordId: string;
+  accessUrl: string;
+  coverUrl: string | null;
+  createdAt: string;
+};
+
+export type LearningMaterialRecord = {
+  id: string;
+  title: string;
+  type: "pdf" | "txt" | "link";
+  url: string;
+  subject: string;
+  grade: number;
+  description: string | null;
+  topicId: string | null;
+  uploadedById: string;
+  classOfferingId: string;
+  createdAt: string;
+};
+
+export type EnrolledSubject = {
+  subjectId: string;
+  subjectName: string;
+  subjectCode?: string | null;
+  classOfferingId: string;
+  gradeName?: string | null;
+  sectionName?: string | null;
+  teacher?: { id: string; firstName: string; lastName: string; email: string } | null;
+};
+
+export type CurriculumSubject = {
+  id: string;
+  name: string;
+  code?: string | null;
+  curriculumVersion?: string | null;
+};
+
+export type TopicRecord = {
+  id: string;
+  name?: string;
+  title?: string;
+  description?: string | null;
+  subjectId?: string;
+  orderIndex?: number;
+};
+
+export type StudentGoal = {
+  id: string;
+  studentId: string;
+  title: string;
+  description: string | null;
+  targetDate: string | null;
+  status: string;
+  progressPercent: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BadgeAward = {
+  id: string;
+  badgeId?: string;
+  userId?: string;
+  awardedAt?: string;
+  badge?: { id: string; key?: string; name: string; description?: string | null; iconKey?: string | null; pointsValue?: number | null };
+  name?: string;
+  description?: string | null;
+  pointsValue?: number | null;
+};
+
+export type StudentAttendanceReport = {
+  studentId: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  summary?: { total: number; present: number; absent: number; excused: number; attendanceRate: number | null };
+  records?: Array<{
+    markId?: string;
+    id?: string;
+    status: string;
+    note?: string | null;
+    date?: string;
+    sessionDate?: string;
+    subject?: { id: string; name: string; code?: string | null } | null;
+    grade?: { id: string; name: string } | string | null;
+    section?: { id: string; name: string } | string | null;
+    teacher?: { id: string; firstName: string; lastName: string; email: string } | null;
+  }>;
+  sessions?: Array<{
+    sessionId: string;
+    date: string;
+    status?: string;
+    note?: string | null;
+    subject?: { id: string; name: string; code?: string | null } | null;
+    grade?: { id: string; name: string } | null;
+    section?: { id: string; name: string } | null;
+    teacher?: { id: string; firstName: string; lastName: string; email: string } | null;
+  }>;
+};
+
+export type StudentDetail = {
+  student: { id: string; firstName: string; lastName: string; email: string; grade?: string | null; section?: string | null };
+  profile?: Record<string, unknown> | null;
+  classes?: unknown[];
+  subjects?: EnrolledSubject[];
+  teachers?: Array<{ id: string; firstName: string; lastName: string; email: string; subjectName?: string | null }>;
+};
+
 // --- API ---
 
 export async function getActiveAcademicYear(): Promise<AcademicYear | null> {
@@ -563,6 +679,18 @@ export async function classAttendanceReport(classOfferingId: string) {
   }>(`/api/reports/attendance/class/${classOfferingId}`, { method: "GET" });
 }
 
+export async function getClassRoster(classOfferingId: string): Promise<{
+  classOfferingId: string;
+  className?: string;
+  subject?: { id: string; name: string; code?: string | null } | null;
+  grade?: { id: string; name: string } | null;
+  section?: { id: string; name: string } | null;
+  studentCount: number;
+  students: Array<{ studentId: string; firstName: string; lastName: string; email: string; enrollmentId?: string }>;
+}> {
+  return adminJson(`/api/enrollments/class/${encodeURIComponent(classOfferingId)}/students`, { method: "GET" });
+}
+
 export async function listConversations(): Promise<Conversation[]> {
   return adminJson<Conversation[]>("/api/conversations", { method: "GET" });
 }
@@ -828,6 +956,116 @@ export async function markNotificationRead(id: string): Promise<unknown> {
 
 export async function markAllNotificationsRead(): Promise<unknown> {
   return adminJson("/api/notifications/read-all", { method: "POST" });
+}
+
+export async function listTextbooks(filters?: { subject?: string; grade?: number }): Promise<TextbookRecord[]> {
+  const p = new URLSearchParams();
+  if (filters?.subject) p.set("subject", filters.subject);
+  if (filters?.grade != null) p.set("grade", String(filters.grade));
+  const qs = p.toString();
+  return adminJson<TextbookRecord[]>(`/api/textbooks${qs ? `?${qs}` : ""}`, { method: "GET" });
+}
+
+export async function uploadTextbook(body: {
+  title: string;
+  subject: string;
+  grade: number;
+  description?: string;
+  file: File;
+  cover?: File | null;
+}): Promise<TextbookRecord> {
+  const fd = new FormData();
+  fd.append("title", body.title);
+  fd.append("subject", body.subject);
+  fd.append("grade", String(body.grade));
+  if (body.description) fd.append("description", body.description);
+  fd.append("file", body.file);
+  if (body.cover) fd.append("cover", body.cover);
+  return adminJson<TextbookRecord>("/api/textbooks/upload", { method: "POST", body: fd });
+}
+
+export async function deleteTextbook(id: string): Promise<void> {
+  await adminFetch(`/api/textbooks/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function createLearningMaterial(body: {
+  title: string;
+  type: "pdf" | "txt" | "link";
+  subject: string;
+  grade: number;
+  description?: string;
+  classOfferingId: string;
+  topicId?: string;
+  link?: string;
+  file?: File | null;
+}): Promise<LearningMaterialRecord> {
+  const fd = new FormData();
+  fd.append("title", body.title);
+  fd.append("type", body.type);
+  fd.append("subject", body.subject);
+  fd.append("grade", String(body.grade));
+  fd.append("classOfferingId", body.classOfferingId);
+  if (body.description) fd.append("description", body.description);
+  if (body.topicId) fd.append("topicId", body.topicId);
+  if (body.link) fd.append("link", body.link);
+  if (body.file) fd.append("file", body.file);
+  return adminJson<LearningMaterialRecord>("/api/learning-materials", { method: "POST", body: fd });
+}
+
+export async function listStudentMaterials(): Promise<LearningMaterialRecord[]> {
+  return adminJson<LearningMaterialRecord[]>("/api/learning-materials/student/me", { method: "GET" });
+}
+
+export async function listMySubjects(): Promise<EnrolledSubject[]> {
+  return adminJson<EnrolledSubject[]>("/api/enrollments/mine/subjects", { method: "GET" });
+}
+
+export async function listChildSubjects(studentId: string): Promise<EnrolledSubject[]> {
+  return adminJson<EnrolledSubject[]>(`/api/enrollments/children/${encodeURIComponent(studentId)}/subjects`, { method: "GET" });
+}
+
+export async function listChildEnrollments(studentId: string): Promise<unknown[]> {
+  return adminJson<unknown[]>(`/api/enrollments/children/${encodeURIComponent(studentId)}`, { method: "GET" });
+}
+
+export async function listCurriculumSubjects(): Promise<CurriculumSubject[]> {
+  return adminJson<CurriculumSubject[]>("/api/curriculum/me/subjects", { method: "GET" });
+}
+
+export async function listCurriculumTopics(subjectId: string): Promise<TopicRecord[]> {
+  return adminJson<TopicRecord[]>(`/api/curriculum/me/subjects/${encodeURIComponent(subjectId)}/topics`, { method: "GET" });
+}
+
+export async function listMyGoals(): Promise<StudentGoal[]> {
+  return adminJson<StudentGoal[]>("/api/goals/me", { method: "GET" });
+}
+
+export async function createMyGoal(body: { title: string; description?: string; targetDate?: string }): Promise<StudentGoal> {
+  return adminJson<StudentGoal>("/api/goals/me", { method: "POST", body: JSON.stringify(body) });
+}
+
+export async function patchGoal(id: string, body: Partial<Pick<StudentGoal, "title" | "description" | "targetDate" | "status" | "progressPercent">>): Promise<StudentGoal> {
+  return adminJson<StudentGoal>(`/api/goals/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export async function listMyBadges(): Promise<BadgeAward[]> {
+  return adminJson<BadgeAward[]>("/api/gamification/me/badges", { method: "GET" });
+}
+
+export async function myBadgePoints(): Promise<{ points?: number; total?: number } | number> {
+  return adminJson("/api/gamification/me/badge-points", { method: "GET" });
+}
+
+export async function myGamificationProgress(): Promise<Record<string, unknown>> {
+  return adminJson<Record<string, unknown>>("/api/gamification/me/progress", { method: "GET" });
+}
+
+export async function studentAttendanceReport(studentId: string): Promise<StudentAttendanceReport> {
+  return adminJson<StudentAttendanceReport>(`/api/reports/attendance/student/${encodeURIComponent(studentId)}`, { method: "GET" });
+}
+
+export async function getStudentDetail(studentId: string): Promise<StudentDetail> {
+  return adminJson<StudentDetail>(`/api/student-profiles/${encodeURIComponent(studentId)}/detail`, { method: "GET" });
 }
 
 // ── Student Exam Flow API ─────────────────────────────────────────────────────

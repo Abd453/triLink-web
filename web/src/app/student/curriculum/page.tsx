@@ -1,13 +1,6 @@
 "use client";
-import { ListChecks } from "lucide-react";
-import ComingSoon from "@/components/ComingSoon";
+import { StudentCurriculumPage } from "@/components/PortalMvpPages";
 
 export default function Page() {
-    return (
-        <ComingSoon
-            title="Curriculum"
-            description="Topics, units, and what's coming up next per subject."
-            icon={<ListChecks size={22} />}
-        />
-    );
+    return <StudentCurriculumPage />;
 }

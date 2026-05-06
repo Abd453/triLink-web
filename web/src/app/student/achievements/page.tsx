@@ -1,13 +1,6 @@
 "use client";
-import { Award } from "lucide-react";
-import ComingSoon from "@/components/ComingSoon";
+import { StudentAchievementsPage } from "@/components/PortalMvpPages";
 
 export default function Page() {
-    return (
-        <ComingSoon
-            title="Achievements"
-            description="Badges, honors, and milestones you've unlocked."
-            icon={<Award size={22} />}
-        />
-    );
+    return <StudentAchievementsPage />;
 }

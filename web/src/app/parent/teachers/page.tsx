@@ -1,13 +1,6 @@
 "use client";
-import { Users } from "lucide-react";
-import ComingSoon from "@/components/ComingSoon";
+import { ParentTeachersPage } from "@/components/PortalMvpPages";
 
 export default function Page() {
-    return (
-        <ComingSoon
-            title="Teachers"
-            description="Teachers your child has, with contact info."
-            icon={<Users size={22} />}
-        />
-    );
+    return <ParentTeachersPage />;
 }
