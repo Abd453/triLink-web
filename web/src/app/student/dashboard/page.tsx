@@ -41,7 +41,7 @@ interface Exam {
     date: string;
     time: string;
     duration: number;
-    totalQuestions: number;
+    totalQuestions: number | null;
     status: ExamStatus;
     score?: number | null;
     maxPoints: number;
@@ -177,7 +177,7 @@ export default function StudentDashboard() {
                 date: opensAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
                 time: opensAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
                 duration: e.durationMinutes,
-                totalQuestions: (e as any).questionCount || 0,
+                totalQuestions: typeof (e as any).questionCount === "number" ? (e as any).questionCount : null,
                 status,
                 score: attempt?.score,
                 maxPoints: e.maxPoints,
@@ -317,7 +317,7 @@ export default function StudentDashboard() {
                                         </div>
                                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--gray-500)" }}>
                                             <Layout size={16} />
-                                            <span style={{ fontSize: "0.85rem", fontWeight: 500 }}>{exam.totalQuestions} Questions</span>
+                                            <span style={{ fontSize: "0.85rem", fontWeight: 500 }}>{exam.totalQuestions == null ? "Questions unavailable" : `${exam.totalQuestions} Questions`}</span>
                                         </div>
                                     </div>
 
@@ -443,6 +443,8 @@ export default function StudentDashboard() {
                         <h4 style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.85rem" }}>Quick Stats</h4>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
                             {[
+                                { label: "Enrollments", value: apiDash?.activeEnrollments ?? "—", color: "var(--primary-600)" },
+                                { label: "Unread", value: apiDash?.unreadNotifications ?? "—", color: "#f59e0b" },
                                 { label: "Exams Done", value: processedExams.filter(e => e.status === "completed").length, color: "var(--primary-600)" },
                                 { label: "Assignments", value: assignments.filter(a => a.submission?.submittedAt).length, color: "#8b5cf6" },
                                 { label: "Grades Released", value: grades.filter(g => g.releasedAt).length, color: "#10b981" },
@@ -544,4 +546,3 @@ export default function StudentDashboard() {
         </div>
     );
 }
-
