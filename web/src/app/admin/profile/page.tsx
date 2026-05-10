@@ -7,6 +7,8 @@ import { authFetch, getStoredUser, setStoredUser } from "@/lib/auth";
 import { apiPath, getApiBase } from "@/lib/api";
 import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
 import { useToastStore } from "@/store/toastStore";
+import { PageHeader, PageHeaderSkeleton, CardSkeleton } from "@/components/ui";
+import { UserCircle2 } from "lucide-react";
 
 function roleLabel(role: string): string {
   switch (role) {
@@ -171,11 +173,11 @@ export default function AdminProfile() {
 
   if (loading) {
     return (
-      <div className="page-wrapper" style={{ display: "flex", justifyContent: "center", padding: "4rem" }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
-          <div style={{ width: "36px", height: "36px", border: "3px solid var(--gray-200)", borderTopColor: "var(--primary)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-          <div style={{ color: "var(--gray-500)", fontWeight: 500 }}>Loading profile...</div>
-          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      <div className="page-wrapper">
+        <PageHeaderSkeleton />
+        <div className="content-grid" style={{ alignItems: "start" }}>
+          <CardSkeleton lines={6} />
+          <CardSkeleton lines={5} />
         </div>
       </div>
     );
@@ -186,15 +188,16 @@ export default function AdminProfile() {
 
   return (
     <div className="page-wrapper">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Your profile</h1>
-          <p className="page-subtitle">Contact details and account security</p>
-        </div>
-        <button type="button" className="btn btn-primary" onClick={saveProfile}>
-          Save changes
-        </button>
-      </div>
+      <PageHeader
+        kicker="Account"
+        title="Your profile"
+        subtitle="Contact details and account security."
+        icon={<UserCircle2 size={22} />}
+        variant="light"
+        actions={(
+          <button type="button" className="btn btn-primary" onClick={saveProfile} style={{ borderRadius: 12 }}>Save changes</button>
+        )}
+      />
       {err && <div className="card" style={{ color: "var(--danger)", marginBottom: "1rem" }}>{err}</div>}
 
       <div className="content-grid" style={{ alignItems: "start" }}>

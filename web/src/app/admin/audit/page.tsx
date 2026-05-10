@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { listAuditLogs, listUsers, type PublicUser } from "@/lib/admin-api";
 import Select from "@/components/Select";
 import TablePagination from "@/components/TablePagination";
+import { PageHeader, TableSkeleton, EmptyState } from "@/components/ui";
+import { ShieldCheck } from "lucide-react";
 
 type Row = {
   id: string;
@@ -99,12 +101,13 @@ export default function AdminAuditPage() {
 
   return (
     <div className="page-wrapper">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Activity log</h1>
-          <p className="page-subtitle">Important account and security events across your school</p>
-        </div>
-      </div>
+      <PageHeader
+        kicker="Security"
+        title="Activity log"
+        subtitle="Important account and security events across your school."
+        icon={<ShieldCheck size={22} />}
+        variant="light"
+      />
 
       <div className="card" style={{ marginBottom: "1.5rem", background: "var(--primary-50)", border: "1px solid var(--primary-100)", borderRadius: "12px", display: "flex", gap: "1.25rem", alignItems: "flex-start", padding: "1.5rem" }}>
         <div style={{ padding: "0.65rem", background: "white", borderRadius: "50%", color: "var(--primary-600)", display: "flex", flexShrink: 0, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
@@ -160,18 +163,14 @@ export default function AdminAuditPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: "center", padding: "5rem 2rem" }}>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
-                      <div style={{ width: "36px", height: "36px", border: "3px solid var(--gray-200)", borderTopColor: "var(--primary)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                      <div style={{ color: "var(--gray-500)", fontWeight: 500 }}>Loading activity logs...</div>
-                    </div>
-                    <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+                  <td colSpan={4} style={{ padding: 0, border: 0 }}>
+                    <TableSkeleton rows={5} columns={4} />
                   </td>
                 </tr>
               ) : visibleRows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ color: "var(--gray-500)", textAlign: "center", padding: "4rem 2rem" }}>
-                    No activity found matching your criteria.
+                  <td colSpan={4} style={{ padding: 0, border: 0 }}>
+                    <EmptyState icon={<ShieldCheck size={26} />} title="No activity found" description="No audit logs match your current filters." />
                   </td>
                 </tr>
               ) : (
