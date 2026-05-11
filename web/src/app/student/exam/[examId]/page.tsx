@@ -24,7 +24,6 @@ interface Question {
     text: string;
     options?: string[];
     order: number;
-    imageUrl?: string;
 }
 
 interface ExamData {
@@ -153,24 +152,12 @@ function mapApiQuestions(raw: ExamQuestionForStudent[]): Question[] {
                 ? ["True", "False"]
                 : options;
 
-            // Extract image from attachmentsJson
-            const rawAttachments = (item as any).attachmentsJson ?? nested.attachmentsJson;
-            let imageUrl: string | undefined;
-            if (rawAttachments) {
-                try {
-                    const atts = typeof rawAttachments === "string" ? JSON.parse(rawAttachments) : rawAttachments;
-                    const img = Array.isArray(atts) ? atts.find((a: any) => a.kind === "image" || a.url?.match(/\.(jpg|jpeg|png|gif|webp)/i)) : null;
-                    if (img?.url) imageUrl = img.url;
-                } catch { /* ignore */ }
-            }
-
             return {
                 id,
                 type: qType,
                 text: stem || `Question ${i + 1}`,
                 options: safeOptions,
                 order: i + 1,
-                imageUrl,
             };
         })
         .filter((q) => q.text.trim().length > 0);
@@ -587,15 +574,6 @@ export default function ExamSession() {
                     {/* Question Text */}
                     <div style={{ background: "#fff", borderRadius: 16, padding: "1.5rem", border: "1px solid var(--gray-100)", marginBottom: "1.5rem", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                         <p style={{ fontSize: "1.1rem", lineHeight: 1.7, fontWeight: 500, color: "var(--gray-800)" }}>{question.text}</p>
-                        {question.imageUrl && (
-                            <div style={{ marginTop: "1rem" }}>
-                                <img
-                                    src={question.imageUrl}
-                                    alt="Question image"
-                                    style={{ maxWidth: "100%", maxHeight: 320, borderRadius: 10, border: "1px solid var(--gray-200)", display: "block" }}
-                                />
-                            </div>
-                        )}
                     </div>
 
                     {/* Answer Area */}

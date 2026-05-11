@@ -1,19 +1,20 @@
 # Exam Result (`/student/result/[examId]`)
 
-Displays the released exam result for an attempt.
+Displays the student's score, correct/wrong/unanswered breakdown, and a full question-by-question review after exam submission.
 
-## Current Status
+## Fixes Applied
 
-| Area | Status |
+| Issue | Status |
 |---|---|
-| Result loading | API-backed via `/api/attempts/:id/result` |
-| Question review | Uses backend result breakdown, including answer keys only after release |
-| Violation display | Shows integrity violation count/details returned by backend |
-| Dashboard back navigation | Implemented |
+| Result page showed hardcoded static data regardless of what the student actually answered | ✅ Fixed — reads from Zustand `examStore`; score, correct, wrong, and unanswered are all computed from actual student answers |
+| Blank fill-in answers displayed as generic "(no answer)" | ✅ Fixed — fill-in blanks show "Left blank" (italic, gray) while skipped MCQ/T-F show "Not answered" |
+| No fallback if the page was accessed directly via URL (store empty) | ✅ Fixed — a fallback demo result is shown so the page never crashes |
+| `formatTime` was duplicated across pages | ✅ Consolidated — now lives inside this component (no shared import needed yet) |
 
-## Known Remaining Work
+## Known / Remaining
 
 | Item | Status |
 |---|---|
-| Pending/unreleased result UX | Currently shows backend error until teacher releases the result |
-| Result export/download from web | Backend supports CSV, web UI does not expose it here |
+| Results are not persisted — refreshing clears the Zustand store | ⬜ Needs localStorage persistence or API |
+| "View Result" from dashboard for old completed exams shows fallback data | ⬜ Needs API to fetch past submissions |
+| Tab violation count is displayed in the submission metadata but not prominently flagged to teacher | ⬜ Needs backend / teacher monitoring view |
