@@ -20,27 +20,24 @@ export default function Select({ children, value, onChange, disabled, style, cla
   }, []);
 
   const options: { value: string; label: ReactNode; disabled?: boolean }[] = [];
-
-  type OptionLikeProps = { value?: unknown; children?: ReactNode; disabled?: boolean };
-
-  // Recursively extract <option> children, drilling through Fragments/arrays.
+  
+  // Recursively extract options
   function extractOptions(node: ReactNode) {
     React.Children.forEach(node, (child) => {
-      if (Array.isArray(child)) {
-        child.forEach(extractOptions);
-        return;
-      }
-      if (!React.isValidElement(child)) return;
-      const props = child.props as OptionLikeProps;
-      if (child.type === "option") {
-        const val = props.value ?? props.children;
-        options.push({
-          value: String(val),
-          label: props.children,
-          disabled: props.disabled,
-        });
-      } else if (props.children) {
-        extractOptions(props.children);
+      if (React.isValidElement<{ value?: unknown; children?: ReactNode; disabled?: boolean }>(child)) {
+        if (child.type === 'option') {
+          const val = child.props.value ?? child.props.children;
+          options.push({
+            value: String(val),
+            label: child.props.children,
+            disabled: child.props.disabled
+          });
+        } else if (child.props.children) {
+          // If it's a Fragment or array inside, drill down
+          extractOptions(child.props.children);
+        }
+      } else if (Array.isArray(child)) {
+        child.forEach(subChild => extractOptions(subChild));
       }
     });
   }

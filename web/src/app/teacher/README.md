@@ -1,26 +1,26 @@
-# Teacher Portal Overview
+# Teacher Portal — Overview
 
 This folder contains all pages for the Teacher portal (`/teacher/...`).
 
-## Current Status
+## Pages Summary
 
 | Page | Path | Status |
 |---|---|---|
-| Dashboard | `/teacher/dashboard` | API-backed dashboard metrics and quick actions |
-| Attendance | `/teacher/attendance` | API-backed class/student loading, daily session creation, marks, submitted-session edits, and history |
-| Exams | `/teacher/exams` | API-backed quiz creation, question bank, publishing, results, grading, and live monitor |
-| Students | `/teacher/students` | API-backed enrollments, exam scores, grade entries, and attendance summary |
-| Announcements | `/teacher/announcements` | API-backed announcement list/create/delete |
-| Chat | `/teacher/chat` | REST-backed conversations/messages with Socket.IO update listener |
-| Notifications | `/teacher/notifications` | API-backed notifications and read state |
-| Calendar | `/teacher/calendar` | API-backed calendar events |
-| Settings/Profile | `/teacher/settings`, `/teacher/profile` | API-backed profile/security updates |
+| Dashboard | `/teacher/dashboard` | ✅ No issues found |
+| Attendance | `/teacher/attendance` | ✅ Fixed |
+| Exams | `/teacher/exams` | ✅ Fixed |
+| Students | `/teacher/students` | ✅ Fixed |
+| Announcements | `/teacher/announcements` | ✅ No issues found |
+| Chat | `/teacher/chat` | ✅ No issues found |
+| Notifications | `/teacher/notifications` | ✅ No issues found |
+| Calendar | `/teacher/calendar` | ✅ No issues found |
+| Settings | `/teacher/settings` | ✅ No issues found |
 
-## Known Remaining Work
+## Known / Remaining for all Teacher pages
 
 | Item | Status |
 |---|---|
-| Full AI-driven student recommendations | Deferred to AI service integration |
-| Historical attendance date selection | Deferred |
-| Richer chat presence | Deferred |
-| Broader lint/type cleanup | Deferred unless it blocks build/runtime |
+| All data is hardcoded mock data | ⬜ Needs real API |
+| Teacher name "Mr. Solomon" hardcoded in layout | ⬜ Needs auth context |
+| Chat has no real-time messaging | ⬜ Needs WebSocket / backend |
+| Student tab-switch notifications to teacher | ⬜ Needs WebSocket / backend |
