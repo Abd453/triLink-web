@@ -1,0 +1,5 @@
+# AI-generated docs and specs (do not commit)
+.kiro/
+web/docs/
+/*.md
+!README.md
