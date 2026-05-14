@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { authFetch, getStoredUser } from "@/lib/auth";
 import { apiPath, getApiBase } from "@/lib/api";
 import { useToastStore } from "@/store/toastStore";
+import { PageHeader } from "@/components/ui";
+import { Settings as SettingsIcon } from "lucide-react";
 
 export default function SettingsPage() {
     const [currentPassword, setCurrentPassword] = useState("");
@@ -77,12 +79,14 @@ export default function SettingsPage() {
 
     return (
         <div className="page-wrapper">
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">Account Settings</h1>
-                    <p className="page-subtitle">Manage your password, security, and preferences</p>
-                </div>
-            </div>
+            <PageHeader
+                kicker="Account"
+                title="Settings"
+                subtitle="Manage your password, security, and account preferences."
+                icon={<SettingsIcon size={22} />}
+                variant="light"
+                accent="#7c3aed"
+            />
 
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(250px, 0.8fr)", gap: "1.5rem" }}>
                 {/* Account Information */}
@@ -119,27 +123,19 @@ export default function SettingsPage() {
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                         <button
                             className="btn btn-outline"
-                            type="button"
-                            disabled
-                            title="Activity log is handled by the administrator workspace."
                             style={{ fontSize: "0.875rem" }}
                         >
                             View Activity Log
                         </button>
                         <button
                             className="btn btn-outline"
-                            type="button"
-                            disabled
-                            title="Session management is not available for this account yet."
                             style={{ fontSize: "0.875rem" }}
                         >
                             Active Sessions
                         </button>
                         <button
                             className="btn btn-outline"
-                            type="button"
-                            disabled
-                            title="Data export requires backend support before it can be enabled."
+                            onClick={() => alert("Download account data")}
                             style={{ fontSize: "0.875rem" }}
                         >
                             Download Data

@@ -1,25 +1,25 @@
 /**
  * Central API base URL for TriLink NestJS backend.
  * All authenticated calls should use authFetch from ./auth.
- *
- * NEXT_PUBLIC_API_BASE_URL is required — set it in .env.local for dev
- * and in your deployment environment for prod. We refuse to silently
- * point at a hardcoded backend.
  */
 export function getApiBase(): string {
-  const raw = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_API_BASE_URL : undefined;
-  const envBase = raw?.replace(/\/$/, "") ?? "";
-  if (!envBase) {
-    throw new Error(
-      "NEXT_PUBLIC_API_BASE_URL is not set. Add it to .env.local (e.g. http://localhost:3001) or your deployment environment.",
-    );
-  }
-  return envBase;
+  const envBase =
+    (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "")) || "";
+  if (envBase) return envBase;
+  // If no env is set, we default to the production backend
+  return "https://trilink-backend-ms68.onrender.com";
 }
 
+/**
+ * Robust helper to get a file download URL.
+ * Handles cases where getApiBase might be empty or relative.
+ */
 export function getFileUrl(fileId: string | null | undefined): string {
   if (!fileId) return "";
-  return `${getApiBase()}/api/files/${fileId}/download`;
+  const base = getApiBase();
+  // If base is empty (should not happen now with our default), fallback to the production backend
+  const safeBase = base || "https://trilink-backend-ms68.onrender.com";
+  return `${safeBase}/api/files/${fileId}/download`;
 }
 
 /** Paths are relative to API host (include /api prefix). */

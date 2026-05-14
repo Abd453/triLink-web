@@ -3,15 +3,16 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAcademicYearStore } from "@/store/academicYearStore";
-import { clearAuth } from "@/lib/auth";
-import { ArrowRight, Search } from "lucide-react";
+import { clearAuth, authFetch } from "@/lib/auth";
+import { X } from "lucide-react";
 import { getActiveAcademicYear, listAcademicYears } from "@/lib/admin-api";
+import { getFileUrl, getApiBase } from "@/lib/api";
 import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
 import { useToastStore } from "@/store/toastStore";
 import RealtimeToast from "@/components/RealtimeToast";
 import Select from "@/components/Select";
 import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
-import { navSearchIndex, type NavRole } from "@/lib/role-nav";
+import { useChatUnreadStore } from "@/store/chatUnreadStore";
 
 interface HeaderProps {
     userName: string;
@@ -22,50 +23,6 @@ interface HeaderProps {
     userId?: string;
 }
 
-const ROLE_ROUTES: Record<string, Array<{ href: string; keywords: string[] }>> = {
-    teacher: [
-        { href: "/teacher/dashboard", keywords: ["dashboard", "home", "overview"] },
-        { href: "/teacher/attendance", keywords: ["attendance", "present", "absent"] },
-        { href: "/teacher/announcements", keywords: ["announcement", "announcements", "notice"] },
-        { href: "/teacher/exams", keywords: ["exam", "exams", "quiz", "bank", "grade"] },
-        { href: "/teacher/students", keywords: ["student", "students", "learner"] },
-        { href: "/teacher/notifications", keywords: ["notification", "notifications", "alerts"] },
-        { href: "/teacher/chat", keywords: ["chat", "message", "messages", "conversation"] },
-        { href: "/teacher/calendar", keywords: ["calendar", "event", "events", "schedule"] },
-        { href: "/teacher/settings", keywords: ["setting", "settings", "security", "password", "2fa"] },
-        { href: "/teacher/profile", keywords: ["profile", "account"] },
-    ],
-    admin: [
-        { href: "/admin/dashboard", keywords: ["dashboard", "home", "overview"] },
-        { href: "/admin/school-setup", keywords: ["school", "setup", "configuration", "config"] },
-        { href: "/admin/students", keywords: ["student", "students"] },
-        { href: "/admin/teachers", keywords: ["teacher", "teachers", "staff"] },
-        { href: "/admin/parents", keywords: ["parent", "parents", "guardian"] },
-        { href: "/admin/attendance", keywords: ["attendance", "present", "absent"] },
-        { href: "/admin/announcements", keywords: ["announcement", "announcements", "notice"] },
-        { href: "/admin/classes", keywords: ["class", "classes"] },
-        { href: "/admin/registration", keywords: ["registration", "register", "enroll"] },
-        { href: "/admin/chat", keywords: ["chat", "message", "messages", "conversation"] },
-        { href: "/admin/feedback", keywords: ["feedback", "review"] },
-        { href: "/admin/audit", keywords: ["audit", "log", "activity", "history"] },
-        { href: "/admin/settings", keywords: ["setting", "settings", "security"] },
-        { href: "/admin/profile", keywords: ["profile", "account"] },
-    ],
-    student: [
-        { href: "/student/dashboard", keywords: ["dashboard", "home", "overview"] },
-        { href: "/student/chat", keywords: ["chat", "message", "messages"] },
-        { href: "/student/profile", keywords: ["profile", "account"] },
-        { href: "/student/settings", keywords: ["settings", "security"] },
-        { href: "/student/login", keywords: ["login", "sign in"] },
-    ],
-    parent: [
-        { href: "/parent/dashboard", keywords: ["dashboard", "home", "overview"] },
-        { href: "/parent/chat", keywords: ["chat", "message", "messages"] },
-        { href: "/parent/profile", keywords: ["profile", "account"] },
-        { href: "/parent/settings", keywords: ["settings", "security"] },
-    ],
-};
-
 export default function Header({ userName, userRole, userInitials, userProfileHref, userProfileImageFileId, userId }: HeaderProps) {
     const router = useRouter();
     const pathname = usePathname();
@@ -73,7 +30,6 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [suggestions, setSuggestions] = useState<{ href: string; label: string }[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
-    const [searchMessage, setSearchMessage] = useState("");
     const searchRef = useRef<HTMLDivElement>(null);
     const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -86,13 +42,13 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
                 setShowUserMenu(false);
             }
         }
-        if (showUserMenu || showSuggestions) {
+        if (showUserMenu) {
             document.addEventListener("mousedown", handleClickOutside);
         }
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
-    }, [showUserMenu, showSuggestions]);
+    }, [showUserMenu]);
     
     // Academic year: admin dropdown is loaded from API (not the static list in the store).
     const { currentSystemYear, adminSelectedYear, setAdminSelectedYear } = useAcademicYearStore();
@@ -150,15 +106,15 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
     // Real-time notifications
     const { toast, setToast } = useRealtimeNotifications(userId, userName);
     const { toast: manualToast, hideToast } = useToastStore();
+    const totalChatUnread = useChatUnreadStore((s) => s.totalUnread);
 
     useEffect(() => {
         const q = searchText.trim().toLowerCase();
         if (q.length < 2) {
             setSuggestions([]);
-            setSearchMessage("");
             return;
         }
-        const rts = navSearchIndex[role as NavRole] || ROLE_ROUTES[role] || [];
+        const rts = roleRoutes[role] || [];
         const filtered = rts.filter(r => 
             r.href.toLowerCase().includes(q) || 
             r.keywords.some(k => k.toLowerCase().includes(q)) ||
@@ -168,7 +124,6 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
             label: r.href.split("/").pop()?.replace(/-/g, " ").replace(/^\w/, c => c.toUpperCase()) || "Page"
         }));
         setSuggestions(filtered.slice(0, 5));
-        setSearchMessage(filtered.length === 0 ? "No matching page. Try students, exams, grades, chat, or settings." : "");
         setShowSuggestions(true);
     }, [searchText, role]);
 
@@ -182,6 +137,51 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
     const notificationsHref = quickActionRoutes[role]?.notifications;
     const messagesHref = quickActionRoutes[role]?.messages;
 
+    const roleRoutes: Record<string, Array<{ href: string; keywords: string[] }>> = {
+        teacher: [
+            { href: "/teacher/dashboard", keywords: ["dashboard", "home", "overview"] },
+            { href: "/teacher/attendance", keywords: ["attendance", "present", "absent"] },
+            { href: "/teacher/announcements", keywords: ["announcement", "announcements", "notice"] },
+            { href: "/teacher/exams", keywords: ["exam", "exams", "quiz", "bank", "grade"] },
+            { href: "/teacher/students", keywords: ["student", "students", "learner"] },
+            { href: "/teacher/notifications", keywords: ["notification", "notifications", "alerts"] },
+            { href: "/teacher/chat", keywords: ["chat", "message", "messages", "conversation"] },
+            { href: "/teacher/calendar", keywords: ["calendar", "event", "events", "schedule"] },
+            { href: "/teacher/settings", keywords: ["setting", "settings", "security", "password", "2fa"] },
+            { href: "/teacher/profile", keywords: ["profile", "account"] },
+        ],
+        admin: [
+            { href: "/admin/dashboard", keywords: ["dashboard", "home", "overview"] },
+            { href: "/admin/school-setup", keywords: ["school", "setup", "configuration", "config"] },
+            { href: "/admin/section-assignment", keywords: ["section assignment", "assign students", "student section", "enroll subjects"] },
+            { href: "/admin/students", keywords: ["student", "students"] },
+            { href: "/admin/teachers", keywords: ["teacher", "teachers", "staff"] },
+            { href: "/admin/parents", keywords: ["parent", "parents", "guardian"] },
+            { href: "/admin/attendance", keywords: ["attendance", "present", "absent"] },
+            { href: "/admin/announcements", keywords: ["announcement", "announcements", "notice"] },
+            { href: "/admin/classes", keywords: ["class", "classes"] },
+            { href: "/admin/registration", keywords: ["registration", "register", "enroll"] },
+            { href: "/admin/chat", keywords: ["chat", "message", "messages", "conversation"] },
+            { href: "/admin/feedback", keywords: ["feedback", "review"] },
+            { href: "/admin/audit", keywords: ["audit", "log", "activity", "history"] },
+            { href: "/admin/settings", keywords: ["setting", "settings", "security"] },
+            { href: "/admin/profile", keywords: ["profile", "account"] },
+        ],
+        student: [
+            { href: "/student/dashboard", keywords: ["dashboard", "home", "overview"] },
+            { href: "/student/chat", keywords: ["chat", "message", "messages"] },
+            { href: "/student/profile", keywords: ["profile", "account"] },
+            { href: "/student/settings", keywords: ["settings", "security"] },
+            { href: "/student/login", keywords: ["login", "sign in"] },
+        ],
+        parent: [
+            { href: "/parent/dashboard", keywords: ["dashboard", "home", "overview"] },
+            { href: "/parent/chat", keywords: ["chat", "message", "messages"] },
+            { href: "/parent/profile", keywords: ["profile", "account"] },
+            { href: "/parent/settings", keywords: ["settings", "security"] },
+        ],
+    };
+
     function getSearchTarget(query: string) {
         const q = query.trim().toLowerCase().replace(/\s+/g, " ");
         if (!q) return null;
@@ -191,7 +191,7 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
             return q;
         }
 
-        const routes = navSearchIndex[role as NavRole] ?? ROLE_ROUTES[role] ?? [];
+        const routes = roleRoutes[role] ?? [];
 
         // First pass: exact/contains match against route path.
         const byPath = routes.find((item) => item.href.toLowerCase().includes(q.replace(/\s+/g, "-")));
@@ -219,14 +219,10 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
         if (!query) return;
         const target = getSearchTarget(query);
         if (!target) {
-            setSearchMessage("No matching page. Try students, exams, grades, chat, or settings.");
-            setShowSuggestions(true);
+            window.alert("No matching page found for your search.");
             return;
         }
         router.push(target);
-        setSearchText("");
-        setShowSuggestions(false);
-        setSearchMessage("");
     }
 
     function handleLogout() {
@@ -238,11 +234,7 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
     const userBlock = (
         <div style={{ position: "relative" }} ref={userMenuRef}>
             <button
-                type="button"
                 onClick={() => setShowUserMenu((v) => !v)}
-                aria-label="User menu"
-                aria-haspopup="menu"
-                aria-expanded={showUserMenu}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
             >
                 <div className="header-user">
@@ -308,52 +300,25 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
 
     return (
         <header className="top-header" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-            <div className="header-search-wrap" ref={searchRef} style={{ flex: "1 1 260px", minWidth: 0 }}>
-            <div className="header-search">
+            <div className="header-search" style={{ flex: "1 1 160px", minWidth: 0 }}>
                 <button type="button" className="header-search-btn" onClick={submitSearch} aria-label="Search">
-                    <Search className="search-icon" size={16} />
+                    <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.3-4.3" />
+                    </svg>
                 </button>
                 <input
                     type="text"
-                    placeholder="Search pages, people, classes..."
+                    placeholder="Search anything..."
                     value={searchText}
                     onChange={(e) => setSearchText(e.target.value)}
-                    onFocus={() => {
-                        if (searchText.trim().length >= 2) setShowSuggestions(true);
-                    }}
                     onKeyDown={(e) => {
                         if (e.key === "Enter") {
                             e.preventDefault();
                             submitSearch();
-                        } else if (e.key === "Escape") {
-                            setShowSuggestions(false);
                         }
                     }}
                 />
-            </div>
-            {showSuggestions && (suggestions.length > 0 || searchMessage) ? (
-                <div className="header-search-panel" role="listbox" aria-label="Search suggestions">
-                    <div className="header-search-panel-title">Quick navigation</div>
-                    {suggestions.map((item) => (
-                        <button
-                            key={item.href}
-                            type="button"
-                            className="header-search-result"
-                            onClick={() => {
-                                router.push(item.href);
-                                setSearchText("");
-                                setShowSuggestions(false);
-                                setSearchMessage("");
-                            }}
-                        >
-                            <span>{item.label}</span>
-                            <small>{item.href}</small>
-                            <ArrowRight size={15} />
-                        </button>
-                    ))}
-                    {searchMessage ? <div className="header-search-empty">{searchMessage}</div> : null}
-                </div>
-            ) : null}
             </div>
 
             <div className="header-actions" style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "nowrap" }}>
@@ -407,7 +372,7 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
                         <span className="notification-dot"></span>
                     </Link>
                 ) : (
-                    <button className="header-icon-btn" title="Notifications" aria-label="Notifications" type="button" aria-disabled="true">
+                    <button className="header-icon-btn" title="Notifications" type="button" aria-disabled="true">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
@@ -417,13 +382,36 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
                 )}
 
                 {messagesHref ? (
-                    <Link href={messagesHref} className="header-icon-btn" title="Messages" aria-label="Open chat">
+                    <Link href={messagesHref} className="header-icon-btn" title="Messages" aria-label="Open chat" style={{ position: "relative" }}>
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                         </svg>
+                        {totalChatUnread > 0 && (
+                            <span style={{
+                                position: "absolute",
+                                top: 0,
+                                right: 0,
+                                minWidth: 16,
+                                height: 16,
+                                borderRadius: 999,
+                                background: "#ef4444",
+                                color: "#fff",
+                                fontSize: "0.6rem",
+                                fontWeight: 800,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                padding: "0 3px",
+                                lineHeight: 1,
+                                border: "2px solid #fff",
+                                pointerEvents: "none",
+                            }}>
+                                {totalChatUnread > 99 ? "99+" : totalChatUnread}
+                            </span>
+                        )}
                     </Link>
                 ) : (
-                    <button className="header-icon-btn" title="Messages" aria-label="Messages" type="button" aria-disabled="true">
+                    <button className="header-icon-btn" title="Messages" type="button" aria-disabled="true">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                         </svg>
