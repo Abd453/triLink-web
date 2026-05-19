@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Building2, Sparkles, Users } from "lucide-react";
+import { BookOpen, Building2, Sparkles, Users, Search } from "lucide-react";
 import { type PublicUser, listUsers, patchUser } from "@/lib/admin-api";
+import Select from "@/components/Select";
 import TablePagination from "@/components/TablePagination";
 import { PageHeader, PageHeaderSkeleton, StatGridSkeleton, TableSkeleton } from "@/components/ui";
 
@@ -152,31 +153,40 @@ export default function AdminTeachers() {
         subtitle="Teachers on staff."
         icon={<BookOpen size={22} />}
         actions={(
-          <Link href="/admin/registration" className="btn btn-primary" style={{ borderRadius: 12 }}>+ Register</Link>
+          <Link href="/admin/registration?from=teachers" className="btn btn-primary" style={{ borderRadius: 12 }}>+ Register</Link>
         )}
       />
 
-      <div className="teachers-summary-grid">
-        <div className="card teachers-summary-card">
-          <div className="teachers-summary-icon blue">
-            <Users size={18} />
+      <div className="stats-grid admin-dash-stats-grid">
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon blue">
+            <Users size={20} />
           </div>
-          <div className="teachers-summary-label">Total teachers</div>
-          <div className="teachers-summary-value">{rows.length}</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Total teachers</div>
+            <div className="stat-value">{rows.length}</div>
+            <div className="admin-dash-stat-note">Faculty members</div>
+          </div>
         </div>
-        <div className="card teachers-summary-card">
-          <div className="teachers-summary-icon teal">
-            <BookOpen size={18} />
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon teal">
+            <BookOpen size={20} />
           </div>
-          <div className="teachers-summary-label">With subject</div>
-          <div className="teachers-summary-value">{withSubject}</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">With subject</div>
+            <div className="stat-value">{withSubject}</div>
+            <div className="admin-dash-stat-note">Assigned expertise</div>
+          </div>
         </div>
-        <div className="card teachers-summary-card">
-          <div className="teachers-summary-icon orange">
-            <Building2 size={18} />
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon orange">
+            <Building2 size={20} />
           </div>
-          <div className="teachers-summary-label">With department</div>
-          <div className="teachers-summary-value">{withDepartment}</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">With department</div>
+            <div className="stat-value">{withDepartment}</div>
+            <div className="admin-dash-stat-note">Departmentalized staff</div>
+          </div>
         </div>
       </div>
 
@@ -184,28 +194,68 @@ export default function AdminTeachers() {
 
       {/* Filters */}
       <div className="card" style={{ marginBottom: "1rem", padding: "1rem 1.25rem", display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
-        <input
-          value={q}
-          onChange={(e) => { setQ(e.target.value); setPage(0); }}
-          placeholder="Search name or email…"
-          style={{ ...inputStyle, minWidth: 220, flex: "1 1 220px" }}
-        />
-        <select
+        <div style={{ position: "relative", minWidth: 220, flex: "1 1 220px" }}>
+          <Search size={16} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "var(--gray-400)", pointerEvents: "none" }} />
+          <input
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setPage(0); }}
+            placeholder="Search name or email…"
+            style={{
+              padding: "0.75rem 1rem 0.75rem 2.75rem",
+              borderRadius: "20px",
+              border: "1.5px solid var(--gray-300)",
+              backgroundColor: "var(--gray-50)",
+              fontSize: "0.95rem",
+              width: "100%",
+              outline: "none",
+              transition: "all 0.2s ease",
+              color: "var(--gray-800)",
+              boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)",
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = "var(--primary-400)";
+              e.target.style.backgroundColor = "#fff";
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = "var(--gray-300)";
+              e.target.style.backgroundColor = "var(--gray-50)";
+            }}
+          />
+        </div>
+        <Select
           value={subjectFilter}
           onChange={(e) => { setSubjectFilter(e.target.value); setPage(0); }}
-          style={selectStyle}
+          style={{
+            padding: "0.65rem 1.75rem 0.65rem 1rem",
+            borderRadius: "20px",
+            border: "1.5px solid var(--primary-200)",
+            backgroundColor: "var(--primary-50)",
+            color: "var(--primary-800)",
+            fontWeight: 600,
+            outline: "none",
+            cursor: "pointer",
+          }}
         >
           <option value="">All subjects</option>
           {subjectOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select
+        </Select>
+        <Select
           value={departmentFilter}
           onChange={(e) => { setDepartmentFilter(e.target.value); setPage(0); }}
-          style={selectStyle}
+          style={{
+            padding: "0.65rem 1.75rem 0.65rem 1rem",
+            borderRadius: "20px",
+            border: "1.5px solid var(--primary-200)",
+            backgroundColor: "var(--primary-50)",
+            color: "var(--primary-800)",
+            fontWeight: 600,
+            outline: "none",
+            cursor: "pointer",
+          }}
         >
           <option value="">All departments</option>
           {departmentOptions.map((d) => <option key={d} value={d}>{d}</option>)}
-        </select>
+        </Select>
       </div>
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>

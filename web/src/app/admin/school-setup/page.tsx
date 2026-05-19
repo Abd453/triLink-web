@@ -65,6 +65,7 @@ export default function AdminSchoolSetup() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [terms, setTerms] = useState<TermRow[]>([]);
   const [termsYearId, setTermsYearId] = useState("");
+  const [activeTab, setActiveTab] = useState("academic_years");
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -89,7 +90,7 @@ export default function AdminSchoolSetup() {
     selectedSubjects: [] as string[],
   });
   const [loadingGradeCreate, setLoadingGradeCreate] = useState(false);
-  
+
   const [sNew, setSNew] = useState({ name: "" });
   const [subNew, setSubNew] = useState({ name: "", code: "" });
 
@@ -371,85 +372,129 @@ export default function AdminSchoolSetup() {
         )}
       />
 
-      <div className="school-setup-summary-grid">
-        <div className="card school-setup-summary-card">
-          <div className="school-setup-summary-icon blue">
-            <CalendarDays size={18} />
+      <div className="stats-grid admin-dash-stats-grid" style={{ marginBottom: "2rem" }}>
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon blue">
+            <CalendarDays size={20} />
           </div>
-          <div className="school-setup-summary-label">Academic years</div>
-          <div className="school-setup-summary-value">{years.length}</div>
-          <div className="school-setup-summary-note">{activeYears} active, {archivedYears} archived</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Academic years</div>
+            <div className="stat-value">{years.length}</div>
+            <div className="admin-dash-stat-note">{activeYears} active, {archivedYears} archived</div>
+          </div>
         </div>
-        <div className="card school-setup-summary-card">
-          <div className="school-setup-summary-icon teal">
-            <LayoutGrid size={18} />
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon green">
+            <LayoutGrid size={20} />
           </div>
-          <div className="school-setup-summary-label">Terms</div>
-          <div className="school-setup-summary-value">{terms.length}</div>
-          <div className="school-setup-summary-note">For selected academic year</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Terms</div>
+            <div className="stat-value">{terms.length}</div>
+            <div className="admin-dash-stat-note">For selected academic year</div>
+          </div>
         </div>
-        <div className="card school-setup-summary-card">
-          <div className="school-setup-summary-icon orange">
-            <Layers3 size={18} />
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon orange">
+            <Layers3 size={20} />
           </div>
-          <div className="school-setup-summary-label">Structure nodes</div>
-          <div className="school-setup-summary-value">{grades.length + sections.length}</div>
-          <div className="school-setup-summary-note">{grades.length} grades and {sections.length} sections</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Structure nodes</div>
+            <div className="stat-value">{grades.length + sections.length}</div>
+            <div className="admin-dash-stat-note">{grades.length} grades and {sections.length} sections</div>
+          </div>
         </div>
-        <div className="card school-setup-summary-card">
-          <div className="school-setup-summary-icon purple">
-            <BookOpen size={18} />
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon purple">
+            <BookOpen size={20} />
           </div>
-          <div className="school-setup-summary-label">Subjects</div>
-          <div className="school-setup-summary-value">{subjects.length}</div>
-          <div className="school-setup-summary-note">Curriculum catalog</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Subjects</div>
+            <div className="stat-value">{subjects.length}</div>
+            <div className="admin-dash-stat-note">Curriculum catalog</div>
+          </div>
         </div>
       </div>
 
       {err && <div className="card" style={{ color: "var(--danger)", marginBottom: "1rem" }}>{err}</div>}
 
-      {/* Academic years */}
+      <div style={{ display: "flex", gap: "0.5rem", borderBottom: "1px solid var(--gray-200)", marginBottom: "2rem", overflowX: "auto", paddingBottom: "0.5rem", WebkitOverflowScrolling: "touch" }}>
+        {[
+          { id: "academic_years", label: "Academic years", icon: <CalendarDays size={16} /> },
+          { id: "terms", label: "Terms", icon: <LayoutGrid size={16} /> },
+          { id: "grades", label: "Grades", icon: <Layers3 size={16} /> },
+          { id: "sections", label: "Sections", icon: <LayoutGrid size={16} /> },
+          { id: "subjects", label: "Subjects", icon: <BookOpen size={16} /> }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            style={{
+              display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 1rem", borderRadius: "8px", fontWeight: 600, fontSize: "0.9rem", transition: "all 0.2s",
+              backgroundColor: activeTab === tab.id ? "var(--primary-50)" : "transparent",
+              color: activeTab === tab.id ? "var(--primary-600)" : "var(--gray-500)",
+              border: "none", cursor: "pointer", whiteSpace: "nowrap"
+            }}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "academic_years" && (
+        <>
+          {/* Academic years */}
       <div className="card school-setup-card" style={{ marginBottom: "1.5rem" }}>
         <h3 className="card-title school-setup-section-title" style={{ marginBottom: "0.75rem" }}>
           <CalendarDays size={16} />
           Academic years
         </h3>
-        <div style={{ display: "grid", gap: "0.5rem", marginBottom: "1rem", maxWidth: 480 }}>
-          <input
-            placeholder="Label (e.g. 2025/2026)"
-            value={newYear.label}
-            onChange={(e) => setNewYear((n) => ({ ...n, label: e.target.value }))}
-            style={{ padding: "0.5rem 0.75rem", borderRadius: 8, border: "1px solid var(--gray-200)" }}
-          />
-          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-            <label style={{ fontSize: "0.85rem" }}>
-              Start
+        <div style={{ display: "grid", gap: "1.25rem", marginBottom: "1.5rem", maxWidth: 540 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>Label</label>
+            <input
+              placeholder="e.g. 2025/2026"
+              value={newYear.label}
+              onChange={(e) => setNewYear((n) => ({ ...n, label: e.target.value }))}
+              style={{ padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", fontSize: "0.95rem", width: "100%", outline: "none", transition: "all 0.2s", color: "var(--gray-800)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.02)" }}
+              onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }}
+              onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }}
+            />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>Start Date</label>
               <input
                 type="date"
                 value={newYear.startDate}
                 onChange={(e) => setNewYear((n) => ({ ...n, startDate: e.target.value }))}
-                style={{ display: "block", marginTop: 4, padding: "0.35rem" }}
+                style={{ padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", fontSize: "0.95rem", width: "100%", outline: "none", transition: "all 0.2s", color: "var(--gray-800)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.02)" }}
+                onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }}
+                onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }}
               />
-            </label>
-            <label style={{ fontSize: "0.85rem" }}>
-              End
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>End Date</label>
               <input
                 type="date"
                 value={newYear.endDate}
                 onChange={(e) => setNewYear((n) => ({ ...n, endDate: e.target.value }))}
-                style={{ display: "block", marginTop: 4, padding: "0.35rem" }}
+                style={{ padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", fontSize: "0.95rem", width: "100%", outline: "none", transition: "all 0.2s", color: "var(--gray-800)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.02)" }}
+                onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }}
+                onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }}
               />
-            </label>
+            </div>
           </div>
-          <label style={{ fontSize: "0.85rem", display: "flex", alignItems: "center", gap: 8 }}>
+          <label style={{ fontSize: "0.85rem", display: "flex", alignItems: "center", gap: 10, marginTop: "0.5rem", color: "var(--gray-600)", fontWeight: 500, cursor: "pointer" }}>
             <input
               type="checkbox"
               checked={newYear.isActive}
               onChange={(e) => setNewYear((n) => ({ ...n, isActive: e.target.checked }))}
+              style={{ width: "18px", height: "18px", accentColor: "var(--primary-600)", cursor: "pointer" }}
             />
             Set as active year on create
           </label>
-          <button type="button" className="btn btn-primary" onClick={handleCreateYear}>
+          <button type="button" className="btn btn-primary" onClick={handleCreateYear} style={{ marginTop: "0.5rem", padding: "0.85rem", fontSize: "0.95rem", fontWeight: 600, borderRadius: "10px" }}>
             Create year
           </button>
         </div>
@@ -556,42 +601,58 @@ export default function AdminSchoolSetup() {
           </table>
         </div>
       </div>
+      </>)}
 
-      {/* Terms */}
+      {activeTab === "terms" && (
       <div className="card school-setup-card" style={{ marginBottom: "1.5rem" }}>
         <h3 className="card-title school-setup-section-title" style={{ marginBottom: "0.75rem" }}>
           <LayoutGrid size={16} />
           Terms
         </h3>
-        <label style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>Academic year</label>
-        <Select
-          value={termsYearId}
-          onChange={(e) => {
-            const next = e.target.value;
-            setTermsYearId(next);
-            if (!next) setTerms([]);
-          }}
-          style={{ padding: "0.5rem 0.75rem", borderRadius: 8, border: "1px solid var(--gray-200)", marginBottom: "1rem", minWidth: 220 }}
-        >
-          {years.length === 0 && <option value="">Create a year first</option>}
-          {years.map((y) => (
-            <option key={y.id} value={y.id}>
-              {y.label}
-            </option>
-          ))}
-        </Select>
-        <div style={{ display: "grid", gap: "0.5rem", marginBottom: "1rem", maxWidth: 480 }}>
-          <input
-            placeholder="Term name"
-            value={termForm.name}
-            onChange={(e) => setTermForm((t) => ({ ...t, name: e.target.value }))}
-            style={{ padding: "0.5rem 0.75rem", borderRadius: 8, border: "1px solid var(--gray-200)" }}
-          />
-          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-            <input type="date" value={termForm.startDate} onChange={(e) => setTermForm((t) => ({ ...t, startDate: e.target.value }))} />
-            <input type="date" value={termForm.endDate} onChange={(e) => setTermForm((t) => ({ ...t, endDate: e.target.value }))} />
+        <div style={{ display: "grid", gap: "1.25rem", marginBottom: "1.5rem", maxWidth: 540 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>Academic year</label>
+            <Select
+              value={termsYearId}
+              onChange={(e) => {
+                const next = e.target.value;
+                setTermsYearId(next);
+                if (!next) setTerms([]);
+              }}
+              style={{ padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", fontSize: "0.95rem", width: "100%", outline: "none", transition: "all 0.2s", color: "var(--gray-800)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.02)", cursor: "pointer" }}
+              onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }}
+              onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }}
+            >
+              {years.length === 0 && <option value="">Create a year first</option>}
+              {years.map((y) => (
+                <option key={y.id} value={y.id}>
+                  {y.label}
+                </option>
+              ))}
+            </Select>
           </div>
-          <button type="button" className="btn btn-primary" onClick={handleAddTerm} disabled={!termsYearId}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>Term name</label>
+            <input
+              placeholder="e.g. Fall Semester"
+              value={termForm.name}
+              onChange={(e) => setTermForm((t) => ({ ...t, name: e.target.value }))}
+              style={{ padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", fontSize: "0.95rem", width: "100%", outline: "none", transition: "all 0.2s", color: "var(--gray-800)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.02)" }}
+              onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }}
+              onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }}
+            />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>Start Date</label>
+              <input type="date" value={termForm.startDate} onChange={(e) => setTermForm((t) => ({ ...t, startDate: e.target.value }))} style={{ padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", fontSize: "0.95rem", width: "100%", outline: "none", transition: "all 0.2s", color: "var(--gray-800)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.02)" }} onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }} onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>End Date</label>
+              <input type="date" value={termForm.endDate} onChange={(e) => setTermForm((t) => ({ ...t, endDate: e.target.value }))} style={{ padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", fontSize: "0.95rem", width: "100%", outline: "none", transition: "all 0.2s", color: "var(--gray-800)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.02)" }} onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }} onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }} />
+            </div>
+          </div>
+          <button type="button" className="btn btn-primary" onClick={handleAddTerm} disabled={!termsYearId} style={{ marginTop: "0.5rem", padding: "0.85rem", fontSize: "0.95rem", fontWeight: 600, borderRadius: "10px" }}>
             Add term
           </button>
         </div>
@@ -643,7 +704,9 @@ export default function AdminSchoolSetup() {
           </table>
         </div>
       </div>
+      )}
 
+      {activeTab === "grades" && (
       <div className="card school-setup-card" style={{ marginBottom: "1.5rem" }}>
         <h3 className="card-title school-setup-section-title" style={{ marginBottom: "0.75rem" }}>
           <Layers3 size={16} />
@@ -693,25 +756,32 @@ export default function AdminSchoolSetup() {
           </table>
         </div>
       </div>
+      )}
 
-      {/* Sections */}
+      {activeTab === "sections" && (
       <div className="card school-setup-card" style={{ marginBottom: "1.5rem" }}>
         <h3 className="card-title school-setup-section-title" style={{ marginBottom: "0.75rem" }}>
           <LayoutGrid size={16} />
           Sections
         </h3>
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-          <input
-            placeholder="Name (unique)"
-            value={sNew.name}
-            onChange={(e) => setSNew({ name: e.target.value })}
-            style={{ padding: "0.5rem 0.75rem", borderRadius: 8, border: "1px solid var(--gray-200)" }}
-            disabled={loading}
-          />
+        <div style={{ display: "flex", gap: "1rem", alignItems: "flex-end", marginBottom: "1.5rem", maxWidth: 540 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", flex: 1 }}>
+            <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>Section Name</label>
+            <input
+              placeholder="e.g. Section A"
+              value={sNew.name}
+              onChange={(e) => setSNew({ name: e.target.value })}
+              style={{ padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", fontSize: "0.95rem", width: "100%", outline: "none", transition: "all 0.2s", color: "var(--gray-800)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.02)" }}
+              onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }}
+              onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }}
+              disabled={loading}
+            />
+          </div>
           <button
             type="button"
             className="btn btn-primary"
             disabled={loading}
+            style={{ padding: "0.8rem 1.5rem", fontSize: "0.95rem", fontWeight: 600, borderRadius: "10px", height: "46px" }}
             onClick={async () => {
               if (!sNew.name.trim()) return;
               try {
@@ -760,32 +830,44 @@ export default function AdminSchoolSetup() {
           </table>
         </div>
       </div>
+      )}
 
-      {/* Subjects */}
+      {activeTab === "subjects" && (
       <div className="card school-setup-card" style={{ marginBottom: "1.5rem" }}>
         <h3 className="card-title school-setup-section-title" style={{ marginBottom: "0.75rem" }}>
           <BookOpen size={16} />
           Subjects
         </h3>
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-          <input
-            placeholder="Name"
-            value={subNew.name}
-            onChange={(e) => setSubNew((u) => ({ ...u, name: e.target.value }))}
-            style={{ padding: "0.5rem 0.75rem", borderRadius: 8, border: "1px solid var(--gray-200)" }}
-            disabled={loading}
-          />
-          <input
-            placeholder="Code (optional)"
-            value={subNew.code}
-            onChange={(e) => setSubNew((u) => ({ ...u, code: e.target.value }))}
-            style={{ padding: "0.5rem 0.75rem", borderRadius: 8, border: "1px solid var(--gray-200)" }}
-            disabled={loading}
-          />
+        <div style={{ display: "flex", gap: "1rem", alignItems: "flex-end", marginBottom: "1.5rem", maxWidth: 640 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", flex: 2 }}>
+            <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>Name</label>
+            <input
+              placeholder="e.g. Mathematics"
+              value={subNew.name}
+              onChange={(e) => setSubNew((u) => ({ ...u, name: e.target.value }))}
+              style={{ padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", fontSize: "0.95rem", width: "100%", outline: "none", transition: "all 0.2s", color: "var(--gray-800)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.02)" }}
+              onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }}
+              onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }}
+              disabled={loading}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", flex: 1 }}>
+            <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--gray-700)" }}>Code (optional)</label>
+            <input
+              placeholder="e.g. MATH101"
+              value={subNew.code}
+              onChange={(e) => setSubNew((u) => ({ ...u, code: e.target.value }))}
+              style={{ padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", fontSize: "0.95rem", width: "100%", outline: "none", transition: "all 0.2s", color: "var(--gray-800)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.02)" }}
+              onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }}
+              onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }}
+              disabled={loading}
+            />
+          </div>
           <button
             type="button"
             className="btn btn-primary"
             disabled={loading}
+            style={{ padding: "0.8rem 1.5rem", fontSize: "0.95rem", fontWeight: 600, borderRadius: "10px", height: "46px" }}
             onClick={async () => {
               if (!subNew.name.trim()) return;
               try {
@@ -835,6 +917,7 @@ export default function AdminSchoolSetup() {
           </table>
         </div>
       </div>
+      )}
 
       {editYear && (
         <div
@@ -970,19 +1053,19 @@ export default function AdminSchoolSetup() {
               Create Grade
             </h3>
 
-            {/* Grade Name */}
             <label style={{ display: "block", marginBottom: "1rem", fontSize: "0.85rem" }}>
               Grade Name *
               <input
                 value={gradeForm.name}
                 onChange={(e) => setGradeForm((f) => ({ ...f, name: e.target.value }))}
                 placeholder="e.g., Grade 9"
-                style={{ display: "block", width: "100%", marginTop: 4, padding: "0.5rem 0.75rem", borderRadius: 8, border: "1px solid var(--gray-200)" }}
+                style={{ padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", fontSize: "0.95rem", width: "100%", outline: "none", transition: "all 0.2s", color: "var(--gray-800)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.02)", marginTop: 6 }}
+                onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }}
+                onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }}
                 disabled={loadingGradeCreate}
               />
             </label>
 
-            {/* Order Index */}
             <label style={{ display: "block", marginBottom: "1rem", fontSize: "0.85rem" }}>
               Order Index (optional)
               <input
@@ -990,12 +1073,13 @@ export default function AdminSchoolSetup() {
                 onChange={(e) => setGradeForm((f) => ({ ...f, orderIndex: e.target.value }))}
                 placeholder="e.g., 9"
                 type="number"
-                style={{ display: "block", width: "100%", marginTop: 4, padding: "0.5rem 0.75rem", borderRadius: 8, border: "1px solid var(--gray-200)" }}
+                style={{ padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", fontSize: "0.95rem", width: "100%", outline: "none", transition: "all 0.2s", color: "var(--gray-800)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.02)", marginTop: 6 }}
+                onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }}
+                onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }}
                 disabled={loadingGradeCreate}
               />
             </label>
 
-            {/* Existing Sections */}
             <div style={{ marginBottom: "1rem" }}>
               <label style={{ display: "block", marginBottom: 8, fontSize: "0.85rem", fontWeight: 600 }}>
                 Assign Existing Sections ({gradeForm.selectedSections.length} selected)
@@ -1036,7 +1120,6 @@ export default function AdminSchoolSetup() {
               )}
             </div>
 
-            {/* New Sections */}
             <div style={{ marginBottom: "1rem" }}>
               <label style={{ display: "block", marginBottom: 8, fontSize: "0.85rem", fontWeight: 600 }}>
                 Create New Sections
@@ -1050,7 +1133,9 @@ export default function AdminSchoolSetup() {
                   }
                 }}
                 disabled={loadingGradeCreate}
-                style={{ display: "block", width: "100%", padding: "0.5rem 0.75rem", borderRadius: 8, border: "1px solid var(--gray-200)", marginBottom: "0.5rem" }}
+                style={{ padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", fontSize: "0.95rem", width: "100%", outline: "none", transition: "all 0.2s", color: "var(--gray-800)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.02)", marginBottom: "0.5rem", marginTop: 6 }}
+                onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }}
+                onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }}
               />
               <small style={{ fontSize: "0.75rem", color: "var(--gray-600)" }}>Press Enter to add</small>
               {gradeForm.newSections.length > 0 && (
@@ -1091,7 +1176,6 @@ export default function AdminSchoolSetup() {
               )}
             </div>
 
-            {/* Subjects */}
             <div style={{ marginBottom: "1rem" }}>
               <label style={{ display: "block", marginBottom: 8, fontSize: "0.85rem", fontWeight: 600 }}>
                 Assign Subjects ({gradeForm.selectedSubjects.length} selected)
@@ -1165,12 +1249,12 @@ export default function AdminSchoolSetup() {
   );
 }
 
-function GradeRow({ g, allSections, allSubjects, onSaved, showT }: { 
-  g: Grade; 
+function GradeRow({ g, allSections, allSubjects, onSaved, showT }: {
+  g: Grade;
   allSections: Section[];
   allSubjects: Subject[];
-  onSaved: () => Promise<void>; 
-  showT: (m: string) => void 
+  onSaved: () => Promise<void>;
+  showT: (m: string) => void
 }) {
   const [name, setName] = useState(g.name);
   const [order, setOrder] = useState(g.orderIndex != null ? String(g.orderIndex) : "");
@@ -1295,10 +1379,10 @@ function GradeRow({ g, allSections, allSubjects, onSaved, showT }: {
         {isEditing ? (
           <>
             <td>
-              <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%", padding: "0.35rem" }} disabled={saving} />
+              <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%", padding: "0.5rem 0.75rem", borderRadius: "6px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", outline: "none", transition: "all 0.2s" }} onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }} onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }} disabled={saving} />
             </td>
             <td>
-              <input value={order} onChange={(e) => setOrder(e.target.value)} style={{ width: 80, padding: "0.35rem" }} disabled={saving} />
+              <input value={order} onChange={(e) => setOrder(e.target.value)} style={{ width: 80, padding: "0.5rem 0.75rem", borderRadius: "6px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", outline: "none", transition: "all 0.2s" }} onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }} onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }} disabled={saving} />
             </td>
             <td style={{ whiteSpace: "nowrap" }}>
               <button type="button" className="btn btn-primary btn-sm" style={{ marginRight: 4 }} onClick={handleSave} disabled={saving}>
@@ -1456,7 +1540,7 @@ function SectionRow({ s, onSaved, showT }: { s: Section; onSaved: () => Promise<
   return (
     <tr>
       <td>
-        <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%", padding: "0.35rem" }} />
+        <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%", padding: "0.5rem 0.75rem", borderRadius: "6px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", outline: "none", transition: "all 0.2s" }} onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }} onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }} />
       </td>
       <td style={{ whiteSpace: "nowrap" }}>
         <button
@@ -1502,10 +1586,10 @@ function SubjectRow({ s, onSaved, showT }: { s: Subject; onSaved: () => Promise<
   return (
     <tr>
       <td>
-        <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%", padding: "0.35rem" }} />
+        <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%", padding: "0.5rem 0.75rem", borderRadius: "6px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", outline: "none", transition: "all 0.2s" }} onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }} onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }} />
       </td>
       <td>
-        <input value={code} onChange={(e) => setCode(e.target.value)} style={{ width: 120, padding: "0.35rem" }} />
+        <input value={code} onChange={(e) => setCode(e.target.value)} style={{ width: 120, padding: "0.5rem 0.75rem", borderRadius: "6px", border: "1.5px solid var(--gray-300)", backgroundColor: "var(--gray-50)", outline: "none", transition: "all 0.2s" }} onFocus={(e) => { e.target.style.borderColor = "var(--primary-400)"; e.target.style.backgroundColor = "#fff"; }} onBlur={(e) => { e.target.style.borderColor = "var(--gray-300)"; e.target.style.backgroundColor = "var(--gray-50)"; }} />
       </td>
       <td style={{ whiteSpace: "nowrap" }}>
         <button

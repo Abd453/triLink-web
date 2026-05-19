@@ -530,38 +530,46 @@ export default function AdminClasses() {
         )}
       />
 
-      <div className="classes-summary-grid">
-        <div className="card classes-summary-card">
-          <div className="classes-summary-icon blue">
-            <BookOpen size={18} />
+      <div className="stats-grid admin-dash-stats-grid">
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon blue">
+            <BookOpen size={20} />
           </div>
-          <div className="classes-summary-label">Offerings</div>
-          <div className="classes-summary-value">{offerings.length}</div>
-          <div className="classes-summary-note">Current year classes</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Offerings</div>
+            <div className="stat-value">{offerings.length}</div>
+            <div className="admin-dash-stat-note">Current year classes</div>
+          </div>
         </div>
-        <div className="card classes-summary-card">
-          <div className="classes-summary-icon teal">
-            <UserRoundCheck size={18} />
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon teal">
+            <UserRoundCheck size={20} />
           </div>
-          <div className="classes-summary-label">Assigned teachers</div>
-          <div className="classes-summary-value">{assignedTeacherCount}</div>
-          <div className="classes-summary-note">Unique faculty assigned</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Assigned teachers</div>
+            <div className="stat-value">{assignedTeacherCount}</div>
+            <div className="admin-dash-stat-note">Unique faculty assigned</div>
+          </div>
         </div>
-        <div className="card classes-summary-card">
-          <div className="classes-summary-icon orange">
-            <GraduationCap size={18} />
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon orange">
+            <GraduationCap size={20} />
           </div>
-          <div className="classes-summary-label">Students scope</div>
-          <div className="classes-summary-value">{years.length ? "Open" : "Pending"}</div>
-          <div className="classes-summary-note">Based on class enrollments</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Students scope</div>
+            <div className="stat-value">{years.length ? "Open" : "Pending"}</div>
+            <div className="admin-dash-stat-note">Based on enrollments</div>
+          </div>
         </div>
-        <div className="card classes-summary-card">
-          <div className="classes-summary-icon purple">
-            <CalendarDays size={18} />
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon purple">
+            <CalendarDays size={20} />
           </div>
-          <div className="classes-summary-label">Active year</div>
-          <div className="classes-summary-value classes-summary-small">{activeYear?.label ?? "None"}</div>
-          <div className="classes-summary-note">Switch or activate below</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Active year</div>
+            <div className="stat-value" style={{ fontSize: "1.1rem" }}>{activeYear?.label ?? "None"}</div>
+            <div className="admin-dash-stat-note">Switch or activate below</div>
+          </div>
         </div>
       </div>
 

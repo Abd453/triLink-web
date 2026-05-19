@@ -11,6 +11,7 @@ import {
   listAnnouncements 
 } from "@/lib/admin-api";
 import Select from "@/components/Select";
+import TablePagination from "@/components/TablePagination";
 import { PageHeader, PageHeaderSkeleton, StatGridSkeleton, CardSkeleton } from "@/components/ui";
 
 const AUDIENCES = ["all", "students", "teachers", "parents"];
@@ -37,6 +38,14 @@ export default function AdminAnnouncements() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
+
+  const maxPage = Math.max(0, Math.ceil(rows.length / rowsPerPage) - 1);
+  const currentPage = Math.min(page, maxPage);
+  const startIdx = currentPage * rowsPerPage;
+  const endIdx = Math.min(startIdx + rowsPerPage, rows.length);
+  const visibleRows = rows.slice(startIdx, endIdx);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -196,7 +205,25 @@ export default function AdminAnnouncements() {
                  placeholder="Main heading for the announcement" 
                  value={title} 
                  onChange={(e) => setTitle(e.target.value)} 
-                 style={{ padding: "0.75rem 1rem", borderRadius: 12, border: "1.5px solid var(--gray-200)", fontSize: "0.95rem", width: "100%", outline: "none" }} 
+                 style={{
+                   padding: "0.75rem 1rem",
+                   borderRadius: "12px",
+                   border: "1.5px solid var(--gray-300)",
+                   backgroundColor: "var(--gray-50)",
+                   fontSize: "0.95rem",
+                   width: "100%",
+                   outline: "none",
+                   transition: "all 0.2s ease",
+                   boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)",
+                 }}
+                 onFocus={(e) => {
+                   e.target.style.borderColor = "var(--primary-400)";
+                   e.target.style.backgroundColor = "#fff";
+                 }}
+                 onBlur={(e) => {
+                   e.target.style.borderColor = "var(--gray-300)";
+                   e.target.style.backgroundColor = "var(--gray-50)";
+                 }}
                />
              </div>
              <div style={{ display: "grid", gap: "0.5rem" }}>
@@ -204,7 +231,16 @@ export default function AdminAnnouncements() {
                <Select 
                  value={audience} 
                  onChange={(e) => setAudience(e.target.value)} 
-                 style={{ padding: "0.75rem", borderRadius: 12, border: "1.5px solid var(--gray-200)", background: "var(--gray-50)", cursor: "pointer", fontWeight: 600 }}
+                 style={{
+                   padding: "0.75rem 1.25rem",
+                   borderRadius: "20px", // Rounded perfectly as in classes!
+                   border: "1.5px solid var(--primary-200)",
+                   background: "var(--primary-50)",
+                   color: "var(--primary-800)",
+                   cursor: "pointer",
+                   fontWeight: 600,
+                   outline: "none",
+                 }}
                >
                  {AUDIENCES.map((a) => (
                    <option key={a} value={a}>
@@ -222,7 +258,26 @@ export default function AdminAnnouncements() {
               value={body} 
               onChange={(e) => setBody(e.target.value)} 
               rows={4} 
-              style={{ padding: "0.75rem 1rem", borderRadius: 12, border: "1.5px solid var(--gray-200)", fontSize: "0.95rem", width: "100%", outline: "none", resize: "none" }} 
+              style={{
+                padding: "0.75rem 1rem",
+                borderRadius: "12px",
+                border: "1.5px solid var(--gray-300)",
+                backgroundColor: "var(--gray-50)",
+                fontSize: "0.95rem",
+                width: "100%",
+                outline: "none",
+                resize: "none",
+                transition: "all 0.2s ease",
+                boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)",
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = "var(--primary-400)";
+                e.target.style.backgroundColor = "#fff";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "var(--gray-300)";
+                e.target.style.backgroundColor = "var(--gray-50)";
+              }}
             />
           </div>
 
@@ -277,7 +332,7 @@ export default function AdminAnnouncements() {
                   </td>
                 </tr>
               ) : (
-                rows.map((a) => (
+                visibleRows.map((a) => (
                   <tr key={a.id} className="table-row-hover">
                     <td style={{ padding: "1.25rem 2rem", fontWeight: 700, color: "var(--gray-800)" }}>{a.title}</td>
                     <td style={{ padding: "1.25rem 2rem" }}>
@@ -313,6 +368,19 @@ export default function AdminAnnouncements() {
             </tbody>
           </table>
         </div>
+
+        {rows.length > 5 && (
+          <TablePagination
+            total={rows.length}
+            page={currentPage}
+            rowsPerPage={rowsPerPage}
+            onPageChange={setPage}
+            onRowsPerPageChange={(n) => {
+              setRowsPerPage(n);
+              setPage(0);
+            }}
+          />
+        )}
       </div>
       
       <style jsx>{`

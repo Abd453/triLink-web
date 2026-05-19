@@ -285,38 +285,51 @@ export default function AdminAttendance() {
       />
       {err && <div className="card" style={{ color: "var(--danger)", marginBottom: "1rem" }}>{err}</div>}
 
-      <div className="attendance-summary-grid">
-        <div className="card attendance-summary-card">
-          <div className="attendance-summary-icon blue">
-            <CalendarDays size={18} />
+      <div className="stats-grid admin-dash-stats-grid">
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon blue">
+            <CalendarDays size={20} />
           </div>
-          <div className="attendance-summary-label">Academic year</div>
-          <div className="attendance-summary-value attendance-summary-small">{activeYearLabel}</div>
-          <div className="attendance-summary-note">Selected scope</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Academic year</div>
+            <div className="stat-value" style={{ fontSize: "1.2rem" }}>{activeYearLabel}</div>
+            <div className="admin-dash-stat-note">Selected scope</div>
+          </div>
         </div>
-        <div className="card attendance-summary-card">
-          <div className="attendance-summary-icon teal">
-            <ClipboardCheck size={18} />
+
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon teal">
+            <ClipboardCheck size={20} />
           </div>
-          <div className="attendance-summary-label">Total sessions</div>
-          <div className="attendance-summary-value">{totalSessions}</div>
-          <div className="attendance-summary-note">{filterGrade ? `${gradeOptions.find(g => g.id === filterGrade)?.name ?? ""}${filterSection ? ` · ${sectionOptions.find(s => s.id === filterSection)?.name ?? ""}` : ""}` : "All classes"}</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Total sessions</div>
+            <div className="stat-value">{totalSessions}</div>
+            <div className="admin-dash-stat-note">
+              {filterGrade ? `${gradeOptions.find(g => g.id === filterGrade)?.name ?? ""}${filterSection ? ` · ${sectionOptions.find(s => s.id === filterSection)?.name ?? ""}` : ""}` : "All classes"}
+            </div>
+          </div>
         </div>
-        <div className="card attendance-summary-card">
-          <div className="attendance-summary-icon orange">
-            <Users size={18} />
+
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon orange">
+            <Users size={20} />
           </div>
-          <div className="attendance-summary-label">Enrolled students</div>
-          <div className="attendance-summary-value">{totalEnrolled}</div>
-          <div className="attendance-summary-note">Class roster size</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Enrolled students</div>
+            <div className="stat-value">{totalEnrolled}</div>
+            <div className="admin-dash-stat-note">Class roster size</div>
+          </div>
         </div>
-        <div className="card attendance-summary-card">
-          <div className="attendance-summary-icon purple">
-            <CalendarCheck2 size={18} />
+
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon purple">
+            <CalendarCheck2 size={20} />
           </div>
-          <div className="attendance-summary-label">Overall present rate</div>
-          <div className="attendance-summary-value">{classId ? `${overallPresentRate}%` : "—"}</div>
-          <div className="attendance-summary-note">Across all sessions</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Overall present rate</div>
+            <div className="stat-value">{classId ? `${overallPresentRate}%` : "—"}</div>
+            <div className="admin-dash-stat-note">Across all sessions</div>
+          </div>
         </div>
       </div>
 
@@ -334,7 +347,7 @@ export default function AdminAttendance() {
               setFilterSection("");
               setFilterSubject("");
             }}
-            style={{ display: "block", marginTop: 4, padding: "0.6rem 1rem", borderRadius: "20px", border: "1px solid var(--primary-200)", background: "var(--primary-50)", color: "var(--primary-800)", width: "100%", outline: "none", cursor: "pointer", fontWeight: 500 }}
+            style={{ display: "block", marginTop: 4, padding: "0.65rem 1rem", borderRadius: "20px", border: "1.5px solid var(--primary-200)", background: "var(--primary-50)", color: "var(--primary-800)", width: "100%", outline: "none", cursor: "pointer", fontWeight: 600 }}
           >
             {years.length === 0 && <option value="">No years</option>}
             {years.map((y) => (
@@ -352,7 +365,7 @@ export default function AdminAttendance() {
             value={filterGrade}
             onChange={(e) => { setFilterGrade(e.target.value); setFilterSection(""); setFilterSubject(""); setClassId(""); }}
             disabled={loadingOfferings}
-            style={{ display: "block", marginTop: 4, padding: "0.6rem 1rem", borderRadius: "10px", border: "1px solid var(--primary-200)", background: "var(--primary-50)", color: "var(--primary-800)", width: "100%", outline: "none", cursor: loadingOfferings ? "not-allowed" : "pointer", fontWeight: 500 }}
+            style={{ display: "block", marginTop: 4, padding: "0.65rem 1rem", borderRadius: "20px", border: "1.5px solid var(--primary-200)", background: "var(--primary-50)", color: "var(--primary-800)", width: "100%", outline: "none", cursor: loadingOfferings ? "not-allowed" : "pointer", fontWeight: 600 }}
           >
             {loadingOfferings ? (
               <option value="">Loading grades…</option>
@@ -372,7 +385,7 @@ export default function AdminAttendance() {
             value={filterSection}
             onChange={(e) => { setFilterSection(e.target.value); setFilterSubject(""); setClassId(""); }}
             disabled={!filterGrade}
-            style={{ display: "block", marginTop: 4, padding: "0.6rem 1rem", borderRadius: "10px", border: "1px solid var(--primary-200)", background: filterGrade ? "var(--primary-50)" : "var(--gray-50)", color: "var(--primary-800)", width: "100%", outline: "none", cursor: filterGrade ? "pointer" : "not-allowed", fontWeight: 500 }}
+            style={{ display: "block", marginTop: 4, padding: "0.65rem 1rem", borderRadius: "20px", border: "1.5px solid var(--primary-200)", background: filterGrade ? "var(--primary-50)" : "var(--gray-50)", color: "var(--primary-800)", width: "100%", outline: "none", cursor: filterGrade ? "pointer" : "not-allowed", fontWeight: 600 }}
           >
             <option value="">All sections</option>
             {sectionOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -386,7 +399,7 @@ export default function AdminAttendance() {
             value={filterSubject}
             onChange={(e) => { setFilterSubject(e.target.value); setClassId(""); }}
             disabled={!filterSection}
-            style={{ display: "block", marginTop: 4, padding: "0.6rem 1rem", borderRadius: "10px", border: "1px solid var(--primary-200)", background: filterSection ? "var(--primary-50)" : "var(--gray-50)", color: "var(--primary-800)", width: "100%", outline: "none", cursor: filterSection ? "pointer" : "not-allowed", fontWeight: 500 }}
+            style={{ display: "block", marginTop: 4, padding: "0.65rem 1rem", borderRadius: "20px", border: "1.5px solid var(--primary-200)", background: filterSection ? "var(--primary-50)" : "var(--gray-50)", color: "var(--primary-800)", width: "100%", outline: "none", cursor: filterSection ? "pointer" : "not-allowed", fontWeight: 600 }}
           >
             <option value="">All subjects</option>
             {subjectOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -399,7 +412,7 @@ export default function AdminAttendance() {
           <Select
             value={classId}
             onChange={(e) => setClassId(e.target.value)}
-            style={{ display: "block", marginTop: 4, padding: "0.6rem 1rem", borderRadius: "10px", border: "1px solid var(--primary-200)", background: "var(--primary-50)", color: "var(--primary-800)", width: "100%", outline: "none", cursor: "pointer", fontWeight: 500 }}
+            style={{ display: "block", marginTop: 4, padding: "0.65rem 1rem", borderRadius: "20px", border: "1.5px solid var(--primary-200)", background: "var(--primary-50)", color: "var(--primary-800)", width: "100%", outline: "none", cursor: "pointer", fontWeight: 600 }}
           >
             <option value="">Select…</option>
             {filteredOfferings.map((o) => {
@@ -459,7 +472,22 @@ export default function AdminAttendance() {
             <p style={{ color: "var(--gray-500)", padding: "1rem 0" }}>No sessions recorded for this class yet.</p>
           ) : (
             <>
-              <Select value={sessionId} onChange={(e) => setSessionId(e.target.value)} style={{ padding: "0.5rem", minWidth: 280, marginBottom: "1rem" }}>
+              <Select
+                value={sessionId}
+                onChange={(e) => setSessionId(e.target.value)}
+                style={{
+                  padding: "0.65rem 1rem",
+                  minWidth: 280,
+                  marginBottom: "1rem",
+                  borderRadius: "20px",
+                  border: "1.5px solid var(--primary-200)",
+                  background: "var(--primary-50)",
+                  color: "var(--primary-800)",
+                  fontWeight: 600,
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
                 {sessions.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.date}

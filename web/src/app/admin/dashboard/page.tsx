@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
+  MessageSquare,
 } from "lucide-react";
 import { adminAnalytics, adminDashboard } from "@/lib/admin-api";
 import { PageHeader, PageHeaderSkeleton, StatGridSkeleton, CardSkeleton, EmptyState } from "@/components/ui";
@@ -184,7 +185,13 @@ export default function AdminDashboard() {
             </div>
           </div>
           {analytics.feedbackTicketsByStatus.length === 0 ? (
-            <p style={{ color: "var(--gray-500)" }}>No feedback yet.</p>
+            <div style={{ padding: "2.5rem 1rem", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", minHeight: "220px" }}>
+              <div style={{ width: "64px", height: "64px", background: "#edf2fa", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.25rem" }}>
+                <MessageSquare size={28} style={{ color: "#a0aabf" }} strokeWidth={2.5} />
+              </div>
+              <h4 style={{ fontSize: "1.15rem", fontWeight: 700, color: "var(--gray-600)", marginBottom: "0.5rem" }}>No feedback yet.</h4>
+              <p style={{ fontSize: "0.85rem", color: "var(--gray-400)", lineHeight: 1.5, maxWidth: "260px", fontWeight: 500 }}>Feedback from teachers and parents will appear here once they start reaching out.</p>
+            </div>
           ) : (
             <ul className="admin-dash-feedback-list">
               {analytics.feedbackTicketsByStatus.map((f) => (

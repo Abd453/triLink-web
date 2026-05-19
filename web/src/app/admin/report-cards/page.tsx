@@ -16,6 +16,7 @@ import {
   Search,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui";
+import Select from "@/components/Select";
 import {
   getActiveAcademicYear,
   listAcademicYears,
@@ -420,29 +421,44 @@ export default function AdminReportCardsPage() {
               background: "#fff",
               borderRadius: 14,
               border: "1.5px solid var(--gray-100)",
-              padding: "0.75rem 1rem",
+              padding: "0.85rem 1rem",
               marginBottom: "0.75rem",
               display: "flex",
               alignItems: "center",
               gap: 10,
+              flexWrap: "wrap",
             }}
           >
-            <Search size={14} color="var(--gray-400)" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter students by name…"
-              style={{
-                flex: 1,
-                border: "none",
-                outline: "none",
-                fontSize: "0.88rem",
-                background: "transparent",
-                color: "var(--gray-800)",
-              }}
-            />
-            <span style={{ fontSize: "0.78rem", color: "var(--gray-500)" }}>
+            <div style={{ flex: 1, minWidth: 260, position: "relative" }}>
+              <Search size={16} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "var(--gray-400)", pointerEvents: "none" }} />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Filter students by name…"
+                style={{
+                  width: "100%",
+                  padding: "0.65rem 1rem 0.65rem 2.5rem",
+                  borderRadius: "20px", // matches perfectly rounded selects
+                  border: "1.5px solid var(--gray-300)",
+                  backgroundColor: "var(--gray-50)",
+                  fontSize: "0.9rem",
+                  outline: "none",
+                  color: "var(--gray-800)",
+                  transition: "all 0.2s ease",
+                  boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)",
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "var(--primary-400)";
+                  e.target.style.backgroundColor = "#fff";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "var(--gray-300)";
+                  e.target.style.backgroundColor = "var(--gray-50)";
+                }}
+              />
+            </div>
+            <span style={{ fontSize: "0.78rem", color: "var(--gray-500)", marginLeft: "auto" }}>
               {filteredStudents.length} of {classCard.students.length}
             </span>
           </div>
@@ -510,29 +526,33 @@ function NativeSelect({
   value,
   onChange,
   children,
+  style,
 }: {
   value: string;
   onChange: (v: string) => void;
   children: React.ReactNode;
+  style?: React.CSSProperties;
 }) {
   return (
-    <select
+    <Select
       value={value}
       onChange={(e) => onChange(e.target.value)}
       style={{
         width: "100%",
-        padding: "0.55rem 0.75rem",
-        borderRadius: 8,
-        border: "1.5px solid var(--gray-200)",
-        background: "#fff",
-        color: "var(--gray-800)",
-        fontSize: "0.88rem",
+        padding: "0.65rem 1rem",
+        borderRadius: "20px", // Rounded perfectly as in classes!
+        border: "1.5px solid var(--primary-200)",
+        background: "var(--primary-50)",
+        color: "var(--primary-800)",
+        fontSize: "0.92rem",
+        fontWeight: 600,
         outline: "none",
         cursor: "pointer",
+        ...style
       }}
     >
       {children}
-    </select>
+    </Select>
   );
 }
 

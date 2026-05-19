@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link2, ShieldCheck, Sparkles, UserRound, Users } from "lucide-react";
+import { Link2, ShieldCheck, Sparkles, UserRound, Users, Search } from "lucide-react";
 import { type ParentLink, type PublicUser, createParentLink, deleteParentLink, listParentLinks, listUsers, patchUser } from "@/lib/admin-api";
 import Select from "@/components/Select";
 import TablePagination from "@/components/TablePagination";
@@ -229,31 +229,40 @@ export default function AdminParents() {
         subtitle="Link guardians to the right student records."
         icon={<UserRound size={22} />}
         actions={(
-          <Link href="/admin/registration" className="btn btn-primary" style={{ borderRadius: 12 }}>+ Register parent</Link>
+          <Link href="/admin/registration?from=parents" className="btn btn-primary" style={{ borderRadius: 12 }}>+ Register parent</Link>
         )}
       />
 
-      <div className="parents-summary-grid">
-        <div className="card parents-summary-card">
-          <div className="parents-summary-icon blue">
-            <UserRound size={18} />
+      <div className="stats-grid admin-dash-stats-grid">
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon blue">
+            <UserRound size={20} />
           </div>
-          <div className="parents-summary-label">Parents</div>
-          <div className="parents-summary-value">{parents.length}</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Parents</div>
+            <div className="stat-value">{parents.length}</div>
+            <div className="admin-dash-stat-note">Registered guardians</div>
+          </div>
         </div>
-        <div className="card parents-summary-card">
-          <div className="parents-summary-icon teal">
-            <Users size={18} />
+        <div className="stat-card admin-dash-stat-card">
+          <div className={`stat-icon admin-dash-stat-icon teal`}>
+            <Users size={20} />
           </div>
-          <div className="parents-summary-label">Students</div>
-          <div className="parents-summary-value">{students.length}</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Students</div>
+            <div className="stat-value">{students.length}</div>
+            <div className="admin-dash-stat-note">Enrolled records</div>
+          </div>
         </div>
-        <div className="card parents-summary-card">
-          <div className="parents-summary-icon orange">
-            <Link2 size={18} />
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon orange">
+            <Link2 size={20} />
           </div>
-          <div className="parents-summary-label">Existing links</div>
-          <div className="parents-summary-value">{links.length}</div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Existing links</div>
+            <div className="stat-value">{links.length}</div>
+            <div className="admin-dash-stat-note">Active mapping</div>
+          </div>
         </div>
       </div>
 
@@ -261,20 +270,51 @@ export default function AdminParents() {
 
       {/* Filter bar — matches students/teachers pattern */}
       <div className="card" style={{ marginBottom: "1rem", padding: "1rem 1.25rem", display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
-        <input
-          value={parentQ}
-          onChange={(e) => { setParentQ(e.target.value); setParentPage(0); }}
-          placeholder="Search name or email…"
-          style={{ ...inputStyle, minWidth: 220, flex: "1 1 220px" }}
-        />
-        <select
+        <div style={{ position: "relative", minWidth: 220, flex: "1 1 220px" }}>
+          <Search size={16} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "var(--gray-400)", pointerEvents: "none" }} />
+          <input
+            value={parentQ}
+            onChange={(e) => { setParentQ(e.target.value); setParentPage(0); }}
+            placeholder="Search name or email…"
+            style={{
+              padding: "0.75rem 1rem 0.75rem 2.75rem",
+              borderRadius: "20px",
+              border: "1.5px solid var(--gray-300)",
+              backgroundColor: "var(--gray-50)",
+              fontSize: "0.95rem",
+              width: "100%",
+              outline: "none",
+              transition: "all 0.2s ease",
+              color: "var(--gray-800)",
+              boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)",
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = "var(--primary-400)";
+              e.target.style.backgroundColor = "#fff";
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = "var(--gray-300)";
+              e.target.style.backgroundColor = "var(--gray-50)";
+            }}
+          />
+        </div>
+        <Select
           value={relationshipFilter}
           onChange={(e) => { setRelationshipFilter(e.target.value); setParentPage(0); }}
-          style={selectStyle}
+          style={{
+            padding: "0.65rem 1.75rem 0.65rem 1rem",
+            borderRadius: "20px",
+            border: "1.5px solid var(--primary-200)",
+            backgroundColor: "var(--primary-50)",
+            color: "var(--primary-800)",
+            fontWeight: 600,
+            outline: "none",
+            cursor: "pointer",
+          }}
         >
           <option value="">All relationships</option>
           {relationshipOptions.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
+        </Select>
       </div>
 
       {/* Parents Directory */}
@@ -394,12 +434,34 @@ export default function AdminParents() {
           <h3 className="card-title parents-section-title" style={{ margin: 0 }}>
             Existing links
           </h3>
-          <input
-            value={filterText}
-            onChange={(e) => { setFilterText(e.target.value); setLinksPage(0); }}
-            placeholder="Filter by name or relationship…"
-            style={{ ...inputStyle, maxWidth: 280, width: "auto" }}
-          />
+          <div style={{ position: "relative", maxWidth: 280, width: "100%" }}>
+            <Search size={16} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "var(--gray-400)", pointerEvents: "none" }} />
+            <input
+              value={filterText}
+              onChange={(e) => { setFilterText(e.target.value); setLinksPage(0); }}
+              placeholder="Filter by name or relationship…"
+              style={{
+                padding: "0.6rem 1rem 0.6rem 2.5rem",
+                borderRadius: "20px",
+                border: "1.5px solid var(--gray-300)",
+                backgroundColor: "var(--gray-50)",
+                fontSize: "0.9rem",
+                width: "100%",
+                outline: "none",
+                transition: "all 0.2s ease",
+                color: "var(--gray-800)",
+                boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)",
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = "var(--primary-400)";
+                e.target.style.backgroundColor = "#fff";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "var(--gray-300)";
+                e.target.style.backgroundColor = "var(--gray-50)";
+              }}
+            />
+          </div>
         </div>
         <div className="table-wrapper">
           <table>

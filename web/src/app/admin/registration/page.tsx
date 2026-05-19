@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
     BookOpen,
     CheckCircle2,
@@ -8,6 +9,7 @@ import {
     ShieldCheck,
     Sparkles,
     Users,
+    ArrowLeft,
     type LucideIcon,
 } from "lucide-react";
 import { apiPath, getApiBase } from "@/lib/api";
@@ -80,8 +82,32 @@ const ROLE_META = {
     parent:  { icon: Users as LucideIcon, color: "#7c3aed", light: "#f5f3ff", label: "Parent" },
 };
 
-export default function AdminRegistration() {
+function RegistrationForm() {
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const fromVal = searchParams.get("from");
+    const isFromOrigin = fromVal === "students" || fromVal === "teachers" || fromVal === "parents";
+
+    const getOriginMeta = () => {
+        if (fromVal === "teachers") {
+            return { label: "teachers", route: "/admin/teachers" };
+        }
+        if (fromVal === "parents") {
+            return { label: "parents", route: "/admin/parents" };
+        }
+        return { label: "students", route: "/admin/students" };
+    };
+
+    const originMeta = getOriginMeta();
+
     const [regType, setRegType] = useState<RegistrationType>("student");
+
+    useEffect(() => {
+        if (fromVal === "teachers") setRegType("teacher");
+        else if (fromVal === "parents") setRegType("parent");
+        else if (fromVal === "students") setRegType("student");
+    }, [fromVal]);
+
     const [loading, setLoading] = useState(false);
     const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null);
     const [errorMessage, setErrorMessage] = useState("");
@@ -354,6 +380,45 @@ export default function AdminRegistration() {
 
     return (
         <div className="page-wrapper">
+            {isFromOrigin && (
+                <div style={{ marginBottom: "1.25rem" }}>
+                    <button
+                        type="button"
+                        onClick={() => router.push(originMeta.route)}
+                        style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            background: "#ffffff",
+                            border: "1px solid var(--gray-200)",
+                            boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+                            borderRadius: "12px",
+                            padding: "0.6rem 1.2rem",
+                            color: "var(--gray-700)",
+                            fontSize: "0.88rem",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                            outline: "none",
+                        }}
+                        onMouseOver={(e) => {
+                            e.currentTarget.style.borderColor = "var(--primary-300)";
+                            e.currentTarget.style.boxShadow = "0 4px 14px rgba(37, 99, 235, 0.08)";
+                            e.currentTarget.style.color = "var(--primary-600)";
+                            e.currentTarget.style.transform = "translateY(-1px)";
+                        }}
+                        onMouseOut={(e) => {
+                            e.currentTarget.style.borderColor = "var(--gray-200)";
+                            e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.04)";
+                            e.currentTarget.style.color = "var(--gray-700)";
+                            e.currentTarget.style.transform = "translateY(0)";
+                        }}
+                    >
+                        <ArrowLeft size={16} color="var(--primary-600)" />
+                        Back to {originMeta.label}
+                    </button>
+                </div>
+            )}
             <PageHeader
                 kicker="Onboarding Studio"
                 title="Registration"
@@ -428,12 +493,7 @@ export default function AdminRegistration() {
 
                     {/* Card body */}
                     <div style={{ padding: "24px 28px" }}>
-                        <div style={{
-                            display: "grid",
-                            gridTemplateColumns: "1fr 1fr",
-                            gap: "12px",
-                            marginBottom: "20px",
-                        }}>
+                            <div className="info-grid">
                             <InfoRow label="Email" value={successInfo.email} />
                             <InfoRow label="Role" value={
                                 <span style={{
@@ -547,13 +607,13 @@ export default function AdminRegistration() {
             )}
 
             {/* ── Form ── */}
-            <div className="card registration-form-card">
+                    <div className="card registration-form-card">
                 <h3 className="card-title registration-form-title" style={{ marginBottom: "1.25rem" }}>
                     <RoleIcon size={18} /> Register New {meta.label}
                 </h3>
 
                 <form onSubmit={handleSubmit}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.25rem" }}>
+                    <div className="registration-grid">
                         <div className="input-group">
                             <label htmlFor="firstName">First Name <span style={{ color: "var(--red-500)" }}>*</span></label>
                             <div className="input-field">
@@ -811,5 +871,13 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
             <p style={{ margin: "0 0 3px", fontSize: 11, fontWeight: 700, color: "#94a3b8", letterSpacing: 0.8, textTransform: "uppercase" }}>{label}</p>
             <div style={{ fontSize: 14, fontWeight: 600, color: "#1e293b" }}>{value}</div>
         </div>
+    );
+}
+
+export default function AdminRegistration() {
+    return (
+        <Suspense fallback={<div className="page-wrapper registration-fallback">Loading Registration Studio...</div>}>
+            <RegistrationForm />
+        </Suspense>
     );
 }
