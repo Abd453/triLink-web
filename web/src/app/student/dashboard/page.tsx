@@ -185,7 +185,7 @@ export default function StudentDashboard() {
             <div className="page-wrapper" style={{ maxWidth: 1280, margin: "0 auto", padding: "2rem" }}>
                 <PageHeaderSkeleton />
                 <StatGridSkeleton count={4} />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: "2rem", alignItems: "start" }}>
+                <div className="student-dashboard-layout" style={{ gap: "2rem" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                         {Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} lines={2} />)}
                     </div>
@@ -222,7 +222,7 @@ export default function StudentDashboard() {
             />
 
             {/* Stat tiles */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, marginBottom: 20 }}>
+            <div className="exam-stats-grid">
                 {[
                     { label: "Total Exams", value: totalExams, tone: "primary" as const, icon: <BookOpen size={16} /> },
                     { label: "Available", value: availableCount, tone: "success" as const, icon: <PlayCircle size={16} /> },
@@ -239,7 +239,7 @@ export default function StudentDashboard() {
                 ))}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: "2.5rem", alignItems: "start" }}>
+            <div className="student-dashboard-layout">
                 {/* Main Content: Exams */}
                 <div className="exams-column">
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
@@ -312,7 +312,7 @@ export default function StudentDashboard() {
                                         </div>
                                     </div>
 
-                                    <div style={{ display: "flex", gap: "2rem", marginBottom: "1.75rem" }}>
+                                    <div style={{ display: "flex", gap: "1rem 2rem", flexWrap: "wrap", marginBottom: "1.75rem" }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--gray-500)" }}>
                                             <Calendar size={16} />
                                             <span style={{ fontSize: "0.85rem", fontWeight: 500 }}>{exam.date}</span>

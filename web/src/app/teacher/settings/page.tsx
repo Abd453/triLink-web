@@ -8,6 +8,8 @@ import { patchMe, uploadProfileImage } from "@/lib/admin-api";
 import { authFetch, refreshStoredProfile } from "@/lib/auth";
 import Select from "@/components/Select";
 import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
+import { PageHeader } from "@/components/ui";
+import { Settings } from "lucide-react";
 
 const TEACHER_SECURITY_STORAGE_KEY = "trilink-teacher-security-v1";
 const DEFAULT_TEACHER_PASSWORD = "Teacher@123!";
@@ -163,11 +165,39 @@ function ProfileInput({
     disabled?: boolean;
 }) {
     return (
-        <div className="input-group">
-            <label>{label}</label>
-            <div className="input-field">
-                <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} disabled={disabled} />
-            </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--gray-600)" }}>{label}</label>
+            <input
+                type={type}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder}
+                disabled={disabled}
+                style={{
+                    width: "100%",
+                    padding: "0.75rem 0.95rem",
+                    borderRadius: "12px",
+                    border: "1.5px solid var(--gray-200)",
+                    background: disabled ? "var(--gray-50)" : "#fff",
+                    fontSize: "0.9rem",
+                    color: disabled ? "var(--gray-500)" : "var(--gray-800)",
+                    cursor: disabled ? "not-allowed" : "text",
+                    outline: "none",
+                    transition: "all 0.2s",
+                }}
+                onFocus={(e) => {
+                    if (!disabled) {
+                        e.target.style.borderColor = "var(--primary-400)";
+                        e.target.style.boxShadow = "0 0 0 3px rgba(37,99,235,0.08)";
+                    }
+                }}
+                onBlur={(e) => {
+                    if (!disabled) {
+                        e.target.style.borderColor = "var(--gray-200)";
+                        e.target.style.boxShadow = "none";
+                    }
+                }}
+            />
         </div>
     );
 }
@@ -420,17 +450,17 @@ export default function TeacherSettings() {
 
     return (
         <div className="page-wrapper">
-            <div style={{ background: "#fff", borderRadius: 20, padding: "1.5rem 2rem", marginBottom: "1.5rem", border: "1.5px solid var(--gray-100)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
-                <h1 style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--gray-900)", margin: 0 }}>Settings</h1>
-                <p style={{ fontSize: "0.875rem", color: "var(--gray-500)", margin: "0.25rem 0 0" }}>Manage your account preferences and configurations.</p>
-            </div>
+            <PageHeader
+                kicker="ACCOUNT SETTINGS"
+                title="Settings"
+                subtitle="Manage your account preferences and configurations."
+                icon={<Settings size={22} />}
+                variant="dark"
+            />
 
-            <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start" }}>
+            <div className="settings-container">
                 {/* Sidebar Tabs */}
-                <div
-                    className="card"
-                    style={{ width: 220, flexShrink: 0, padding: "0.5rem", display: "flex", flexDirection: "column", gap: 2 }}
-                >
+                <div className="settings-sidebar">
                     {TABS.map((tab) => (
                         <button
                             key={tab.key}
@@ -461,13 +491,13 @@ export default function TeacherSettings() {
                 </div>
 
                 {/* Tab Content */}
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div className="settings-content">
 
                     {/* ── PROFILE TAB ── */}
                     {activeTab === "profile" && (
                         <>
                             <div className="card">
-                                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.9fr)", gap: "1rem", alignItems: "center" }}>
+                                <div className="profile-hero-grid">
                                     <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
                                         <div style={{ position: "relative" }}>
                                             <AuthenticatedAvatar
@@ -499,7 +529,7 @@ export default function TeacherSettings() {
                                     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                                         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0.65rem" }}>
                                             {profileQuickStats.map((item) => (
-                                                <div key={item.label} style={{ padding: "0.75rem 0.85rem", border: "1px solid var(--gray-200)", background: "#fff", borderRadius: "var(--radius-md)" }}>
+                                                <div key={item.label} style={{ padding: "0.85rem 1rem", border: "1.5px solid var(--gray-100)", background: "var(--gray-50)", borderRadius: "14px", textAlign: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.02)" }}>
                                                     <div style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.04em", color: "var(--gray-400)", textTransform: "uppercase" }}>{item.label}</div>
                                                     <div style={{ marginTop: "0.35rem", fontSize: "0.9rem", fontWeight: 600, color: "var(--gray-800)" }}>{item.value || "—"}</div>
                                                 </div>
@@ -516,10 +546,10 @@ export default function TeacherSettings() {
                                 </div>
                             </div>
 
-                            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(280px, 1fr)", gap: "1rem", alignItems: "start" }}>
+                            <div className="profile-forms-grid">
                                 <div className="card">
                                     <h3 className="card-title" style={{ marginBottom: "1rem" }}>Personal Information</h3>
-                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.85rem" }}>
+                                    <div className="personal-info-grid">
                                         <ProfileInput label="First Name" value={profile.firstName} onChange={(value) => setProfile({ ...profile, firstName: value })} placeholder="First name" disabled={true} />
                                         <ProfileInput label="Last Name" value={profile.lastName} onChange={(value) => setProfile({ ...profile, lastName: value })} placeholder="Last name" disabled={true} />
                                         <ProfileInput label="Email Address" type="email" value={profile.email} onChange={(value) => setProfile({ ...profile, email: value })} placeholder="teacher@school.edu" disabled />
@@ -531,7 +561,7 @@ export default function TeacherSettings() {
 
                                 <div className="card">
                                     <h3 className="card-title" style={{ marginBottom: "1rem" }}>School Details</h3>
-                                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "0.85rem" }}>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
                                         <ProfileInput label="Department" value={profile.department} onChange={(value) => setProfile({ ...profile, department: value })} placeholder="Mathematics" disabled={loading} />
                                         <ProfileInput label="Homeroom Class" value={profile.homeroomClass} onChange={(value) => setProfile({ ...profile, homeroomClass: value })} placeholder="Grade 11-A" disabled={loading} />
                                         <ProfileInput label="Country" value={profile.country} onChange={(value) => setProfile({ ...profile, country: value })} placeholder="Country" disabled={loading} />
@@ -539,7 +569,7 @@ export default function TeacherSettings() {
                                         <ProfileInput label="Postal Code" value={profile.postalCode} onChange={(value) => setProfile({ ...profile, postalCode: value })} placeholder="Postal code" disabled={loading} />
                                         <ProfileInput label="Office Room" value={profile.officeRoom} onChange={(value) => setProfile({ ...profile, officeRoom: value })} placeholder="Office room" disabled={loading} />
                                     </div>
-                                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1rem" }}>
+                                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1.25rem" }}>
                                         <button className="btn btn-primary" onClick={handleSaveProfile} disabled={loading}>
                                             {loading ? "Saving..." : "Save Changes"}
                                         </button>
@@ -568,29 +598,59 @@ export default function TeacherSettings() {
                                             { key: "confirm", label: "Confirm New Password" },
                                         ] as { key: keyof typeof passwords; label: string }[]
                                     ).map(({ key, label }) => (
-                                        <div className="input-group" key={key}>
-                                            <label>{label}</label>
-                                            <div className="input-field">
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }} key={key}>
+                                            <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--gray-600)" }}>{label}</label>
+                                            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
                                                 <input
                                                     type={showPasswords[key] ? "text" : "password"}
                                                     value={passwords[key]}
                                                     onChange={(e) => setPasswords({ ...passwords, [key]: e.target.value })}
                                                     placeholder="••••••••"
+                                                    style={{
+                                                        width: "100%",
+                                                        padding: "0.75rem 2.8rem 0.75rem 0.95rem",
+                                                        borderRadius: "12px",
+                                                        border: "1.5px solid var(--gray-200)",
+                                                        background: "#fff",
+                                                        fontSize: "0.9rem",
+                                                        color: "var(--gray-800)",
+                                                        outline: "none",
+                                                        transition: "all 0.2s",
+                                                    }}
+                                                    onFocus={(e) => {
+                                                        e.target.style.borderColor = "var(--primary-400)";
+                                                        e.target.style.boxShadow = "0 0 0 3px rgba(37,99,235,0.08)";
+                                                    }}
+                                                    onBlur={(e) => {
+                                                        e.target.style.borderColor = "var(--gray-200)";
+                                                        e.target.style.boxShadow = "none";
+                                                    }}
                                                 />
                                                 <button
+                                                    type="button"
                                                     onClick={() =>
                                                         setShowPasswords({ ...showPasswords, [key]: !showPasswords[key] })
                                                     }
-                                                    style={{ color: "var(--gray-400)", cursor: "pointer", flexShrink: 0 }}
+                                                    style={{
+                                                        position: "absolute",
+                                                        right: 12,
+                                                        border: "none",
+                                                        background: "transparent",
+                                                        color: "var(--gray-400)",
+                                                        cursor: "pointer",
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        justifyContent: "center",
+                                                    }}
                                                 >
                                                     {showPasswords[key] ? (
-                                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                                                             <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
                                                             <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
                                                             <line x1="1" y1="1" x2="23" y2="23" />
                                                         </svg>
                                                     ) : (
-                                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                                                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                                                             <circle cx="12" cy="12" r="3" />
                                                         </svg>
@@ -636,9 +696,22 @@ export default function TeacherSettings() {
                         <div className="card">
                             <h3 className="card-title">Appearance</h3>
                             <div style={{ display: "grid", gap: "1rem" }}>
-                                <div className="input-group">
-                                    <label>Language</label>
-                                    <Select value={language} onChange={(e) => setLanguage(e.target.value)}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                    <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--gray-600)" }}>Language</label>
+                                    <Select
+                                        value={language}
+                                        onChange={(e) => setLanguage(e.target.value)}
+                                        style={{
+                                            width: "100%",
+                                            padding: "0.75rem 0.95rem",
+                                            borderRadius: "12px",
+                                            border: "1.5px solid var(--gray-200)",
+                                            background: "#fff",
+                                            fontSize: "0.9rem",
+                                            color: "var(--gray-800)",
+                                            fontWeight: 600,
+                                        }}
+                                    >
                                         <option value="en">English</option>
                                         <option value="am">Amharic</option>
                                     </Select>
@@ -654,7 +727,90 @@ export default function TeacherSettings() {
 
                 </div>
             </div>
-            <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+            <style>{`
+                .settings-container {
+                    display: flex;
+                    gap: 1.5rem;
+                    align-items: flex-start;
+                    width: 100%;
+                }
+                .settings-sidebar {
+                    width: 240px;
+                    flex-shrink: 0;
+                    padding: 0.5rem;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4px;
+                    background: #fff;
+                    border-radius: 20px;
+                    border: 1.5px solid var(--gray-100);
+                }
+                .settings-content {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 1rem;
+                    min-width: 0;
+                }
+                .profile-hero-grid {
+                    display: grid;
+                    grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.9fr);
+                    gap: 1.5rem;
+                    align-items: center;
+                }
+                .profile-forms-grid {
+                    display: grid;
+                    grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr);
+                    gap: 1.5rem;
+                    align-items: start;
+                }
+                .personal-info-grid {
+                    display: grid;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 1rem;
+                }
+                
+                @media (max-width: 900px) {
+                    .profile-hero-grid,
+                    .profile-forms-grid {
+                        grid-template-columns: 1fr;
+                        gap: 1.5rem;
+                    }
+                }
+                
+                @media (max-width: 768px) {
+                    .settings-container {
+                        flex-direction: column;
+                        align-items: stretch;
+                        gap: 1rem;
+                    }
+                    .settings-sidebar {
+                        width: 100%;
+                        flex-direction: row;
+                        overflow-x: auto;
+                        padding: 0.5rem;
+                        gap: 8px;
+                        white-space: nowrap;
+                        -webkit-overflow-scrolling: touch;
+                        border-radius: 14px;
+                    }
+                    .settings-sidebar button {
+                        flex-shrink: 0;
+                        width: auto !important;
+                    }
+                }
+                
+                @media (max-width: 600px) {
+                    .personal-info-grid {
+                        grid-template-columns: 1fr;
+                    }
+                }
+
+                @keyframes spin { 
+                    0% { transform: rotate(0deg); } 
+                    100% { transform: rotate(360deg); } 
+                }
+            `}</style>
         </div>
     );
 }

@@ -10,6 +10,7 @@ import {
 } from "@/lib/admin-api";
 import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
 import { PageHeader, PageHeaderSkeleton, ListSkeleton, EmptyState } from "@/components/ui";
+import TablePagination from "@/components/TablePagination";
 
 function studentInitials(s: HomeroomStudent): string {
   return ((s.firstName?.[0] ?? "") + (s.lastName?.[0] ?? "")).toUpperCase() || "??";
@@ -20,6 +21,15 @@ export default function TeacherHomeroomPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+
+  // Pagination states
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  // Auto-reset page when query changes
+  useEffect(() => {
+    setPage(0);
+  }, [query]);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,6 +64,11 @@ export default function TeacherHomeroomPage() {
         `${s.firstName} ${s.lastName}`.toLowerCase().includes(q),
     );
   }, [data, query]);
+
+  const pagedStudents = useMemo(() => {
+    const start = page * rowsPerPage;
+    return filteredStudents.slice(start, start + rowsPerPage);
+  }, [filteredStudents, page, rowsPerPage]);
 
   if (loading) {
     return (
@@ -92,7 +107,7 @@ export default function TeacherHomeroomPage() {
         actions={(
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <Link
-              href="/teacher/report-cards"
+              href="/teacher/report-cards?from=homeroom"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -110,7 +125,7 @@ export default function TeacherHomeroomPage() {
               <FileText size={14} /> Report Cards
             </Link>
             <Link
-              href="/teacher/attendance"
+              href="/teacher/attendance?from=homeroom"
               className="btn btn-primary"
               style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0.55rem 1rem", borderRadius: 12, fontSize: "0.85rem", fontWeight: 700, textDecoration: "none" }}
             >
@@ -197,7 +212,7 @@ export default function TeacherHomeroomPage() {
             <span>Actions</span>
           </div>
 
-          {filteredStudents.map((s, i) => (
+          {pagedStudents.map((s, i) => (
             <div
               key={s.id}
               style={{
@@ -205,7 +220,7 @@ export default function TeacherHomeroomPage() {
                 gridTemplateColumns: "1fr auto",
                 alignItems: "center",
                 padding: "0.85rem 1.25rem",
-                borderBottom: i < filteredStudents.length - 1 ? "1px solid var(--gray-100)" : "none",
+                borderBottom: i < pagedStudents.length - 1 ? "1px solid var(--gray-100)" : "none",
                 gap: 12,
               }}
             >
@@ -227,7 +242,7 @@ export default function TeacherHomeroomPage() {
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <Link
-                  href={`/teacher/report-cards?studentId=${s.id}`}
+                  href={`/teacher/report-cards?studentId=${s.id}&from=homeroom`}
                   title="View Report Card"
                   style={{
                     display: "inline-flex",
@@ -246,7 +261,7 @@ export default function TeacherHomeroomPage() {
                   <FileText size={13} /> Report
                 </Link>
                 <Link
-                  href={`/teacher/chat?to=${s.id}`}
+                  href={`/teacher/chat?to=${s.id}&from=homeroom`}
                   title="Message Student"
                   style={{
                     display: "inline-flex",
@@ -267,6 +282,18 @@ export default function TeacherHomeroomPage() {
               </div>
             </div>
           ))}
+          {filteredStudents.length > 0 && (
+            <TablePagination
+              total={filteredStudents.length}
+              page={page}
+              rowsPerPage={rowsPerPage}
+              onPageChange={setPage}
+              onRowsPerPageChange={(n) => {
+                setRowsPerPage(n);
+                setPage(0);
+              }}
+            />
+          )}
         </div>
       )}
     </div>

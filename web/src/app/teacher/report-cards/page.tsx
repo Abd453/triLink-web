@@ -31,6 +31,7 @@ import {
 import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
 import { useTermStore } from "@/store/termStore";
 import { PageHeader, PageHeaderSkeleton, ListSkeleton, EmptyState } from "@/components/ui";
+import TablePagination from "@/components/TablePagination";
 
 function rankBadgeStyle(rank: number): React.CSSProperties {
   if (rank === 1) return { background: "linear-gradient(135deg, #fde68a, #f59e0b)", color: "#78350f" };
@@ -51,6 +52,7 @@ export default function TeacherReportCardsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const studentIdParam = searchParams.get("studentId");
+  const fromHomeroom = searchParams.get("from") === "homeroom";
 
   // Bootstrap state
   const [homeroom, setHomeroom] = useState<HomeroomMyClass | null>(null);
@@ -79,6 +81,15 @@ export default function TeacherReportCardsPage() {
   const [conduct, setConduct] = useState("");
   const [savingRemark, setSavingRemark] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  // Pagination states
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  // Auto-reset page when term changes
+  useEffect(() => {
+    setPage(0);
+  }, [selectedTermId]);
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -178,6 +189,12 @@ export default function TeacherReportCardsPage() {
     );
   }, [homeroom, studentCard]);
 
+  const pagedStudents = useMemo(() => {
+    if (!classCard?.students) return [];
+    const start = page * rowsPerPage;
+    return classCard.students.slice(start, start + rowsPerPage);
+  }, [classCard?.students, page, rowsPerPage]);
+
   async function handleSaveRemark() {
     if (!studentCard || !selectedTermId) return;
     if (!remark.trim()) {
@@ -238,25 +255,40 @@ export default function TeacherReportCardsPage() {
   if (studentIdParam) {
     return (
       <div className="page-wrapper">
-        <button
-          type="button"
-          onClick={() => router.push("/teacher/report-cards")}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            background: "transparent",
-            border: "none",
-            color: "var(--gray-600)",
-            fontSize: "0.85rem",
-            fontWeight: 600,
-            cursor: "pointer",
-            marginBottom: "1rem",
-            padding: 0,
-          }}
-        >
-          <ArrowLeft size={14} /> Back to class
-        </button>
+        <div style={{ marginBottom: "1rem" }}>
+          <button
+            type="button"
+            onClick={() => router.push(fromHomeroom ? "/teacher/homeroom" : "/teacher/report-cards")}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              background: "#fff",
+              border: "1.5px solid var(--gray-150)",
+              borderRadius: "12px",
+              padding: "0.55rem 1.15rem",
+              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
+              color: "var(--gray-800)",
+              fontSize: "0.85rem",
+              fontWeight: 700,
+              cursor: "pointer",
+              transition: "all 0.2s ease-in-out",
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = "var(--primary-300)";
+              e.currentTarget.style.boxShadow = "0 4px 16px rgba(37, 99, 235, 0.08)";
+              e.currentTarget.style.transform = "translateY(-1px)";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = "var(--gray-150)";
+              e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.04)";
+              e.currentTarget.style.transform = "none";
+            }}
+          >
+            <ArrowLeft size={14} strokeWidth={3} style={{ color: "var(--primary-600)" }} />
+            <span>{fromHomeroom ? "Back to Homeroom" : "Back to Class"}</span>
+          </button>
+        </div>
 
         <TermPicker terms={terms} selected={selectedTermId ?? ""} onChange={setSelectedTermId} />
 
@@ -291,6 +323,43 @@ export default function TeacherReportCardsPage() {
 
   return (
     <div className="page-wrapper">
+      {fromHomeroom && (
+        <div style={{ marginBottom: "1rem" }}>
+          <button
+            type="button"
+            onClick={() => router.push("/teacher/homeroom")}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              background: "#fff",
+              border: "1.5px solid var(--gray-150)",
+              borderRadius: "12px",
+              padding: "0.55rem 1.15rem",
+              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
+              color: "var(--gray-800)",
+              fontSize: "0.85rem",
+              fontWeight: 700,
+              cursor: "pointer",
+              transition: "all 0.2s ease-in-out",
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = "var(--primary-300)";
+              e.currentTarget.style.boxShadow = "0 4px 16px rgba(37, 99, 235, 0.08)";
+              e.currentTarget.style.transform = "translateY(-1px)";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = "var(--gray-150)";
+              e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.04)";
+              e.currentTarget.style.transform = "none";
+            }}
+          >
+            <ArrowLeft size={14} strokeWidth={3} style={{ color: "var(--primary-600)" }} />
+            <span>Back to Homeroom</span>
+          </button>
+        </div>
+      )}
+
       <PageHeader
         kicker="Class Report Cards"
         title={`${grade}${section && section !== "—" ? ` — Section ${section}` : ""}`}
@@ -316,7 +385,7 @@ export default function TeacherReportCardsPage() {
             background: "#fff",
             borderRadius: 14,
             border: "1.5px solid var(--gray-100)",
-            overflow: "hidden",
+            overflowX: "auto",
             marginTop: 12,
           }}
         >
@@ -332,6 +401,7 @@ export default function TeacherReportCardsPage() {
               letterSpacing: "0.06em",
               background: "var(--gray-50)",
               borderBottom: "1px solid var(--gray-100)",
+              minWidth: "650px",
             }}
           >
             <span>Rank</span>
@@ -340,16 +410,28 @@ export default function TeacherReportCardsPage() {
             <span style={{ textAlign: "center" }}>Grade</span>
             <span style={{ textAlign: "center" }}>Attendance</span>
           </div>
-          {classCard.students.map((row, i) => (
+          {pagedStudents.map((row, i) => (
             <ClassRow
               key={row.studentId}
               row={row}
-              isLast={i === classCard.students.length - 1}
+              isLast={i === pagedStudents.length - 1}
               onClick={() =>
                 router.push(`/teacher/report-cards?studentId=${row.studentId}`)
               }
             />
           ))}
+          {classCard.students.length > 0 && (
+            <TablePagination
+              total={classCard.students.length}
+              page={page}
+              rowsPerPage={rowsPerPage}
+              onPageChange={setPage}
+              onRowsPerPageChange={(n) => {
+                setRowsPerPage(n);
+                setPage(0);
+              }}
+            />
+          )}
         </div>
       )}
 
@@ -446,6 +528,7 @@ function ClassRow({ row, isLast, onClick }: { row: ClassTermReportCardRow; isLas
         borderBottom: isLast ? "none" : "1px solid var(--gray-100)",
         cursor: "pointer",
         transition: "background 0.15s",
+        minWidth: "650px",
       }}
       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--gray-50)")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
@@ -581,7 +664,7 @@ function StudentReportCardView({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
           gap: 12,
           marginBottom: 16,
         }}

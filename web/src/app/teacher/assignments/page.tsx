@@ -206,7 +206,7 @@ export default function TeacherAssignments() {
         title="Assignments"
         subtitle="Create, publish, and grade student assignments."
         icon={<FileText size={22} />}
-        variant="light"
+        variant="dark"
         actions={(
           <button className="btn btn-primary" onClick={openCreate} style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 12 }}>
             <Plus size={14} strokeWidth={2.5} /> New Assignment
@@ -217,7 +217,20 @@ export default function TeacherAssignments() {
       {/* Class filter */}
       <div style={{ background: "#fff", borderRadius: 16, padding: "0.875rem 1.5rem", marginBottom: "1.25rem", border: "1.5px solid var(--gray-100)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
         <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>Filter by class</label>
-        <Select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} style={{ padding: "0.45rem 0.75rem", border: "1.5px solid var(--gray-200)", borderRadius: 8, fontSize: "0.875rem", background: "#fff", minWidth: 220 }}>
+        <Select
+          value={selectedClass}
+          onChange={e => setSelectedClass(e.target.value)}
+          style={{
+            padding: "0.45rem 1.15rem",
+            borderRadius: "9999px",
+            border: "1.5px solid var(--primary-200)",
+            background: "var(--primary-50)",
+            color: "var(--primary-800)",
+            fontWeight: 600,
+            fontSize: "0.85rem",
+            minWidth: 220
+          }}
+        >
           <option value="">All my classes</option>
           {offerings.map(o => <option key={o.id} value={o.id}>{offeringLabel(o)}</option>)}
         </Select>
@@ -247,7 +260,20 @@ export default function TeacherAssignments() {
               </div>
               <div className="input-group">
                 <label>Submission Type</label>
-                <Select value={form.submissionType} onChange={e => setForm(f => ({ ...f, submissionType: e.target.value as SubmissionType }))} style={{ padding: "0.65rem 0.9rem", border: "1.5px solid var(--gray-200)", borderRadius: 4, fontSize: "0.9rem", background: "#fff", width: "100%" }}>
+                <Select
+                  value={form.submissionType}
+                  onChange={e => setForm(f => ({ ...f, submissionType: e.target.value as SubmissionType }))}
+                  style={{
+                    padding: "0.45rem 1.15rem",
+                    borderRadius: "9999px",
+                    border: "1.5px solid var(--primary-200)",
+                    background: "var(--primary-50)",
+                    color: "var(--primary-800)",
+                    fontWeight: 600,
+                    fontSize: "0.85rem",
+                    width: "100%"
+                  }}
+                >
                   <option value="file">File Upload</option>
                   <option value="text">Text Response</option>
                   <option value="none">No Submission (Info only)</option>

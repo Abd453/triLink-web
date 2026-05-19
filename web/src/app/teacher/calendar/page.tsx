@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
+import Link from "next/link";
 import { BookOpen, ClipboardList, Users, Bell, ChevronLeft, ChevronRight, X, Plus, CalendarDays, Edit3, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui";
 import type { EventType, CalendarEvent } from "@/store/calendarStore";
@@ -67,6 +68,7 @@ function DayChip({ event, onEdit }: { event: CalendarEvent; onEdit: (event: Cale
   return (
     <button
       type="button"
+      className="day-chip-button"
       onClick={() => onEdit(event)}
       style={{
         width: "100%",
@@ -86,7 +88,7 @@ function DayChip({ event, onEdit }: { event: CalendarEvent; onEdit: (event: Cale
       title={event.title}
     >
       <span style={{ width: 7, height: 7, borderRadius: "50%", background: cfg.dot, flexShrink: 0 }} />
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.title}</span>
+      <span className="day-chip-label" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.title}</span>
     </button>
   );
 }
@@ -96,6 +98,16 @@ export default function TeacherCalendar() {
   const [academicYearId, setAcademicYearId] = useState<string | null>(null);
   const [calErr, setCalErr] = useState<string | null>(null);
   const { selectedTermId, selectedTermName } = useTermStore();
+  const [fromNotifications, setFromNotifications] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("from") === "notifications") {
+        setFromNotifications(true);
+      }
+    }
+  }, []);
 
   const [viewYear, setViewYear] = useState(TODAY.getFullYear());
   const [viewMonth, setViewMonth] = useState(TODAY.getMonth());
@@ -142,7 +154,15 @@ export default function TeacherCalendar() {
   const firstDay = new Date(viewYear, viewMonth, 1).getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
 
+  const selectedDayISO = selDay !== null ? dayISO(selDay) : null;
+  const selectedDayIsPast = selectedDayISO ? isPastDate(selectedDayISO) : false;
+
   const selectedDayEvents = useMemo(() => selDay !== null ? events.filter((event) => event.date === dayISO(selDay)) : [], [dayISO, events, selDay]);
+  const formattedSelectedDate = useMemo(() => {
+    if (!selectedDayISO) return "";
+    const dateObj = parseLocalISODate(selectedDayISO);
+    return dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", weekday: "short" });
+  }, [selectedDayISO]);
   const upcomingEvents = useMemo(() => [...events].filter((event) => event.date >= todayISO).sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? "")), [events]);
   const totalCounts = useMemo(() => ({
     total: events.length,
@@ -253,8 +273,6 @@ export default function TeacherCalendar() {
   }
 
   const isToday = (day: number) => viewYear === TODAY.getFullYear() && viewMonth === TODAY.getMonth() && day === TODAY.getDate();
-  const selectedDayISO = selDay !== null ? dayISO(selDay) : null;
-  const selectedDayIsPast = selectedDayISO ? isPastDate(selectedDayISO) : false;
 
   return (
     <div className="page-wrapper">
@@ -275,6 +293,31 @@ export default function TeacherCalendar() {
         ))}
       </div>
 
+      {fromNotifications && (
+        <div style={{ marginBottom: "1rem" }}>
+          <Link
+            href="/teacher/notifications"
+            className="btn btn-secondary"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "0.55rem 1.15rem",
+              borderRadius: "12px",
+              fontSize: "0.85rem",
+              fontWeight: 700,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+              background: "#fff",
+              border: "1.5px solid var(--gray-100)",
+              color: "var(--gray-700)",
+              textDecoration: "none"
+            }}
+          >
+            ← Back to Notifications
+          </Link>
+        </div>
+      )}
+
       <PageHeader
         kicker="Planning Board"
         title="Calendar"
@@ -290,7 +333,7 @@ export default function TeacherCalendar() {
         )}
       />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, marginBottom: 16 }}>
+      <div className="calendar-stats-grid">
         {[
           { label: "Events", value: totalCounts.total },
           { label: "Classes", value: totalCounts.classes },
@@ -306,7 +349,7 @@ export default function TeacherCalendar() {
 
       {calErr && <div className="card" style={{ marginBottom: 16, color: "var(--danger)", fontSize: "0.9rem" }}>{calErr}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 340px", gap: 16, alignItems: "start" }}>
+      <div className="calendar-main-layout">
         <div className="card" style={{ padding: 20 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
             <button className="btn btn-secondary btn-sm" onClick={() => navMonth(-1)} style={{ display: "flex", alignItems: "center", gap: 4 }}><ChevronLeft size={15} strokeWidth={2.5} /> Prev</button>
@@ -316,7 +359,7 @@ export default function TeacherCalendar() {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 8 }}>
             {DAY_NAMES.map((day) => <div key={day} style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "center", padding: "0.25rem 0" }}>{day}</div>)}
-            {Array.from({ length: firstDay }).map((_, index) => <div key={`b-${index}`} style={{ minHeight: 110 }} />)}
+            {Array.from({ length: firstDay }).map((_, index) => <div key={`b-${index}`} className="calendar-empty-cell calendar-day-cell" />)}
             {Array.from({ length: daysInMonth }).map((_, index) => {
               const day = index + 1;
               const dayEvents = events.filter((event) => event.date === dayISO(day));
@@ -329,8 +372,8 @@ export default function TeacherCalendar() {
                   type="button"
                   onClick={() => setSelDay(selected ? null : day)}
                   onDoubleClick={() => !past && openCreate(day)}
+                  className="calendar-day-cell"
                   style={{
-                    minHeight: 110,
                     borderRadius: 16,
                     border: selected ? "1.5px solid var(--primary-400)" : "1px solid var(--gray-100)",
                     background: isTodayCell ? "linear-gradient(180deg, rgba(37,99,235,0.12), rgba(37,99,235,0.04))" : selected ? "var(--primary-50)" : "#fff",
@@ -349,9 +392,9 @@ export default function TeacherCalendar() {
                     <span style={{ fontWeight: isTodayCell ? 800 : 600, color: isTodayCell ? "var(--primary-700)" : "var(--gray-700)" }}>{day}</span>
                     {dayEvents.length > 0 && <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--gray-500)" }}>{dayEvents.length}</span>}
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div className="calendar-day-events-container">
                     {dayEvents.slice(0, 3).map((event) => <DayChip key={event.id} event={event} onEdit={openEdit} />)}
-                    {dayEvents.length > 3 && <div style={{ fontSize: "0.72rem", color: "var(--gray-500)", paddingLeft: 2 }}>+{dayEvents.length - 3} more</div>}
+                    {dayEvents.length > 3 && <div className="calendar-more-badge">+{dayEvents.length - 3}</div>}
                   </div>
                 </button>
               );
@@ -360,30 +403,119 @@ export default function TeacherCalendar() {
         </div>
 
         <aside style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div className="card" style={{ padding: 18 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 800 }}>Selected Day</h3>
-              <button className="btn btn-secondary btn-sm" onClick={() => setSelDay(TODAY.getDate())}>Today</button>
+          <div className="card" style={{ padding: "1.5rem", borderRadius: "20px", border: "1.5px solid var(--gray-100)", background: "#fff", boxShadow: "0 4px 20px rgba(0,0,0,0.02)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--gray-400)", fontWeight: 700 }}>Selected Date</span>
+                <h3 style={{ margin: "4px 0 0", fontSize: "1.1rem", fontWeight: 800, color: "var(--gray-900)" }}>{formattedSelectedDate || (selectedDayISO ?? todayISO)}</h3>
+              </div>
+              <button 
+                className="btn btn-secondary btn-sm" 
+                onClick={() => setSelDay(TODAY.getDate())}
+                style={{ borderRadius: "10px", padding: "0.3rem 0.75rem", fontSize: "0.75rem", fontWeight: 700 }}
+              >
+                Today
+              </button>
             </div>
-            <div style={{ fontSize: "0.85rem", color: "var(--gray-500)", marginBottom: 10 }}>{selectedDayISO ?? todayISO}</div>
+
+            <div style={{ height: "1px", background: "var(--gray-100)", margin: "0.75rem 0 1rem" }} />
+
             {selectedDayEvents.length === 0 ? (
-              <div style={{ color: "var(--gray-400)", fontSize: "0.85rem" }}>No events on this day.</div>
+              <div style={{ color: "var(--gray-400)", fontSize: "0.85rem", textAlign: "center", padding: "1.5rem 0" }}>No events scheduled for this day.</div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {selectedDayEvents.map((event) => (
-                  <button key={event.id} type="button" onClick={() => openEdit(event)} style={{ border: "1px solid var(--gray-100)", background: TYPE_CFG[event.type].bg, color: TYPE_CFG[event.type].color, borderRadius: 14, padding: 12, textAlign: "left", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                      <div style={{ fontWeight: 800 }}>{event.title}</div>
-                      <Edit3 size={14} />
-                    </div>
-                    <div style={{ fontSize: "0.8rem", opacity: 0.88, marginTop: 4 }}>{TYPE_CFG[event.type].label}{event.time ? ` · ${event.time}` : ""}</div>
-                    {event.description && <div style={{ fontSize: "0.78rem", opacity: 0.78, marginTop: 4 }}>{event.description}</div>}
-                  </button>
-                ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {selectedDayEvents.map((event) => {
+                  const cfg = TYPE_CFG[event.type];
+                  return (
+                    <button
+                      key={event.id}
+                      type="button"
+                      onClick={() => openEdit(event)}
+                      style={{
+                        position: "relative",
+                        border: "1.5px solid var(--gray-100)",
+                        borderLeft: `4px solid ${cfg.dot}`,
+                        background: "#fff",
+                        color: "var(--gray-800)",
+                        borderRadius: "14px",
+                        padding: "1rem 1.15rem",
+                        textAlign: "left",
+                        cursor: "pointer",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
+                        transition: "all 0.2s ease-in-out",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = cfg.dot;
+                        e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.06)";
+                        e.currentTarget.style.transform = "translateY(-1px)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = "var(--gray-100)";
+                        e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.02)";
+                        e.currentTarget.style.transform = "none";
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ width: 28, height: 28, borderRadius: 8, background: cfg.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <EventIcon type={event.type} size={15} />
+                          </div>
+                          <span style={{ fontWeight: 800, fontSize: "0.95rem", color: "var(--gray-900)" }}>{event.title}</span>
+                        </div>
+                        <span 
+                          style={{
+                            fontSize: "0.7rem",
+                            fontWeight: 700,
+                            padding: "0.2rem 0.55rem",
+                            borderRadius: "999px",
+                            background: cfg.bg,
+                            color: cfg.color,
+                            border: `1px solid rgba(${cfg.color === "var(--primary-600)" ? "37,99,235" : cfg.color === "#991b1b" ? "153,27,27" : cfg.color === "#92400e" ? "146,64,14" : "6,95,70"}, 0.12)`
+                          }}
+                        >
+                          {cfg.label}
+                        </span>
+                      </div>
+                      
+                      {event.time && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.78rem", color: "var(--gray-500)", fontWeight: 600, marginTop: 2 }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                          <span>{event.time}</span>
+                        </div>
+                      )}
+
+                      {event.description && (
+                        <div style={{ fontSize: "0.8rem", color: "var(--gray-600)", lineHeight: 1.5, background: "var(--gray-50)", padding: "0.5rem 0.75rem", borderRadius: "10px", marginTop: 4, width: "100%" }}>
+                          {event.description}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
             {!selectedDayIsPast && (
-              <button className="btn btn-primary btn-sm" onClick={() => openCreate(selDay ?? undefined)} style={{ marginTop: 12 }}>Add event on this day</button>
+              <button 
+                className="btn btn-primary" 
+                onClick={() => openCreate(selDay ?? undefined)} 
+                style={{ 
+                  marginTop: "1.25rem", 
+                  width: "100%", 
+                  display: "inline-flex", 
+                  alignItems: "center", 
+                  justifyContent: "center", 
+                  gap: 6, 
+                  borderRadius: 12, 
+                  padding: "0.6rem 1rem",
+                  fontSize: "0.85rem",
+                  fontWeight: 700
+                }}
+              >
+                <Plus size={14} strokeWidth={2.5} /> Add Event
+              </button>
             )}
           </div>
 
@@ -419,24 +551,148 @@ export default function TeacherCalendar() {
               <button className="chat-stage-icon-btn" type="button" onClick={() => setShowModal(false)} aria-label="Close"><X size={16} /></button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-              <div className="chat-compose-input" style={{ padding: 0, background: "transparent" }}>
-                <input value={form.title} onChange={(event) => setForm((previous) => ({ ...previous, title: event.target.value }))} placeholder="Event title" style={{ width: "100%", padding: "0.75rem 0.9rem", borderRadius: 12, border: "1px solid var(--gray-200)" }} />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16 }}>
+              {/* Event Title */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--gray-600)" }}>Event Title</label>
+                <input
+                  value={form.title}
+                  onChange={(event) => setForm((previous) => ({ ...previous, title: event.target.value }))}
+                  placeholder="Enter event title"
+                  style={{
+                    width: "100%",
+                    padding: "0.75rem 0.95rem",
+                    borderRadius: "12px",
+                    border: "1.5px solid var(--gray-200)",
+                    background: "#fff",
+                    fontSize: "0.9rem",
+                    color: "var(--gray-800)",
+                    outline: "none",
+                    transition: "all 0.2s",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "var(--primary-400)";
+                    e.target.style.boxShadow = "0 0 0 3px rgba(37,99,235,0.08)";
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "var(--gray-200)";
+                    e.target.style.boxShadow = "none";
+                  }}
+                />
               </div>
-              <Select value={form.type} onChange={(event) => setForm((previous) => ({ ...previous, type: event.target.value as EventType }))} style={{ padding: "0.75rem 0.9rem", borderRadius: 12, border: "1px solid var(--gray-200)", background: "#fff" }}>
-                <option value="class">Class</option>
-                <option value="exam">Exam</option>
-                <option value="meeting">Meeting</option>
-                <option value="reminder">Reminder</option>
-              </Select>
-              <div className="chat-compose-input" style={{ padding: 0, background: "transparent" }}>
-                <input type="date" value={form.date} onChange={(event) => setForm((previous) => ({ ...previous, date: event.target.value }))} style={{ width: "100%", padding: "0.75rem 0.9rem", borderRadius: 12, border: "1px solid var(--gray-200)" }} />
+
+              {/* Event Type */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--gray-600)" }}>Category</label>
+                <Select
+                  value={form.type}
+                  onChange={(event) => setForm((previous) => ({ ...previous, type: event.target.value as EventType }))}
+                  style={{
+                    width: "100%",
+                    padding: "0.75rem 0.95rem",
+                    borderRadius: "12px",
+                    border: `1.5px solid ${TYPE_CFG[form.type].dot}`,
+                    background: TYPE_CFG[form.type].bg,
+                    color: TYPE_CFG[form.type].color,
+                    fontWeight: 700,
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  <option value="class">Class</option>
+                  <option value="exam">Exam</option>
+                  <option value="meeting">Meeting</option>
+                  <option value="reminder">Reminder</option>
+                </Select>
               </div>
-              <div className="chat-compose-input" style={{ padding: 0, background: "transparent" }}>
-                <input type="time" value={form.time} onChange={(event) => setForm((previous) => ({ ...previous, time: event.target.value }))} style={{ width: "100%", padding: "0.75rem 0.9rem", borderRadius: 12, border: "1px solid var(--gray-200)" }} />
+
+              {/* Date */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--gray-600)" }}>Date</label>
+                <input
+                  type="date"
+                  value={form.date}
+                  onChange={(event) => setForm((previous) => ({ ...previous, date: event.target.value }))}
+                  style={{
+                    width: "100%",
+                    padding: "0.75rem 0.95rem",
+                    borderRadius: "12px",
+                    border: "1.5px solid var(--gray-200)",
+                    background: "#fff",
+                    fontSize: "0.9rem",
+                    color: "var(--gray-800)",
+                    outline: "none",
+                    transition: "all 0.2s",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "var(--primary-400)";
+                    e.target.style.boxShadow = "0 0 0 3px rgba(37,99,235,0.08)";
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "var(--gray-200)";
+                    e.target.style.boxShadow = "none";
+                  }}
+                />
               </div>
-              <div style={{ gridColumn: "1 / -1" }}>
-                <textarea value={form.description} onChange={(event) => setForm((previous) => ({ ...previous, description: event.target.value }))} rows={4} placeholder="Description or instructions" style={{ width: "100%", padding: "0.75rem 0.9rem", borderRadius: 12, border: "1px solid var(--gray-200)", resize: "vertical", fontFamily: "inherit" }} />
+
+              {/* Time */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--gray-600)" }}>Time (Optional)</label>
+                <input
+                  type="time"
+                  value={form.time}
+                  onChange={(event) => setForm((previous) => ({ ...previous, time: event.target.value }))}
+                  style={{
+                    width: "100%",
+                    padding: "0.75rem 0.95rem",
+                    borderRadius: "12px",
+                    border: "1.5px solid var(--gray-200)",
+                    background: "#fff",
+                    fontSize: "0.9rem",
+                    color: "var(--gray-800)",
+                    outline: "none",
+                    transition: "all 0.2s",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "var(--primary-400)";
+                    e.target.style.boxShadow = "0 0 0 3px rgba(37,99,235,0.08)";
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "var(--gray-200)";
+                    e.target.style.boxShadow = "none";
+                  }}
+                />
+              </div>
+
+              {/* Description */}
+              <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--gray-600)" }}>Description</label>
+                <textarea
+                  value={form.description}
+                  onChange={(event) => setForm((previous) => ({ ...previous, description: event.target.value }))}
+                  rows={4}
+                  placeholder="Provide any description, notes, or instructions..."
+                  style={{
+                    width: "100%",
+                    padding: "0.75rem 0.95rem",
+                    borderRadius: "12px",
+                    border: "1.5px solid var(--gray-200)",
+                    background: "#fff",
+                    fontSize: "0.9rem",
+                    color: "var(--gray-800)",
+                    outline: "none",
+                    transition: "all 0.2s",
+                    resize: "vertical",
+                    fontFamily: "inherit",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "var(--primary-400)";
+                    e.target.style.boxShadow = "0 0 0 3px rgba(37,99,235,0.08)";
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "var(--gray-200)";
+                    e.target.style.boxShadow = "none";
+                  }}
+                />
               </div>
             </div>
 

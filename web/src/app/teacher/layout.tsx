@@ -50,7 +50,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
 
     if (!isClient) {
         return (
-            <div className="admin-shell-loading">
+            <div className="admin-shell-loading" suppressHydrationWarning>
                 <main className="admin-shell-loading-main" style={{ marginLeft: 0 }}>
                     <div className="admin-shell-loading-content">
                         <div className="admin-shell-loading-hero admin-loading-shimmer" />

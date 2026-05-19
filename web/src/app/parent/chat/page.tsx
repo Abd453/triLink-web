@@ -3,5 +3,9 @@
 import RestChat from "@/components/RestChat";
 
 export default function ParentChat() {
-  return <RestChat role="parent" />;
+  return (
+    <div className="page-wrapper">
+      <RestChat role="parent" />
+    </div>
+  );
 }

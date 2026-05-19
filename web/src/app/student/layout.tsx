@@ -81,6 +81,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
         <div className="student-header-user">
           <a
             href="/student/dashboard"
+            className="student-desktop-link"
             style={{
               padding: "0.35rem 0.7rem",
               borderRadius: "8px",
@@ -96,6 +97,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           </a>
           <a
             href="/student/settings"
+            className="student-desktop-link"
             style={{
               padding: "0.35rem 0.7rem",
               borderRadius: "8px",
@@ -111,6 +113,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           </a>
           <a
             href="/student/grades"
+            className="student-desktop-link"
             style={{
               padding: "0.35rem 0.7rem",
               borderRadius: "8px",
@@ -149,7 +152,11 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           <button
             type="button"
             onClick={handleLogout}
+            className="student-logout-btn"
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
               padding: "0.4rem 0.75rem",
               borderRadius: "8px",
               background: "var(--danger-light)",
@@ -160,11 +167,42 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
               cursor: "pointer",
             }}
           >
-            Logout
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span className="logout-text">Logout</span>
           </button>
         </div>
       </header>
       <main className="student-main">{children}</main>
+      
+      {/* Mobile Bottom Navigation */}
+      <nav className="student-mobile-bottom-nav">
+        <a href="/student/dashboard" className={`student-mobile-nav-item ${pathname === "/student/dashboard" ? "active" : ""}`}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+          <span>Exams</span>
+        </a>
+        <a href="/student/grades" className={`student-mobile-nav-item ${pathname.startsWith("/student/grades") ? "active" : ""}`}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20V10" />
+            <path d="M18 20V4" />
+            <path d="M6 20v-4" />
+          </svg>
+          <span>Grades</span>
+        </a>
+        <a href="/student/settings" className={`student-mobile-nav-item ${pathname.startsWith("/student/settings") ? "active" : ""}`}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+          <span>Settings</span>
+        </a>
+      </nav>
       <RealtimeToast toast={toast} onClose={() => setToast(null)} />
     </div>
   );

@@ -15,7 +15,8 @@ import {
 } from "@/lib/admin-api";
 import { useTermStore } from "@/store/termStore";
 import { PageHeader } from "@/components/ui";
-import { Megaphone, Plus } from "lucide-react";
+import { Megaphone, Plus, ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 function offeringLabel(o: ClassOffering) {
   let gradeStr = "";
@@ -49,6 +50,7 @@ function TeacherAnnouncementsSkeleton() {
 }
 
 export default function TeacherAnnouncements() {
+  const router = useRouter();
   const { selectedTermId } = useTermStore();
   const [rows, setRows] = useState<Announcement[]>([]);
   const [offerings, setOfferings] = useState<ClassOffering[]>([]);
@@ -57,6 +59,16 @@ export default function TeacherAnnouncements() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  const [fromDashboard, setFromDashboard] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("from") === "dashboard") {
+        setFromDashboard(true);
+      }
+    }
+  }, []);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [title, setTitle] = useState("");
@@ -190,12 +202,49 @@ export default function TeacherAnnouncements() {
         </div>
       )}
 
+      {fromDashboard && (
+        <div style={{ marginBottom: "1rem" }}>
+          <button
+            type="button"
+            onClick={() => router.push("/teacher/dashboard")}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              background: "#fff",
+              border: "1.5px solid var(--gray-150)",
+              borderRadius: "12px",
+              padding: "0.55rem 1.15rem",
+              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
+              color: "var(--gray-800)",
+              fontSize: "0.85rem",
+              fontWeight: 700,
+              cursor: "pointer",
+              transition: "all 0.2s ease-in-out",
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = "var(--primary-300)";
+              e.currentTarget.style.boxShadow = "0 4px 16px rgba(37, 99, 235, 0.08)";
+              e.currentTarget.style.transform = "translateY(-1px)";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = "var(--gray-150)";
+              e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.04)";
+              e.currentTarget.style.transform = "none";
+            }}
+          >
+            <ArrowLeft size={14} strokeWidth={3} style={{ color: "var(--primary-600)" }} />
+            <span>Back to Dashboard</span>
+          </button>
+        </div>
+      )}
+
       <PageHeader
-        kicker="Communication"
+        kicker="COMMUNICATION HUB"
         title="Announcements"
-        subtitle="School-wide feed from the API · publish to your audiences"
+        subtitle="Create and manage broadcast messages for the school community."
         icon={<Megaphone size={22} />}
-        variant="light"
+        variant="dark"
         actions={(
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
             <TermSelector academicYearId={yearId} readOnly={false} />
@@ -213,12 +262,15 @@ export default function TeacherAnnouncements() {
           style={{
             position: "fixed",
             inset: 0,
-            zIndex: 1000,
-            background: "rgba(15, 23, 42, 0.45)",
+            zIndex: 99999,
+            background: "rgba(15, 23, 42, 0.4)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             padding: "1rem",
+            animation: "fadeIn 0.2s ease-out"
           }}
           onClick={() => setShowCreateModal(false)}
         >
@@ -353,8 +405,14 @@ export default function TeacherAnnouncements() {
         </div>
       )}
 
-      <div className="card">
-        <h3 className="card-title" style={{ marginBottom: "1rem" }}>
+      <div style={{
+        background: "#fff",
+        borderRadius: 20,
+        border: "1.5px solid var(--gray-100)",
+        padding: "2rem",
+        boxShadow: "0 4px 20px rgba(0,0,0,0.02)"
+      }}>
+        <h3 className="card-title" style={{ marginBottom: "1.5rem", fontWeight: 800 }}>
           All announcements ({sorted.length})
         </h3>
         {loading ? (
@@ -372,14 +430,25 @@ export default function TeacherAnnouncements() {
                 alignItems: "flex-start",
                 justifyContent: "space-between",
                 width: "100%",
-                padding: "0.85rem 0.95rem",
+                padding: "1.25rem 1.5rem",
                 background: "var(--gray-50)",
-                borderRadius: "var(--radius-md)",
-                marginBottom: "0.5rem",
+                borderRadius: 16,
+                marginBottom: "0.75rem",
                 gap: "0.75rem",
-                border: "1px solid var(--gray-100)",
+                border: "1.5px solid var(--gray-100)",
                 cursor: "pointer",
                 textAlign: "left",
+                transition: "all 0.2s ease-in-out",
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = "var(--primary-300)";
+                e.currentTarget.style.background = "#fff";
+                e.currentTarget.style.boxShadow = "0 4px 12px rgba(37,99,235,0.05)";
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = "var(--gray-100)";
+                e.currentTarget.style.background = "var(--gray-50)";
+                e.currentTarget.style.boxShadow = "none";
               }}
             >
               <div style={{ flex: 1 }}>
@@ -425,25 +494,100 @@ export default function TeacherAnnouncements() {
       </div>
 
       {selected && (
-        <div className="modal-overlay" onClick={() => setSelected(null)}>
-          <div className="modal" style={{ maxWidth: 640, width: "92%" }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">{selected.title}</h3>
-              <button type="button" className="modal-close" onClick={() => setSelected(null)} aria-label="Close">
+        <div 
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 99999,
+            background: "rgba(15, 23, 42, 0.4)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+            animation: "fadeIn 0.2s ease-out"
+          }}
+          onClick={() => setSelected(null)}
+        >
+          <div 
+            style={{
+              background: "#fff",
+              borderRadius: "24px",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.12)",
+              maxWidth: 640,
+              width: "100%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              padding: "2rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: "1.25rem"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
+              <h3 style={{ fontSize: "1.35rem", fontWeight: 800, color: "var(--gray-900)", margin: 0, lineHeight: 1.25 }}>
+                {selected.title}
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setSelected(null)} 
+                style={{
+                  background: "var(--gray-50)",
+                  border: "1.5px solid var(--gray-150)",
+                  borderRadius: "50%",
+                  width: 32,
+                  height: 32,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  color: "var(--gray-500)",
+                  fontSize: "0.85rem",
+                  transition: "all 0.15s ease",
+                  flexShrink: 0
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = "var(--gray-100)";
+                  e.currentTarget.style.color = "var(--gray-700)";
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = "var(--gray-50)";
+                  e.currentTarget.style.color = "var(--gray-500)";
+                }}
+              >
                 ✕
               </button>
             </div>
-            <div className="modal-body" style={{ fontSize: "0.9rem", color: "var(--gray-700)" }}>
-              <p style={{ marginBottom: "0.75rem", fontSize: "0.8rem", color: "var(--gray-500)" }}>
-                Audience: <strong>{selected.audience}</strong>
-                {selected.classOfferingId ? ` · ${offeringLabel(offerings.find((o) => o.id === selected.classOfferingId) || ({ id: selected.classOfferingId } as ClassOffering))}` : ""}
-                <br />
-                {new Date(selected.createdAt).toLocaleString()}
-              </p>
-              <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{selected.body}</div>
+            
+            <div style={{ fontSize: "0.9rem", color: "var(--gray-700)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+                {selected.audience === "class" && selected.classOffering ? (
+                  <span style={{ background: "var(--indigo-50)", color: "var(--indigo-700)", padding: "4px 10px", borderRadius: 8, fontSize: "0.75rem", fontWeight: 700 }}>
+                    {selected.classOffering.subject?.name} - {selected.classOffering.class?.name}
+                  </span>
+                ) : (
+                  <span style={{ background: "var(--gray-100)", color: "var(--gray-700)", padding: "4px 10px", borderRadius: 8, fontSize: "0.75rem", fontWeight: 700, textTransform: "capitalize" }}>
+                    {selected.audience} Broadcast
+                  </span>
+                )}
+                <span style={{ fontSize: "0.78rem", color: "var(--gray-400)", fontWeight: 500 }}>
+                  · {new Date(selected.createdAt).toLocaleString()}
+                </span>
+              </div>
+              <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.7, fontSize: "0.95rem", color: "var(--gray-800)" }}>
+                {selected.body}
+              </div>
             </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-secondary" onClick={() => setSelected(null)}>
+            
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "0.5rem" }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setSelected(null)}
+                style={{ borderRadius: 12, padding: "0.55rem 1.25rem", fontWeight: 700 }}
+              >
                 Close
               </button>
             </div>

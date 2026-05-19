@@ -108,7 +108,8 @@ function classOfferingLabel(o?: ClassOffering | null) {
 import { filterOfferingsBySubject, subjectNameMatchesProfile } from "@/lib/teacher-utils";
 import { useTermStore } from "@/store/termStore";
 import { PageHeader, PageHeaderSkeleton, CardSkeleton } from "@/components/ui";
-import { FileText } from "lucide-react";
+import { FileText, ArrowLeft } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type QuestionListRow = { subjectId: string; subject?: { name?: string } };
 
@@ -132,7 +133,7 @@ function TeacherExamsSkeleton() {
     return (
         <div className="page-wrapper">
             <PageHeaderSkeleton />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: "1.25rem", alignItems: "start" }}>
+            <div className="exams-main-layout">
                 <CardSkeleton lines={5} />
                 <CardSkeleton lines={4} />
             </div>
@@ -683,6 +684,9 @@ function LatexField({ label, value, onChange, rows = 3, placeholder, mini = fals
 
 export default function TeacherExams() {
     const [isClient, setIsClient] = useState(false);
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const fromDashboard = searchParams?.get("from") === "dashboard";
     const user = useCurrentUser("teacher");
     const { selectedTermId } = useTermStore();
     const [activeTab, setActiveTab] = useState<"create" | "bank" | "results">("create");
@@ -1818,12 +1822,49 @@ export default function TeacherExams() {
 
             {/* ── CSV Column Picker Modal removed ── */}
 
+            {fromDashboard && (
+                <div style={{ marginBottom: "1rem" }}>
+                    <button
+                        type="button"
+                        onClick={() => router.push("/teacher/dashboard")}
+                        style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.5rem",
+                            background: "#fff",
+                            border: "1.5px solid var(--gray-150)",
+                            borderRadius: "12px",
+                            padding: "0.55rem 1.15rem",
+                            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
+                            color: "var(--gray-800)",
+                            fontSize: "0.85rem",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            transition: "all 0.2s ease-in-out",
+                        }}
+                        onMouseEnter={e => {
+                            e.currentTarget.style.borderColor = "var(--primary-300)";
+                            e.currentTarget.style.boxShadow = "0 4px 16px rgba(37, 99, 235, 0.08)";
+                            e.currentTarget.style.transform = "translateY(-1px)";
+                        }}
+                        onMouseLeave={e => {
+                            e.currentTarget.style.borderColor = "var(--gray-150)";
+                            e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.04)";
+                            e.currentTarget.style.transform = "none";
+                        }}
+                    >
+                        <ArrowLeft size={14} strokeWidth={3} style={{ color: "var(--primary-600)" }} />
+                        <span>Back to Dashboard</span>
+                    </button>
+                </div>
+            )}
+
             <PageHeader
                 kicker="Assessment"
                 title="Exams & Assessments"
                 subtitle="Create quizzes, manage your exam bank, and review student grades."
                 icon={<FileText size={22} />}
-                variant="light"
+                variant="dark"
                 actions={<TermSelector academicYearId={activeYearId || null} readOnly={false} />}
             />
 
@@ -1841,18 +1882,28 @@ export default function TeacherExams() {
 
             {/* ── CREATE ── */}
             {activeTab === "create" && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: "1.25rem", alignItems: "start" }}>
+                <div className="exams-main-layout">
                     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                         {/* Meta */}
                         <div className="card">
                             <h3 className="card-title" style={{ marginBottom: "1rem" }}>Quiz Details</h3>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                            <div className="exams-details-grid">
                                 <div className="input-group"><label>Quiz Title</label><div className="input-field"><input value={quizTitle} onChange={e => setQuizTitle(e.target.value)} placeholder={`e.g., ${subject} Chapter Quiz`} /></div></div>
                                 <div className="input-group"><label>Subject</label>
-                                    <select
+                                    <Select
                                         value={selectedSubject}
                                         onChange={(e) => setSelectedSubject(e.target.value)}
-                                        style={{ padding: "0.75rem 1rem", background: "#fff", border: "1.5px solid var(--gray-200)", borderRadius: "12px", fontSize: "0.9rem", color: "var(--gray-700)", fontWeight: 600, width: "100%" }}
+                                        style={{
+                                            padding: "0.45rem 1.15rem",
+                                            borderRadius: "9999px",
+                                            border: "1.5px solid var(--primary-200)",
+                                            background: "var(--primary-50)",
+                                            color: "var(--primary-800)",
+                                            fontWeight: 600,
+                                            fontSize: "0.85rem",
+                                            width: "100%"
+                                        }}
+                                        dropdownMinWidth="100%"
                                     >
                                         <option value="" disabled>
                                             {subjectOptions.length > 0 ? "Select your subject" : "No assigned subjects available"}
@@ -1862,22 +1913,74 @@ export default function TeacherExams() {
                                                 {name}
                                             </option>
                                         ))}
-                                    </select>
+                                    </Select>
                                     <div style={{ marginTop: "0.35rem", fontSize: "0.75rem", color: "var(--gray-500)" }}>
                                         Assigned subjects from your class offerings
                                     </div>
                                 </div>
                                 <div className="input-group" style={{ gridColumn: "1 / -1" }}>
-                                    <label>Classes</label>
-                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "0.5rem", padding: "1rem", background: "var(--gray-50)", border: "1.5px solid var(--gray-200)", borderRadius: "12px" }}>
-                                        {offeringsForClassSelect.map(o => (
-                                            <label key={o.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontSize: "0.9rem" }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedOfferingIds.includes(o.id)}
-                                                    onChange={e => {
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                                        <label style={{ margin: 0 }}>Classes Scope</label>
+                                        {offeringsForClassSelect.length > 0 && (
+                                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedOfferingIds(offeringsForClassSelect.map(o => o.id));
+                                                        if (!subject && offeringsForClassSelect.length > 0) {
+                                                            const first = offeringsForClassSelect[0];
+                                                            const sName = (first as any).subjectName || (first as any).subject?.name;
+                                                            if (sName) setSubject(sName);
+                                                            else if (user?.subject) setSubject(user.subject);
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        background: "var(--primary-50)",
+                                                        border: "none",
+                                                        color: "var(--primary-700)",
+                                                        padding: "0.25rem 0.65rem",
+                                                        borderRadius: "9999px",
+                                                        fontSize: "0.75rem",
+                                                        fontWeight: 700,
+                                                        cursor: "pointer",
+                                                        transition: "all 0.15s ease"
+                                                    }}
+                                                    onMouseEnter={e => { e.currentTarget.style.background = "var(--primary-100)"; }}
+                                                    onMouseLeave={e => { e.currentTarget.style.background = "var(--primary-50)"; }}
+                                                >
+                                                    Select All
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSelectedOfferingIds([])}
+                                                    style={{
+                                                        background: "var(--gray-100)",
+                                                        border: "none",
+                                                        color: "var(--gray-600)",
+                                                        padding: "0.25rem 0.65rem",
+                                                        borderRadius: "9999px",
+                                                        fontSize: "0.75rem",
+                                                        fontWeight: 700,
+                                                        cursor: "pointer",
+                                                        transition: "all 0.15s ease"
+                                                    }}
+                                                    onMouseEnter={e => { e.currentTarget.style.background = "var(--gray-200)"; }}
+                                                    onMouseLeave={e => { e.currentTarget.style.background = "var(--gray-100)"; }}
+                                                >
+                                                    Clear
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "0.75rem" }}>
+                                        {offeringsForClassSelect.map(o => {
+                                            const isSelected = selectedOfferingIds.includes(o.id);
+                                            return (
+                                                <div
+                                                    key={o.id}
+                                                    onClick={() => {
                                                         const id = o.id;
-                                                        if (e.target.checked) {
+                                                        if (!isSelected) {
                                                             setSelectedOfferingIds(p => [...p, id]);
                                                             if (!subject) {
                                                                 const sName = (o as any).subjectName || (o as any).subject?.name;
@@ -1888,13 +1991,75 @@ export default function TeacherExams() {
                                                             setSelectedOfferingIds(p => p.filter(x => x !== id));
                                                         }
                                                     }}
-                                                />
-                                                {offeringLabel(o)}
-                                            </label>
-                                        ))}
-                                        {offerings.length === 0 && <span style={{ fontSize: "0.9rem", color: "var(--gray-500)" }}>No classes assigned for this year</span>}
+                                                    style={{
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        justifyContent: "space-between",
+                                                        gap: "0.75rem",
+                                                        padding: "0.85rem 1.15rem",
+                                                        background: isSelected ? "linear-gradient(135deg, var(--primary-600), var(--primary-700))" : "#fff",
+                                                        border: isSelected ? "1.5px solid transparent" : "1.5px solid var(--gray-200)",
+                                                        borderRadius: "16px",
+                                                        color: isSelected ? "#fff" : "var(--gray-700)",
+                                                        fontSize: "0.88rem",
+                                                        fontWeight: 650,
+                                                        cursor: "pointer",
+                                                        transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                                                        boxShadow: isSelected ? "0 8px 20px rgba(37, 99, 235, 0.15)" : "0 2px 4px rgba(0,0,0,0.02)",
+                                                        userSelect: "none"
+                                                    }}
+                                                    onMouseEnter={e => {
+                                                        if (!isSelected) {
+                                                            e.currentTarget.style.borderColor = "var(--primary-300)";
+                                                            e.currentTarget.style.boxShadow = "0 4px 12px rgba(37,99,235,0.06)";
+                                                            e.currentTarget.style.transform = "translateY(-1px)";
+                                                        } else {
+                                                            e.currentTarget.style.transform = "translateY(-1px)";
+                                                        }
+                                                    }}
+                                                    onMouseLeave={e => {
+                                                        if (!isSelected) {
+                                                            e.currentTarget.style.borderColor = "var(--gray-200)";
+                                                            e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.02)";
+                                                            e.currentTarget.style.transform = "translateY(0)";
+                                                        } else {
+                                                            e.currentTarget.style.transform = "translateY(0)";
+                                                        }
+                                                    }}
+                                                >
+                                                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                        {offeringLabel(o)}
+                                                    </span>
+                                                    <div style={{
+                                                        width: 20,
+                                                        height: 20,
+                                                        borderRadius: "50%",
+                                                        border: isSelected ? "2px solid #fff" : "2px solid var(--gray-300)",
+                                                        background: isSelected ? "#fff" : "transparent",
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        justifyContent: "center",
+                                                        flexShrink: 0,
+                                                        transition: "all 0.2s ease"
+                                                    }}>
+                                                        {isSelected && (
+                                                            <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                                                <path d="M1 4L3.5 6.5L9 1" stroke="var(--primary-600)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                            </svg>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {offerings.length === 0 && (
+                                            <div style={{ gridColumn: "1 / -1", padding: "2rem", textAlign: "center", background: "var(--gray-50)", borderRadius: "16px", border: "1.5px dashed var(--gray-200)" }}>
+                                                <span style={{ fontSize: "0.9rem", color: "var(--gray-500)", fontWeight: 500 }}>No classes assigned for this year</span>
+                                            </div>
+                                        )}
                                         {offerings.length > 0 && offeringsForClassSelect.length === 0 && (
-                                            <span style={{ fontSize: "0.9rem", color: "var(--gray-500)" }}>No class matches the selected subject ({selectedSubject || "—"})</span>
+                                            <div style={{ gridColumn: "1 / -1", padding: "2rem", textAlign: "center", background: "var(--gray-50)", borderRadius: "16px", border: "1.5px dashed var(--gray-200)" }}>
+                                                <span style={{ fontSize: "0.9rem", color: "var(--gray-500)", fontWeight: 500 }}>No class matches the selected subject ({selectedSubject || "—"})</span>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -1936,7 +2101,7 @@ export default function TeacherExams() {
                                 </div>
                             </div>
 
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "0.875rem" }}>
+                            <div className="exams-details-grid" style={{ marginBottom: "0.875rem" }}>
                                 <div className="input-group">
                                     <label>Question Type</label>
                                     <Select value={q.type} onChange={e => updateQ({ type: e.target.value as any, correct: "" })} style={{ padding: "0.6rem", borderRadius: 8, border: "1.5px solid var(--gray-200)", width: "100%", fontSize: "0.85rem" }}>
@@ -1951,7 +2116,7 @@ export default function TeacherExams() {
                             <LatexField label="Question Text" value={q.text} onChange={v => updateQ({ text: v })} rows={4} placeholder={q.type === "fillin" ? "Type question, use ____ for blank" : (SUBJECT_CONFIG[subject]?.placeholder ?? "Type question here…")} subject={subject} />
 
                             {q.type === "mcq" && (
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.875rem" }}>
+                                <div className="exams-details-grid" style={{ gap: "0.75rem", marginBottom: "0.875rem" }}>
                                     {(["A", "B", "C", "D"] as const).map(opt => (
                                         <LatexField key={opt} label={`Option ${opt}`} value={q.options[opt]} onChange={v => updateQ({ options: { ...q.options, [opt]: v } })} rows={2} placeholder={`Option ${opt}`} mini subject={subject} />
                                     ))}
@@ -1993,7 +2158,7 @@ export default function TeacherExams() {
                             </div>
                         </div>
 
-                        <div style={{ display: "flex", gap: "0.75rem" }}>
+                        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
                             <button type="button" className="btn btn-secondary" onClick={addQuestion} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                                 Add Question
@@ -2180,7 +2345,7 @@ export default function TeacherExams() {
                     <div className="card">
                         <div className="card-header">
                             <h3 className="card-title">Student Results</h3>
-                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                                 <button className="btn btn-primary btn-sm" disabled={sendAllBusy} onClick={async () => {
                                     setSendAllBusy(true);
                                     try {

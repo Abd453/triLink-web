@@ -145,7 +145,7 @@ export default function TeacherNotifications() {
                 title="Notifications"
                 subtitle={loading ? "Loading…" : (totalUnread > 0 ? `${totalUnread} unread notification${totalUnread !== 1 ? "s" : ""}` : "All caught up!")}
                 icon={<Bell size={22} />}
-                variant="light"
+                variant="dark"
                 actions={(
                     <div style={{ display: "flex", gap: 8 }}>
                         {totalUnread > 0 && (
@@ -153,7 +153,21 @@ export default function TeacherNotifications() {
                                 <CheckCheck size={14} strokeWidth={2} /> Mark all read
                             </button>
                         )}
-                        <Link href="/teacher/calendar" className="btn btn-outline" style={{ fontSize: "0.8rem", display: "flex", alignItems: "center", gap: 6, borderRadius: 12 }}>
+                        <Link
+                            href="/teacher/calendar?from=notifications"
+                            className="btn"
+                            style={{
+                                fontSize: "0.8rem",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                borderRadius: 12,
+                                color: "#fff",
+                                border: "1.5px solid rgba(255, 255, 255, 0.35)",
+                                background: "rgba(255, 255, 255, 0.12)",
+                                fontWeight: 700,
+                            }}
+                        >
                             <Calendar size={14} strokeWidth={2} /> Calendar
                         </Link>
                     </div>
