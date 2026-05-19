@@ -48,7 +48,7 @@ export default function LoginPage({ role, rolePlural, dashboardPath, gradient, t
             const res = await fetch(`${apiBase}${loginPath}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: email.toLowerCase(), password, role: role.toLowerCase() }),
+                body: JSON.stringify({ email: email.trim().toLowerCase(), password, role: role.toLowerCase() }),
             });
 
             const data = await res.json().catch(() => ({}));
@@ -155,6 +155,77 @@ export default function LoginPage({ role, rolePlural, dashboardPath, gradient, t
 
                     {!showForgotPassword || !canUseForgotPassword ? (
                         <>
+                            {role.toLowerCase() === "student" && (
+                                <div style={{
+                                    marginBottom: "1.25rem",
+                                    padding: "1rem",
+                                    background: "linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(59, 130, 246, 0.08) 100%)",
+                                    borderRadius: "var(--radius-lg, 12px)",
+                                    border: "1px dashed rgba(59, 130, 246, 0.3)",
+                                    boxShadow: "inset 0 1px 2px rgba(255,255,255,0.8)",
+                                }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "0.6rem" }}>
+                                        <span style={{ fontSize: "1.1rem" }}>⚡</span>
+                                        <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--primary-700, #1d4ed8)", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                                            Quick Sandbox Demo Logins
+                                        </span>
+                                    </div>
+                                    <p style={{ fontSize: "0.78rem", color: "var(--gray-600)", marginBottom: "0.75rem", lineHeight: 1.4 }}>
+                                        Select an active, pre-seeded student account to log in instantly using the deployed Render database:
+                                    </p>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                                        {[
+                                            { name: "Hiwot Teka (Grade 9A)", email: "hiwot.teka1@grade9a.trilink.edu" },
+                                            { name: "Selam Abreham (Grade 9B)", email: "selam.abreham1@grade9b.trilink.edu" },
+                                            { name: "Chala Beyene (Grade 9B)", email: "chala.beyene2@grade9b.trilink.edu" },
+                                        ].map((student) => (
+                                            <button
+                                                key={student.email}
+                                                type="button"
+                                                onClick={async () => {
+                                                    setEmail(student.email);
+                                                    setPassword("Student@123");
+                                                    setLoginError("");
+                                                    // Automatically submit after a brief UI feedback delay
+                                                    setTimeout(() => {
+                                                        const form = document.querySelector(".login-form") as HTMLFormElement;
+                                                        if (form) {
+                                                            form.requestSubmit();
+                                                        }
+                                                    }, 100);
+                                                }}
+                                                style={{
+                                                    display: "flex",
+                                                    justifyContent: "space-between",
+                                                    alignItems: "center",
+                                                    padding: "0.5rem 0.75rem",
+                                                    background: "#ffffff",
+                                                    border: "1px solid rgba(226, 232, 240, 0.8)",
+                                                    borderRadius: "var(--radius-md, 8px)",
+                                                    cursor: "pointer",
+                                                    textAlign: "left",
+                                                    transition: "all 0.2s ease",
+                                                    boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    e.currentTarget.style.borderColor = "var(--primary-400)";
+                                                    e.currentTarget.style.background = "var(--primary-50)";
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    e.currentTarget.style.borderColor = "rgba(226, 232, 240, 0.8)";
+                                                    e.currentTarget.style.background = "#ffffff";
+                                                }}
+                                            >
+                                                <div style={{ display: "flex", flexDirection: "column" }}>
+                                                    <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--gray-800)" }}>{student.name}</span>
+                                                    <span style={{ fontSize: "0.7rem", color: "var(--gray-400)", fontFamily: "monospace" }}>{student.email}</span>
+                                                </div>
+                                                <span style={{ fontSize: "0.85rem", color: "var(--primary-500)" }}>🔑</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             <form className="login-form" onSubmit={handleLogin}>
                                 {loginError && (
                                     <div style={{ marginBottom: "0.1rem", color: "#dc2626", fontSize: "0.82rem", fontWeight: 600, lineHeight: 1.25 }}>

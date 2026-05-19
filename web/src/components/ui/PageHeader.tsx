@@ -31,17 +31,17 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   const dark = variant === "dark";
-  const accentColor = accent ?? (dark ? "#34d399" : "#7c3aed");
+  const accentColor = accent ?? (dark ? "#38bdf8" : "#7c3aed");
 
   const wrapperStyle: React.CSSProperties = dark
     ? {
-        background: "linear-gradient(135deg, #0f172a, #1e293b 70%, #0f172a)",
+        background: "linear-gradient(135deg, #0b1f3c, #194685 80%, #0d2850)",
         color: "#fff",
         borderRadius: 24,
         padding: "1.5rem 2rem",
         marginBottom: 16,
-        border: "1px solid rgba(255,255,255,0.08)",
-        boxShadow: "0 18px 50px rgba(15,23,42,0.18)",
+        border: "1px solid rgba(59, 130, 246, 0.25)",
+        boxShadow: "0 18px 45px -12px rgba(11, 31, 60, 0.4)",
       }
     : {
         background: "#fff",

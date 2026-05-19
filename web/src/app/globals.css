@@ -69,6 +69,8 @@
   --z-popover: 1060;
   --z-tooltip: 1070;
   --z-toast: 1080;
+  /* responsive page/card buffer */
+  --page-buffer: 2rem;
 }
 
 * {
@@ -258,10 +260,10 @@ img {
 /* Cards */
 .card {
   background: #fff;
-  border-radius: var(--radius-lg);
+  border-radius: 20px;
   box-shadow: var(--shadow-card);
-  border: 1px solid var(--gray-100);
-  padding: 1.5rem;
+  border: 1.5px solid var(--gray-100);
+  padding: 2rem;
   transition: box-shadow var(--transition-base), transform var(--transition-base);
 }
 
@@ -798,6 +800,90 @@ table tbody tr:last-child td {
   border-radius: 14px;
 }
 
+/* Teacher page wrapper uses the global page buffer for consistent spacing */
+.teacher-page-wrapper {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--page-buffer);
+}
+
+@media (max-width: 1024px) {
+  .teacher-page-wrapper { padding: 1.25rem; }
+}
+
+@media (max-width: 640px) {
+  .teacher-page-wrapper { padding: 0.75rem; }
+}
+
+/* Students page layout tweaks */
+.students-main-layout {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.students-list-card {
+  flex: 1 1 640px;
+  min-width: 0;
+  padding: 0; /* inner padding handled by table wrapper for tighter look */
+}
+
+.students-list-card .table-wrapper {
+  border-radius: 14px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.students-list-card table th,
+.students-list-card table td {
+  padding: 0.9rem 1rem;
+}
+
+.students-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.students-back-button {
+  display: none;
+}
+
+/* Responsive: stack list and details on small screens */
+@media (max-width: 960px) {
+  .students-main-layout {
+    flex-direction: column;
+  }
+
+  .students-list-card {
+    order: 1;
+  }
+
+  .students-back-button {
+    display: inline-flex;
+  }
+
+  .students-stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .students-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .students-list-card table th {
+    font-size: 0.72rem;
+    padding: 0.65rem 0.85rem;
+  }
+
+  .students-list-card table td {
+    font-size: 0.82rem;
+    padding: 0.6rem 0.85rem;
+  }
+}
+
 .admin-shell-loading-nav {
   display: grid;
   gap: 0.45rem;
@@ -938,7 +1024,9 @@ table tbody tr:last-child td {
 
 /* Page Layout */
 .page-wrapper {
-  padding: 2rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--page-buffer);
 }
 
 .page-header {
@@ -1039,7 +1127,7 @@ table tbody tr:last-child td {
 
 .stat-value {
   font-size: 1.5rem;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--gray-900);
   line-height: 1.2;
   margin-top: 0.125rem;
@@ -1144,7 +1232,9 @@ table tbody tr:last-child td {
 }
 
 .admin-dash-bottom-card {
-  border: 1px solid #e2e8f0;
+  border: 1.5px solid var(--gray-100);
+  border-radius: 20px;
+  padding: 2rem;
   box-shadow: 0 12px 24px -18px rgba(15, 23, 42, 0.5);
 }
 
@@ -1273,7 +1363,7 @@ table tbody tr:last-child td {
 
 .school-setup-summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1rem;
   margin-bottom: 1.25rem;
 }
@@ -1334,7 +1424,9 @@ table tbody tr:last-child td {
 }
 
 .school-setup-card {
-  border: 1px solid #e2e8f0;
+  border: 1.5px solid var(--gray-100);
+  border-radius: 20px;
+  padding: 2rem;
   box-shadow: 0 10px 24px -18px rgba(15, 23, 42, 0.55);
 }
 
@@ -1386,7 +1478,7 @@ table tbody tr:last-child td {
 
 .classes-summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 1rem;
   margin-bottom: 1rem;
 }
@@ -1451,7 +1543,9 @@ table tbody tr:last-child td {
 }
 
 .classes-panel {
-  border: 1px solid #e2e8f0;
+  border: 1.5px solid var(--gray-100);
+  border-radius: 20px;
+  padding: 2rem;
   box-shadow: 0 10px 24px -19px rgba(15, 23, 42, 0.5);
 }
 
@@ -1508,7 +1602,7 @@ table tbody tr:last-child td {
 
 .attendance-summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 1rem;
   margin-bottom: 1rem;
 }
@@ -1573,7 +1667,9 @@ table tbody tr:last-child td {
 }
 
 .attendance-panel {
-  border: 1px solid #e2e8f0;
+  border: 1.5px solid var(--gray-100);
+  border-radius: 20px;
+  padding: 2rem;
   box-shadow: 0 10px 24px -19px rgba(15, 23, 42, 0.5);
 }
 
@@ -1727,14 +1823,11 @@ table tbody tr:last-child td {
   margin-bottom: 1rem;
 }
 
-.announcements-summary-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
+.announcements-summary-grid,
 .students-summary-grid,
 .teachers-summary-grid,
 .parents-summary-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
 .announcements-summary-card,
@@ -1745,7 +1838,9 @@ table tbody tr:last-child td {
 .students-panel,
 .teachers-panel,
 .parents-panel {
-  border: 1px solid #e2e8f0;
+  border: 1.5px solid var(--gray-100);
+  border-radius: 20px;
+  padding: 2rem;
   box-shadow: 0 10px 24px -19px rgba(15, 23, 42, 0.5);
 }
 
@@ -1803,6 +1898,17 @@ table tbody tr:last-child td {
   line-height: 1.1;
   color: #0f172a;
   margin-top: 0.2rem;
+}
+
+/* Make summary numbers slightly bolder for visual emphasis */
+.school-setup-summary-value,
+.classes-summary-value,
+.attendance-summary-value,
+.announcements-summary-value,
+.students-summary-value,
+.teachers-summary-value,
+.parents-summary-value {
+  font-weight: 800;
 }
 
 .announcements-section-title,
@@ -2736,13 +2842,21 @@ table tbody tr:last-child td {
 /* Shell: icon rail | conversation list | message area | info panel */
 .chat-shell {
   display: grid;
-  grid-template-columns: 64px 300px minmax(0, 1fr) 280px;
-  min-height: calc(100vh - 80px);
-  height: calc(100vh - 80px); /* fixed height so columns don't grow */
   background: #f0f2f5;
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  min-height: calc(100vh - 140px);
+  height: calc(100vh - 140px); /* fixed height so columns don't grow */
+}
+
+/* Desktop multi-column templates */
+.chat-shell.show-info-panel {
+  grid-template-columns: 300px minmax(0, 1fr) 280px;
+}
+
+.chat-shell.hide-info-panel {
+  grid-template-columns: 300px minmax(0, 1fr);
 }
 
 /* ── Icon Rail (leftmost column) ── */
@@ -2783,7 +2897,7 @@ table tbody tr:last-child td {
 }
 
 .chat-rail-logo {
-  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
   color: #fff;
 }
 
@@ -2826,12 +2940,12 @@ table tbody tr:last-child td {
 
 .chat-rail-item:hover,
 .chat-rail-item.active {
-  background: #f0ebff;
-  color: #7c3aed;
+  background: var(--primary-50);
+  color: var(--primary-600);
 }
 
 .chat-rail-item.primary {
-  background: #7c3aed;
+  background: var(--primary-600);
   color: #fff;
   border-radius: 12px;
 }
@@ -2862,8 +2976,8 @@ table tbody tr:last-child td {
 }
 
 .chat-rail-icon-btn:hover {
-  background: #f0ebff;
-  color: #7c3aed;
+  background: var(--primary-50);
+  color: var(--primary-600);
 }
 
 .chat-rail-user-avatar {
@@ -2994,7 +3108,7 @@ table tbody tr:last-child td {
 }
 
 .chat-recent-avatar-ring.active-ring {
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #7c3aed;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--primary-600);
 }
 
 .chat-recent-avatar-name {
@@ -3049,9 +3163,9 @@ table tbody tr:last-child td {
 }
 
 .chat-filter-chip.active {
-  background: #7c3aed;
+  background: var(--primary-600);
   color: #fff;
-  border-color: #7c3aed;
+  border-color: var(--primary-600);
 }
 
 /* Alert */
@@ -3101,7 +3215,7 @@ table tbody tr:last-child td {
 }
 
 .chat-conv-card.active {
-  background: #f0ebff;
+  background: var(--primary-50);
 }
 
 .chat-conv-card-top {
@@ -3132,7 +3246,7 @@ table tbody tr:last-child td {
 }
 
 .chat-conv-avatar-large.direct {
-  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
 }
 
 .chat-avatar-dot {
@@ -3185,7 +3299,7 @@ table tbody tr:last-child td {
 }
 
 .chat-conv-meta span {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: #9aa0a6;
 }
 
@@ -3193,7 +3307,7 @@ table tbody tr:last-child td {
   min-width: 20px;
   height: 20px;
   border-radius: 999px;
-  background: #7c3aed;
+  background: var(--primary-600);
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -3222,8 +3336,8 @@ table tbody tr:last-child td {
 }
 
 .chat-pill.group {
-  background: #ede9fe;
-  color: #6d28d9;
+  background: var(--primary-50);
+  color: var(--primary-750);
 }
 
 .chat-pill.soft {
@@ -3257,8 +3371,8 @@ table tbody tr:last-child td {
   width: 64px;
   height: 64px;
   border-radius: 20px;
-  background: linear-gradient(135deg, #ede9fe, #c4b5fd);
-  color: #7c3aed;
+  background: linear-gradient(135deg, var(--primary-50), var(--primary-100));
+  color: var(--primary-600);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3298,7 +3412,7 @@ table tbody tr:last-child td {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
   color: #fff;
   display: flex;
   align-items: center;
@@ -3412,7 +3526,7 @@ table tbody tr:last-child td {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -3431,7 +3545,7 @@ table tbody tr:last-child td {
 }
 
 .chat-bubble.mine {
-  background: #7c3aed;
+  background: var(--primary-600);
   color: #fff;
   border-bottom-right-radius: 4px;
 }
@@ -3477,7 +3591,7 @@ table tbody tr:last-child td {
 }
 
 .chat-bubble.other .chat-bubble-sender-name {
-  color: #7c3aed;
+  color: var(--primary-600);
 }
 
 .chat-bubble-text {
@@ -3572,7 +3686,7 @@ table tbody tr:last-child td {
   height: 36px;
   border: none;
   border-radius: 50%;
-  background: #7c3aed;
+  background: var(--primary-600);
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -3585,7 +3699,7 @@ table tbody tr:last-child td {
 }
 
 .chat-send-btn:hover {
-  background: #6d28d9;
+  background: var(--primary-700);
 }
 
 .chat-send-btn:disabled {
@@ -3599,7 +3713,155 @@ table tbody tr:last-child td {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0; /* critical for flexbox height containment */
+}
+
+/* ── Chat Info Body Scrollable Container ── */
+.chat-info-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   overflow-y: auto;
+  flex: 1;
+  min-height: 0; /* critical for flexbox height containment */
+}
+
+/* Scrollbar styling for chat info body */
+.chat-info-body::-webkit-scrollbar {
+  width: 4px;
+}
+.chat-info-body::-webkit-scrollbar-thumb {
+  background: var(--gray-200);
+  border-radius: 4px;
+}
+
+/* Action row: Block User button */
+.chat-info-action-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.chat-info-action-row .block-btn {
+  width: 100%;
+  border-color: var(--danger) !important;
+  color: var(--danger) !important;
+  transition: all 0.2s ease;
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 8px 16px;
+  background: transparent;
+}
+.chat-info-action-row .block-btn:hover {
+  background: rgba(239, 68, 68, 0.05) !important;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.08);
+}
+
+/* Notifications row styling */
+.chat-info-notif-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.chat-info-notif-row .notif-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+}
+.chat-info-notif-row button {
+  padding: 4px 10px !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+}
+
+/* Shared media photos grid */
+.chat-info-photos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+.chat-info-photos-grid a {
+  display: block;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.chat-info-photos-grid a:hover {
+  transform: scale(1.04);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.chat-info-photos-grid img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Shared stats file grid */
+.chat-info-file-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+.chat-info-file-grid .chat-file-card {
+  border-radius: 10px;
+  border: 1px solid #e8eaed;
+  background: #fafafa;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  transition: border-color 0.2s, background 0.2s;
+}
+.chat-info-file-grid .chat-file-card:hover {
+  border-color: var(--primary-200);
+  background: var(--primary-25);
+}
+.chat-info-file-grid .chat-file-card span {
+  font-size: 0.7rem;
+  color: var(--gray-500);
+  font-weight: 500;
+}
+.chat-info-file-grid .chat-file-card strong {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--gray-800);
+}
+
+/* Section overrides to remove extra padding */
+.chat-info-section {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.chat-info-section .chat-info-section-title {
+  padding: 0 0 6px 0 !important;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #9aa0a6;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.chat-empty-note {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+  text-align: center;
+  padding: 12px 0;
 }
 
 .chat-info-head {
@@ -3642,7 +3904,7 @@ table tbody tr:last-child td {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
   color: #fff;
   display: flex;
   align-items: center;
@@ -3727,7 +3989,7 @@ table tbody tr:last-child td {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
   color: #fff;
   display: flex;
   align-items: center;
@@ -3802,9 +4064,9 @@ table tbody tr:last-child td {
 .chat-info-note {
   margin: 0 12px 12px;
   border-radius: 10px;
-  background: #f0ebff;
-  border: 1px solid #ddd6fe;
-  color: #6d28d9;
+  background: var(--primary-50);
+  border: 1px solid var(--primary-100);
+  color: var(--primary-700);
   padding: 10px 12px;
   font-size: 0.75rem;
   line-height: 1.45;
@@ -3881,12 +4143,12 @@ table tbody tr:last-child td {
 }
 
 .chat-member-option-row.selected {
-  background: #f0ebff;
-  border-color: #c4b5fd;
+  background: var(--primary-50);
+  border-color: var(--primary-200);
 }
 
 .chat-member-action {
-  color: #7c3aed;
+  color: var(--primary-600);
   font-size: 0.72rem;
   font-weight: 700;
 }
@@ -3904,8 +4166,8 @@ table tbody tr:last-child td {
   gap: 6px;
   border-radius: 999px;
   padding: 4px 10px;
-  background: #ede9fe;
-  color: #4c1d95;
+  background: var(--primary-50);
+  color: var(--primary-700);
   font-size: 0.78rem;
   font-weight: 600;
 }
@@ -3951,9 +4213,9 @@ table tbody tr:last-child td {
 }
 
 .chat-compose-type-btn.active {
-  background: #7c3aed;
+  background: var(--primary-600);
   color: #fff;
-  border-color: #7c3aed;
+  border-color: var(--primary-600);
 }
 
 .chat-compose-input {
@@ -4768,6 +5030,11 @@ table tbody tr:last-child td {
 /* STUDENT EXAM PORTAL — RESPONSIVE STYLES      */
 /* ============================================= */
 
+/* Bottom Navigation Bar for Mobile */
+.student-mobile-bottom-nav {
+  display: none;
+}
+
 /* Student Layout Header */
 .student-header {
   background: #fff;
@@ -4813,9 +5080,17 @@ table tbody tr:last-child td {
 /* Dashboard Stats Grid */
 .exam-stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
   margin-bottom: 1.5rem;
+}
+
+/* Student Dashboard Layout */
+.student-dashboard-layout {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 2.5rem;
+  align-items: start;
 }
 
 /* Dashboard Filter Tabs */
@@ -5002,9 +5277,7 @@ table tbody tr:last-child td {
   }
 
   .header-search {
-    width: auto;
-    flex: 1;
-    max-width: 280px;
+    display: none !important;
   }
 
   .header-user-info {
@@ -5033,14 +5306,79 @@ table tbody tr:last-child td {
     display: none;
   }
 
+  .student-desktop-link {
+    display: none !important;
+  }
+
+  .student-logout-btn .logout-text {
+    display: none;
+  }
+
+  .student-logout-btn {
+    padding: 0.4rem !important;
+    border-radius: 8px;
+  }
+
   .student-main {
-    padding: 1.25rem 1rem;
+    padding: 1.25rem 1rem 80px 1rem !important;
+  }
+
+  .student-mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(226, 232, 240, 0.8);
+    justify-content: space-around;
+    align-items: center;
+    padding: 0 0.5rem;
+    z-index: 1000;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.04);
+  }
+
+  .student-mobile-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: var(--gray-500);
+    text-decoration: none;
+    font-size: 0.65rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    flex: 1;
+    height: 100%;
+  }
+
+  .student-mobile-nav-item.active {
+    color: var(--primary-600);
+  }
+
+  .student-mobile-nav-item svg {
+    width: 20px;
+    height: 20px;
+    transition: transform 0.2s ease;
+  }
+
+  .student-mobile-nav-item:active svg {
+    transform: scale(0.9);
   }
 
   /* Dashboard */
   .exam-stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr) !important;
     gap: 0.75rem;
+  }
+
+  .student-dashboard-layout {
+    grid-template-columns: 1fr !important;
+    gap: 2rem;
   }
 
   .exam-card-meta {
@@ -5159,11 +5497,7 @@ table tbody tr:last-child td {
     gap: 0.4rem !important;
   }
   .header-search {
-    min-width: 0 !important;
-    flex: 1 1 120px !important;
-  }
-  .header-search input {
-    font-size: 0.82rem !important;
+    display: none !important;
   }
   :root {
     --user-info-display: none;
@@ -5205,6 +5539,40 @@ table tbody tr:last-child td {
   }
 }
 
+/* Improve admin dashboard responsiveness for medium screens */
+@media (max-width: 1024px) {
+  .admin-dash-stats-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.9rem !important;
+  }
+  .admin-dash-bottom-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+  .admin-dash-bottom-card {
+    padding: 1.25rem !important;
+  }
+  .admin-dash-stat-card {
+    padding: 0.9rem !important;
+  }
+  .admin-dash-bottom-head {
+    gap: 0.5rem !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-dash-stats-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.6rem !important;
+  }
+  .admin-dash-bottom-card {
+    padding: 0.9rem !important;
+  }
+  .admin-dash-chip { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; }
+}
+
 /* ── Responsive: Cards & Tables ─────────────────────────────────────────── */
 @media (max-width: 768px) {
   .card {
@@ -5233,6 +5601,91 @@ table tbody tr:last-child td {
   .main-content {
     margin-left: 0 !important;
   }
+  .chat-shell {
+    height: calc(100vh - 100px) !important;
+    min-height: calc(100vh - 100px) !important;
+  }
+}
+
+/* ── Tablet Responsive Chat Layout (768px < width <= 1024px) ── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .chat-shell.show-info-panel {
+    grid-template-columns: 260px minmax(0, 1fr) 240px !important;
+  }
+  .chat-shell.hide-info-panel {
+    grid-template-columns: 280px minmax(0, 1fr) !important;
+  }
+}
+
+/* ── Mobile Responsive Chat Layout (≤768px) ── */
+@media (max-width: 768px) {
+  .chat-mobile-back-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: #5f6368;
+    cursor: pointer;
+    margin-right: 8px;
+    transition: background 0.15s;
+  }
+  .chat-mobile-back-btn:hover {
+    background: #f5f5f5;
+  }
+
+  /* When no conversation is active, show ONLY the inbox list */
+  .chat-shell.no-active-conv {
+    grid-template-columns: 1fr !important;
+  }
+  .chat-shell.no-active-conv .chat-inbox {
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .chat-shell.no-active-conv .chat-stage,
+  .chat-shell.no-active-conv .chat-info {
+    display: none !important;
+  }
+
+  /* When a conversation is active, show ONLY the chat stage (and details if explicitly shown) */
+  .chat-shell.has-active-conv {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* If active conversation is present, hide inbox */
+  .chat-shell.has-active-conv .chat-inbox {
+    display: none !important;
+  }
+
+  /* If info panel is closed on mobile, show the chat stage */
+  .chat-shell.has-active-conv.hide-info-panel .chat-stage {
+    display: flex !important;
+    width: 100% !important;
+  }
+  .chat-shell.has-active-conv.hide-info-panel .chat-info {
+    display: none !important;
+  }
+
+  /* If info panel is open on mobile, show the details panel */
+  .chat-shell.has-active-conv.show-info-panel .chat-stage {
+    display: none !important;
+  }
+  .chat-shell.has-active-conv.show-info-panel .chat-info {
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Hide back button on desktop */
+@media (min-width: 769px) {
+  .chat-mobile-back-btn {
+    display: none !important;
+  }
 }
 
 /* ── Chat overhaul: hover bubble actions + broader layout ───────────────── */
@@ -5251,7 +5704,378 @@ table tbody tr:last-child td {
 .chat-bubble-actions button:hover {
   background: #f1f5f9 !important;
 }
-
 .chat-conv-card:hover .chat-conv-pin-btn { opacity: 1 !important; }
 @keyframes chatPulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
 .chat-bubble-text { word-break: break-word; }
+
+/* ── Mobile search toggle button ── */
+.mobile-search-toggle-btn {
+  display: none !important;
+}
+@media (max-width: 768px) {
+  .mobile-search-toggle-btn {
+    display: inline-flex !important;
+  }
+}
+
+/* ── Collapsible Desktop Sidebar Styles ── */
+@media (min-width: 769px) {
+  /* Sidebar base transition */
+  .sidebar {
+    transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform var(--transition-base) !important;
+  }
+  .main-content {
+    transition: margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  }
+
+  /* Collapsed state overrides */
+  body.sidebar-collapsed .sidebar {
+    width: 70px !important;
+  }
+  body.sidebar-collapsed .main-content {
+    margin-left: 70px !important;
+  }
+
+  /* Header transitions in collapsed state */
+  body.sidebar-collapsed .sidebar-header {
+    padding: 1rem 0.75rem !important;
+    justify-content: center !important;
+  }
+  body.sidebar-collapsed .sidebar-brand-wrapper {
+    display: none !important;
+  }
+
+  /* Nav item transitions in collapsed state */
+  body.sidebar-collapsed .sidebar-nav {
+    padding: 1rem 0.5rem !important;
+  }
+  body.sidebar-collapsed .nav-item {
+    justify-content: center !important;
+    padding: 0.75rem 0 !important;
+    width: 100% !important;
+    border-radius: 12px !important;
+  }
+  body.sidebar-collapsed .nav-label {
+    display: none !important;
+  }
+  body.sidebar-collapsed .nav-icon {
+    margin-right: 0 !important;
+  }
+  body.sidebar-collapsed .sidebar-section {
+    display: none !important;
+  }
+  body.sidebar-collapsed .nav-badge {
+    position: absolute !important;
+    top: 4px !important;
+    right: 4px !important;
+    padding: 2px 5px !important;
+    font-size: 0.65rem !important;
+  }
+
+  /* Collapsed footer override */
+  body.sidebar-collapsed .sidebar-footer {
+    padding: 1rem 0.5rem !important;
+  }
+}
+
+/* Desktop Sidebar Floating Collapse Button */
+.sidebar-desktop-collapse-btn {
+  position: absolute;
+  top: 24px;
+  right: -12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid var(--gray-200);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gray-500);
+  cursor: pointer;
+  z-index: 100;
+  transition: all 0.2s ease;
+}
+.sidebar-desktop-collapse-btn:hover {
+  transform: scale(1.08);
+  background: var(--primary-50);
+  border-color: var(--primary-200);
+  color: var(--primary-600);
+}
+@media (max-width: 768px) {
+  .sidebar-desktop-collapse-btn {
+    display: none !important;
+  }
+}
+
+/* ── Settings Page Styling Overrides ── */
+.settings-grid-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(250px, 0.8fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.settings-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 992px) {
+  .settings-grid-layout {
+    grid-template-columns: 1fr !important;
+    gap: 1.25rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-info-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem;
+  }
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+  margin-top: 1.5rem;
+}
+
+.settings-input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 0.65rem 0.85rem !important;
+  border-radius: 10px !important;
+  border: 1.5px solid var(--gray-300) !important;
+  background-color: #f8fafc !important; /* Soft slate off-white to contrast with the card background */
+  color: var(--gray-900) !important;
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease !important;
+  outline: none !important;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03) !important;
+}
+
+.settings-input:hover {
+  border-color: var(--gray-400) !important;
+  background-color: #f1f5f9 !important;
+}
+
+.settings-input:focus {
+  border-color: var(--primary-500) !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12), 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+  background-color: #ffffff !important; /* Transitions to clean white on active typing */
+}
+
+.settings-label {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin-bottom: 0.8rem;
+  cursor: pointer;
+}
+
+/* ── Calendar Page Responsive Styling Overrides ── */
+.calendar-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.calendar-main-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+}
+
+.calendar-day-cell {
+  min-height: 110px;
+}
+
+.calendar-day-events-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.calendar-more-badge {
+  font-size: 0.72rem;
+  color: var(--gray-500);
+  padding-left: 2px;
+}
+
+@media (max-width: 992px) {
+  .calendar-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .calendar-main-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .calendar-day-cell {
+    min-height: 64px !important;
+    padding: 6px !important;
+  }
+  .calendar-empty-cell {
+    min-height: 64px !important;
+  }
+  .calendar-day-events-container {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+    justify-content: center !important;
+  }
+  .calendar-more-badge {
+    font-size: 0.6rem !important;
+    font-weight: bold !important;
+    color: var(--primary-600) !important;
+    padding-left: 0 !important;
+  }
+  .day-chip-label {
+    display: none !important;
+  }
+  .day-chip-button {
+    width: auto !important;
+    padding: 4px !important;
+    border-radius: 50% !important;
+    background: transparent !important;
+    border: none !important;
+    display: inline-flex !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .calendar-stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Teacher Exams Responsive Styling Overrides ── */
+.exams-main-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.exams-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 992px) {
+  .exams-main-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .exams-details-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Teacher Students Page Responsive Styling Overrides ── */
+.students-main-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+.students-main-layout.has-selected {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+}
+
+.students-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 992px) {
+  .students-main-layout.has-selected {
+    grid-template-columns: 1fr !important;
+  }
+  .students-main-layout.has-selected .students-list-card {
+    display: none !important;
+  }
+  .students-back-button {
+    display: inline-flex !important;
+    margin-bottom: 0.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .students-list-card table {
+    min-width: 500px !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .students-main-layout table {
+    min-width: 400px;
+  }
+}
+
+@media (max-width: 480px) {
+  .students-stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Registration page specific responsive helpers */
+.registration-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.registration-success-body {
+  padding: 24px 28px;
+}
+
+.registration-form-card {
+  padding: 2rem;
+}
+
+.registration-fallback {
+  padding: 2rem;
+  text-align: center;
+  color: var(--gray-500);
+}
+
+@media (max-width: 768px) {
+  .registration-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .info-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .registration-form-card { padding: 1rem !important; }
+  .registration-success-body { padding: 1rem !important; }
+  .registration-fallback { padding: 1rem !important; }
+}
+
+@media (max-width: 480px) {
+  .registration-form-card { padding: 0.75rem !important; }
+  .registration-success-body { padding: 0.75rem !important; }
+}

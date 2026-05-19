@@ -84,15 +84,14 @@ export default function SettingsPage() {
                 title="Settings"
                 subtitle="Manage your password, security, and account preferences."
                 icon={<SettingsIcon size={22} />}
-                variant="light"
-                accent="#7c3aed"
+                variant="dark"
             />
 
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(250px, 0.8fr)", gap: "1.5rem" }}>
+            <div className="settings-grid-layout">
                 {/* Account Information */}
                 <div className="card">
                     <h3 className="card-title" style={{ marginBottom: "1rem" }}>Account Information</h3>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                    <div className="settings-info-grid">
                         <div>
                             <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", fontWeight: 600, marginBottom: "0.35rem" }}>
                                 Name

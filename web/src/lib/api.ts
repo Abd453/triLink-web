@@ -6,7 +6,7 @@ export function getApiBase(): string {
   const envBase =
     (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "")) || "";
   if (envBase) return envBase;
-  // If no env is set, we default to the production backend
+  // Always use the deployed production backend as requested
   return "https://trilink-backend-ms68.onrender.com";
 }
 

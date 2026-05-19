@@ -28,6 +28,7 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
     const pathname = usePathname();
     const [searchText, setSearchText] = useState("");
     const [showUserMenu, setShowUserMenu] = useState(false);
+    const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
     const [suggestions, setSuggestions] = useState<{ href: string; label: string }[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
@@ -238,9 +239,9 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
             >
                 <div className="header-user">
-                    <div className="header-user-info" style={{ display: "var(--user-info-display, flex)" }}>
-                        <div className="header-user-name">{userName}</div>
-                        <div className="header-user-role">{userRole}</div>
+                    <div className="header-user-info" style={{ display: "var(--user-info-display, flex)", flexDirection: "column", justifyContent: "center", alignItems: "flex-end" }}>
+                        <div className="header-user-name" style={{ lineHeight: 1.2 }}>{userName}</div>
+                        <div className="header-user-role" style={{ lineHeight: 1.2, marginTop: 2 }}>{userRole}</div>
                     </div>
 <AuthenticatedAvatar
     fileId={userProfileImageFileId}
@@ -299,8 +300,37 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
     );
 
     return (
-        <header className="top-header" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-            <div className="header-search" style={{ flex: "1 1 160px", minWidth: 0 }}>
+        <header className="top-header" style={{ flexWrap: "nowrap", gap: "1rem" }}>
+            {isMobileSearchOpen && (
+                <div className="mobile-search-overlay" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "#ffffff", zIndex: 100, display: "flex", alignItems: "center", padding: "0 1rem 0 4.5rem", gap: "0.75rem", boxShadow: "0 4px 15px rgba(0,0,0,0.05)" }}>
+                    <div style={{ flex: 1, display: "flex", alignItems: "center", background: "var(--gray-50)", borderRadius: "24px", padding: "0.4rem 1rem", border: "1px solid var(--primary-200)", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.02)" }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--primary-600)", marginRight: "0.5rem", flexShrink: 0 }}>
+                            <circle cx="11" cy="11" r="8" />
+                            <path d="m21 21-4.3-4.3" />
+                        </svg>
+                        <input 
+                            type="text" 
+                            autoFocus
+                            placeholder="Search anything..." 
+                            value={searchText} 
+                            onChange={(e) => setSearchText(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    submitSearch();
+                                    setIsMobileSearchOpen(false);
+                                }
+                            }}
+                            style={{ flex: 1, minWidth: 0, border: "none", outline: "none", fontSize: "0.95rem", background: "transparent", padding: "0.2rem 0", color: "var(--gray-900)" }}
+                        />
+                    </div>
+                    <button type="button" onClick={() => setIsMobileSearchOpen(false)} style={{ padding: "0.5rem 0", color: "var(--gray-600)", flexShrink: 0, background: "none", border: "none", fontWeight: 600, fontSize: "0.9rem", cursor: "pointer" }}>
+                        Cancel
+                    </button>
+                </div>
+            )}
+            
+            <div className="header-search" style={{ flex: "1 1 auto", minWidth: 120, maxWidth: 400 }}>
                 <button type="button" className="header-search-btn" onClick={submitSearch} aria-label="Search">
                     <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="11" cy="11" r="8" />
@@ -321,10 +351,13 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
                 />
             </div>
 
-            <div className="header-actions" style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "nowrap" }}>
+            <div className="header-actions" style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "nowrap", marginLeft: "auto" }}>
+                <button type="button" className="header-icon-btn mobile-search-toggle-btn" onClick={() => setIsMobileSearchOpen(true)} title="Search">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </button>
                 {/* Academic Year Control */}
                 {role === "admin" ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginRight: "1rem" }}>
+                    <div className="admin-year-selector" style={{ display: "var(--year-display, flex)", alignItems: "center", gap: "0.5rem", marginRight: "1rem" }}>
                         <span style={{ fontSize: "0.8rem", color: "var(--gray-500)", fontWeight: 600 }}>Year:</span>
                         <Select
                             value={
@@ -335,15 +368,15 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
                             onChange={(e) => setAdminSelectedYear(e.target.value)}
                             disabled={adminYearLabels.length === 0}
                             style={{
-                                padding: "0.3rem 0.8rem",
+                                padding: "0.35rem 1rem",
                                 borderRadius: "20px",
-                                border: "1px solid var(--gray-200)",
+                                border: "1px solid var(--primary-200)",
                                 fontSize: "0.85rem",
-                                background: "var(--gray-50)",
+                                background: "var(--primary-50)",
                                 cursor: adminYearLabels.length === 0 ? "not-allowed" : "pointer",
                                 outline: "none",
                                 fontWeight: 600,
-                                color: "var(--gray-800)",
+                                color: "var(--primary-800)",
                             }}
                         >
                             {adminYearLabels.length === 0 ? (
@@ -355,6 +388,28 @@ export default function Header({ userName, userRole, userInitials, userProfileHr
                                     </option>
                                 ))
                             )}
+                        </Select>
+                    </div>
+                ) : role === "teacher" ? (
+                    <div className="admin-year-selector" style={{ display: "var(--year-display, flex)", alignItems: "center", gap: "0.5rem", marginRight: "1rem" }}>
+                        <span style={{ fontSize: "0.8rem", color: "var(--gray-500)", fontWeight: 600 }}>Year:</span>
+                        <Select
+                            value={portalYearLabel ?? currentSystemYear}
+                            style={{
+                                padding: "0.35rem 1rem",
+                                borderRadius: "20px",
+                                border: "1px solid var(--primary-200)",
+                                fontSize: "0.85rem",
+                                background: "var(--primary-50)",
+                                cursor: "pointer",
+                                outline: "none",
+                                fontWeight: 600,
+                                color: "var(--primary-800)",
+                            }}
+                        >
+                            <option value={portalYearLabel ?? currentSystemYear}>
+                                {portalYearLabel ?? currentSystemYear}
+                            </option>
                         </Select>
                     </div>
                 ) : (
