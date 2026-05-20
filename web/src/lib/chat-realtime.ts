@@ -14,6 +14,8 @@ type BaseEnvelope<T = unknown> = {
 export type PresencePayload = {
   userId: string;
   status: "online" | "offline";
+  isOnline?: boolean;
+  lastSeenAt?: string;
 };
 
 export type TypingPayload = {
@@ -25,7 +27,8 @@ export type TypingPayload = {
 export type ReadPayload = {
   conversationId: string;
   userId: string;
-  messageId: string;
+  messageId?: string;
+  lastReadMessageId?: string;
 };
 
 export type MessagePayload = {
@@ -42,6 +45,8 @@ export type MessagePayload = {
 export type RealtimeEventMap = {
   status: RealtimeStatus;
   "message:new": MessagePayload;
+  "message:update": MessagePayload;
+  "message:delete": { conversationId: string; messageId: string };
   "notification:new": any;
   "announcement:new": any;
   "typing:update": TypingPayload;
@@ -79,6 +84,7 @@ function deriveWsUrl(): string {
 class ChatRealtimeClient {
   private socket: Socket | null = null;
   private reconnectTimer: number | null = null;
+  private pingTimer: number | null = null;
   private reconnectMs = 1800;
   private status: RealtimeStatus = "idle";
   private userInfo: { id: string; name: string } | null = null;
@@ -86,6 +92,8 @@ class ChatRealtimeClient {
   private handlers: HandlerMap = {
     status: new Set(),
     "message:new": new Set(),
+    "message:update": new Set(),
+    "message:delete": new Set(),
     "notification:new": new Set(),
     "announcement:new": new Set(),
     "typing:update": new Set(),
@@ -135,16 +143,17 @@ class ChatRealtimeClient {
     this.socket.on("connect", () => {
       this.setStatus("open");
       this.reconnectMs = 1800;
+      this.schedulePing();
       this.sendRaw("auth:hello", {
-        event: "auth:hello",
-        type: "auth:hello",
-        payload: { token: getAccessToken(), userId: this.userInfo?.id, name: this.userInfo?.name },
+        token: getAccessToken(),
+        userId: this.userInfo?.id,
+        name: this.userInfo?.name,
       });
       if (this.userInfo?.id) {
         this.sendRaw("presence:set", {
-          event: "presence:set",
-          type: "presence:set",
-          payload: { userId: this.userInfo.id, status: "online", name: this.userInfo.name },
+          userId: this.userInfo.id,
+          status: "online",
+          name: this.userInfo.name,
         });
       }
     });
@@ -155,35 +164,64 @@ class ChatRealtimeClient {
         const eventName = String(event ?? parsed.event ?? parsed.type ?? "").toLowerCase();
         const payload = (parsed.payload ?? parsed.data ?? data ?? {}) as Record<string, unknown>;
 
-        // Some backends send the message as root fields plus conversationId.
-        if (eventName.includes("message") && ("text" in payload || "senderId" in payload)) {
-          this.emit("message:new", {
-            conversationId: String(payload.conversationId ?? ""),
-            message: {
-              id: String(payload.id ?? ""),
-              conversationId: String(payload.conversationId ?? ""),
-              senderId: String(payload.senderId ?? ""),
-              text: String(payload.text ?? ""),
-              createdAt: String(payload.createdAt ?? new Date().toISOString()),
-            },
-          });
-          return;
-        }
-
+        // Message events — handle multiple payload shapes from different backends
         if (eventName.includes("message")) {
+          if (eventName.includes("update") || eventName.includes("edit")) {
+            this.emit("message:update", payload as MessagePayload);
+            return;
+          }
+          if (eventName.includes("delete") || eventName.includes("remove")) {
+            this.emit("message:delete", {
+              conversationId: String(payload.conversationId ?? ""),
+              messageId: String(payload.messageId ?? payload.id ?? ""),
+            });
+            return;
+          }
+          // Shape 1: { message: { id, senderId, text, ... }, conversationId }
+          if (payload.message && typeof payload.message === "object") {
+            this.emit("message:new", payload as MessagePayload);
+            return;
+          }
+          // Shape 2: root-level fields { id, senderId, text, conversationId, ... }
+          if ("text" in payload || "senderId" in payload) {
+            this.emit("message:new", {
+              conversationId: String(payload.conversationId ?? ""),
+              message: {
+                id: String(payload.id ?? ""),
+                conversationId: String(payload.conversationId ?? ""),
+                senderId: String(payload.senderId ?? ""),
+                text: String(payload.text ?? ""),
+                createdAt: String(payload.createdAt ?? new Date().toISOString()),
+              },
+            });
+            return;
+          }
+          // Shape 3: nested under data/payload already extracted above — try as-is
           this.emit("message:new", payload as MessagePayload);
           return;
         }
+
         if (eventName.includes("typing")) {
           this.emit("typing:update", payload as TypingPayload);
           return;
         }
         if (eventName.includes("presence")) {
-          this.emit("presence:update", payload as PresencePayload);
+          const status = payload.isOnline === false || String(payload.status ?? "").toLowerCase() === "offline"
+            ? "offline"
+            : "online";
+          this.emit("presence:update", {
+            ...(payload as PresencePayload),
+            status,
+            isOnline: status === "online",
+          });
           return;
         }
         if (eventName.includes("read")) {
-          this.emit("read:update", payload as ReadPayload);
+          this.emit("read:update", {
+            ...(payload as ReadPayload),
+            messageId: String(payload.messageId ?? payload.lastReadMessageId ?? ""),
+            lastReadMessageId: String(payload.lastReadMessageId ?? payload.messageId ?? ""),
+          });
           return;
         }
         if (eventName.includes("conversation")) {
@@ -222,6 +260,7 @@ class ChatRealtimeClient {
 
     this.socket.on("disconnect", () => {
       this.setStatus("closed");
+      this.clearPing();
       this.socket = null;
       this.scheduleReconnect();
     });
@@ -240,38 +279,43 @@ class ChatRealtimeClient {
       }
       this.socket = null;
     }
+    this.clearPing();
     this.setStatus("closed");
+  }
+
+  sendPing() {
+    this.sendRaw("ping", {
+      ts: Date.now(),
+    });
   }
 
   joinConversation(conversationId: string, userId: string) {
     this.sendRaw("conversation:join", {
-      event: "conversation:join",
-      type: "conversation:join",
-      payload: { conversationId, userId },
+      conversationId,
+      userId,
     });
   }
 
   leaveConversation(conversationId: string, userId: string) {
     this.sendRaw("conversation:leave", {
-      event: "conversation:leave",
-      type: "conversation:leave",
-      payload: { conversationId, userId },
+      conversationId,
+      userId,
     });
   }
 
   sendTyping(conversationId: string, userId: string, isTyping: boolean) {
     this.sendRaw("typing:update", {
-      event: "typing:update",
-      type: "typing:update",
-      payload: { conversationId, userId, isTyping },
+      conversationId,
+      userId,
+      isTyping,
     });
   }
 
   sendReadReceipt(conversationId: string, userId: string, messageId: string) {
     this.sendRaw("read:update", {
-      event: "read:update",
-      type: "read:update",
-      payload: { conversationId, userId, messageId },
+      conversationId,
+      userId,
+      messageId,
     });
   }
 
@@ -290,6 +334,21 @@ class ChatRealtimeClient {
       this.connect();
       this.reconnectMs = Math.min(this.reconnectMs * 1.5, 12000);
     }, this.reconnectMs);
+  }
+
+  private schedulePing() {
+    if (typeof window === "undefined") return;
+    this.clearPing();
+    this.pingTimer = window.setInterval(() => {
+      this.sendPing();
+    }, 25_000);
+  }
+
+  private clearPing() {
+    if (this.pingTimer != null && typeof window !== "undefined") {
+      window.clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
   }
 
   private setStatus(next: RealtimeStatus) {

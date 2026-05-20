@@ -1,12 +1,8 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
-import { useCurrentUser } from "@/lib/useCurrentUser";
-import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
-import { useToastStore } from "@/store/toastStore";
-import { patchMe, uploadProfileImage } from "@/lib/admin-api";
-import { refreshStoredProfile } from "@/lib/auth";
+import { useEffect, useRef, useState } from "react";
 import Select from "@/components/Select";
+import { useCurrentUser } from "@/lib/useCurrentUser";
 
 type ParentProfile = {
     firstName: string;
@@ -23,19 +19,19 @@ type ParentProfile = {
     postalCode: string;
 };
 
-const defaultProfile: ParentProfile = {
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    relationship: "",
-    childName: "",
-    childGrade: "",
-    childSection: "",
-    occupation: "",
-    country: "",
-    cityState: "",
-    postalCode: "",
+const initialProfile: ParentProfile = {
+    firstName: "Fatima",
+    lastName: "Mohammed",
+    email: "fatima.mohammed@email.com",
+    phone: "+251 912 345 678",
+    relationship: "Mother",
+    childName: "Ahmed Mohammed",
+    childGrade: "Grade 11",
+    childSection: "A",
+    occupation: "Teacher",
+    country: "Ethiopia",
+    cityState: "Addis Ababa",
+    postalCode: "1000",
 };
 
 function StaticField({ label, value }: { label: string; value: string }) {
@@ -50,7 +46,7 @@ function StaticField({ label, value }: { label: string; value: string }) {
             }}
         >
             <div style={{ fontSize: "0.78rem", color: "var(--gray-500)", marginBottom: "0.35rem", fontWeight: 600 }}>{label}</div>
-            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--gray-900)", lineHeight: 1.35 }}>{value || "—"}</div>
+            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--gray-900)", lineHeight: 1.35 }}>{value}</div>
         </div>
     );
 }
@@ -62,7 +58,6 @@ function EditableField({
     type = "text",
     placeholder,
     readOnly = false,
-    disabled = false,
 }: {
     label: string;
     value: string;
@@ -70,7 +65,6 @@ function EditableField({
     type?: string;
     placeholder?: string;
     readOnly?: boolean;
-    disabled?: boolean;
 }) {
     return (
         <div className="input-group">
@@ -82,7 +76,6 @@ function EditableField({
                     onChange={(e) => onChange(e.target.value)}
                     placeholder={placeholder}
                     readOnly={readOnly}
-                    disabled={disabled}
                     style={readOnly ? { background: "var(--gray-50)", cursor: "not-allowed" } : {}}
                 />
             </div>
@@ -93,28 +86,21 @@ function EditableField({
 export default function ParentProfilePage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isEditing, setIsEditing] = useState(false);
-    const [profile, setProfile] = useState<ParentProfile>(defaultProfile);
-    const [draft, setDraft] = useState<ParentProfile>(defaultProfile);
-    const [saving, setSaving] = useState(false);
-    const [avatarUploading, setAvatarUploading] = useState(false);
-    const { showToast } = useToastStore();
+    const [profile, setProfile] = useState<ParentProfile>(initialProfile);
+    const [draft, setDraft] = useState<ParentProfile>(initialProfile);
     const user = useCurrentUser("parent");
 
     useEffect(() => {
         if (user && user.email) {
-            const next: ParentProfile = {
-                firstName: user.firstName || "",
-                lastName: user.lastName || "",
-                email: user.email || "",
-                phone: user.phone || "",
-                relationship: user.relationship || "",
-                childName: user.childName || "",
-                childGrade: user.grade || "",
-                childSection: user.section || "",
-                occupation: user.occupation || "",
-                country: user.country || "",
-                cityState: user.cityState || "",
-                postalCode: user.postalCode || "",
+            const next = {
+                ...profile,
+                firstName: user.firstName || profile.firstName,
+                lastName: user.lastName || profile.lastName,
+                email: user.email || profile.email,
+                relationship: user.relationship || profile.relationship,
+                childName: user.childName || profile.childName,
+                childGrade: user.grade || profile.childGrade,
+                childSection: user.section || profile.childSection,
             };
             setProfile(next);
             if (!isEditing) setDraft(next);
@@ -139,42 +125,30 @@ export default function ParentProfilePage() {
         setIsEditing(false);
     }
 
-    async function saveProfile() {
+    function saveProfile() {
         if (!draft.firstName.trim() || !draft.lastName.trim() || !draft.email.trim()) {
-            showToast("First name, last name, and email are required.", "error", false);
+            window.alert("First name, last name, and email are required.");
             return;
         }
 
-        try {
-            setSaving(true);
-            await patchMe(draft);
-            await refreshStoredProfile();
-            setProfile(draft);
-            setIsEditing(false);
-            showToast("Profile updated successfully");
-        } catch (e) {
-            showToast(e instanceof Error ? e.message : "Failed to update profile", "error", false);
-        } finally {
-            setSaving(false);
-        }
-    }
+        // Call backend to save changes
+        const updatePayload = {
+            ...draft,
+            firstName: draft.firstName.trim(),
+            lastName: draft.lastName.trim(),
+            email: draft.email.trim(),
+            phone: draft.phone.trim(),
+            occupation: draft.occupation.trim(),
+            country: draft.country.trim(),
+            cityState: draft.cityState.trim(),
+            postalCode: draft.postalCode.trim(),
+        };
 
-    async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
-        const file = e.target.files?.[0];
-        if (!file) return;
+        // TODO: Implement actual API call
+        // fetch(`/api/parent/${profile.email}`, { method: "PUT", body: JSON.stringify(updatePayload) })
 
-        try {
-            setAvatarUploading(true);
-            const res = await uploadProfileImage(file);
-            await patchMe({ profileImageFileId: res.id });
-            await refreshStoredProfile();
-            showToast("Profile photo updated successfully!");
-        } catch (e) {
-            showToast("Failed to upload photo.", "error", false);
-        } finally {
-            setAvatarUploading(false);
-            if (fileInputRef.current) fileInputRef.current.value = "";
-        }
+        setProfile(updatePayload);
+        setIsEditing(false);
     }
 
     return (
@@ -185,8 +159,8 @@ export default function ParentProfilePage() {
                     <button className="btn btn-primary" onClick={startEditing}>Edit</button>
                 ) : (
                     <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <button className="btn btn-secondary" onClick={cancelEditing} disabled={saving}>Cancel</button>
-                        <button className="btn btn-primary" onClick={saveProfile} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>
+                        <button className="btn btn-secondary" onClick={cancelEditing}>Cancel</button>
+                        <button className="btn btn-primary" onClick={saveProfile}>Save Changes</button>
                     </div>
                 )}
             </div>
@@ -194,18 +168,17 @@ export default function ParentProfilePage() {
             <div className="card">
                 <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.9fr)", gap: "1rem", alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
-                        <AuthenticatedAvatar
-                            fileId={user.profileImageFileId}
-                            initials={initials || "P"}
-                            size={110}
-                            alt={fullName || "User"}
-                            style={{ border: "4px solid #fff", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
-                        />
+                        <div
+                            className="avatar avatar-xl avatar-initials"
+                            style={{ fontSize: "1.5rem", flexShrink: 0, background: "linear-gradient(135deg, #9333ea, #7e22ce)" }}
+                        >
+                            {initials || "P"}
+                        </div>
 
                         <div>
                             <h2 style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--gray-900)" }}>{fullName}</h2>
                             <p style={{ color: "var(--gray-500)", fontSize: "0.95rem", marginTop: "0.2rem" }}>{profile.relationship} of {profile.childName}</p>
-                            <p style={{ color: "var(--gray-400)", fontSize: "0.9rem", marginTop: "0.2rem" }}>{profile.cityState}{profile.cityState && profile.country ? ", " : ""}{profile.country}</p>
+                            <p style={{ color: "var(--gray-400)", fontSize: "0.9rem", marginTop: "0.2rem" }}>{profile.cityState}, {profile.country}</p>
                         </div>
                     </div>
 
@@ -214,17 +187,17 @@ export default function ParentProfilePage() {
                             {quickStats.map((item) => (
                                 <div key={item.label} style={{ padding: "0.75rem 0.85rem", border: "1px solid var(--gray-200)", background: "#fff", borderRadius: "var(--radius-md)" }}>
                                     <div style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.04em", color: "var(--gray-400)", textTransform: "uppercase" }}>{item.label}</div>
-                                    <div style={{ marginTop: "0.35rem", fontSize: "0.9rem", fontWeight: 600, color: "var(--gray-800)" }}>{item.value || "—"}</div>
+                                    <div style={{ marginTop: "0.35rem", fontSize: "0.9rem", fontWeight: 600, color: "var(--gray-800)" }}>{item.value}</div>
                                 </div>
                             ))}
                         </div>
 
                         {isEditing && (
                             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                                <button className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()} disabled={avatarUploading}>
-                                    {avatarUploading ? "Uploading..." : "Upload Photo"}
+                                <button className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()}>
+                                    Upload Photo
                                 </button>
-                                <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleAvatarUpload} />
+                                <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} />
                             </div>
                         )}
                     </div>
@@ -249,22 +222,27 @@ export default function ParentProfilePage() {
                         </div>
                     ) : (
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.85rem" }}>
-                            <EditableField label="First Name" value={draft.firstName} onChange={(value) => setDraft((prev) => ({ ...prev, firstName: value }))} placeholder="First name" disabled={saving} />
-                            <EditableField label="Last Name" value={draft.lastName} onChange={(value) => setDraft((prev) => ({ ...prev, lastName: value }))} placeholder="Last name" disabled={saving} />
-                            <EditableField label="Email Address" type="email" value={draft.email} onChange={(value) => setDraft((prev) => ({ ...prev, email: value }))} placeholder="parent@email.com" disabled />
-                            <EditableField label="Phone no" value={draft.phone} onChange={(value) => setDraft((prev) => ({ ...prev, phone: value }))} placeholder="+251 9XX XXX XXX" disabled={saving} />
-                            <EditableField label="Occupation" value={draft.occupation} onChange={(value) => setDraft((prev) => ({ ...prev, occupation: value }))} placeholder="Occupation" disabled={saving} />
+                            <EditableField label="First Name" value={draft.firstName} onChange={(value) => setDraft((prev) => ({ ...prev, firstName: value }))} placeholder="First name" />
+                            <EditableField label="Last Name" value={draft.lastName} onChange={(value) => setDraft((prev) => ({ ...prev, lastName: value }))} placeholder="Last name" />
+                            <EditableField label="Email Address" type="email" value={draft.email} onChange={(value) => setDraft((prev) => ({ ...prev, email: value }))} placeholder="parent@email.com" />
+                            <EditableField label="Phone no" value={draft.phone} onChange={(value) => setDraft((prev) => ({ ...prev, phone: value }))} placeholder="+251 9XX XXX XXX" />
+                            <EditableField label="Occupation" value={draft.occupation} onChange={(value) => setDraft((prev) => ({ ...prev, occupation: value }))} placeholder="Occupation" />
                             <div className="input-group">
                                 <label>Relationship</label>
                                 <Select
                                     value={draft.relationship}
                                     onChange={(e) => setDraft((prev) => ({ ...prev, relationship: e.target.value }))}
-                                    disabled={saving}
+                                    style={{
+                                        padding: "0.75rem",
+                                        background: "var(--gray-50)",
+                                        border: "1.5px solid var(--gray-200)",
+                                        borderRadius: "var(--radius-md)",
+                                        fontFamily: "inherit",
+                                    }}
                                 >
-                                    <option value="">Select relationship</option>
-                                    <option value="Father">Father</option>
-                                    <option value="Mother">Mother</option>
-                                    <option value="Guardian">Guardian</option>
+                                    <option>Father</option>
+                                    <option>Mother</option>
+                                    <option>Guardian</option>
                                 </Select>
                             </div>
                         </div>
@@ -285,9 +263,9 @@ export default function ParentProfilePage() {
                         </div>
                     ) : (
                         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "0.85rem" }}>
-                            <EditableField label="Country" value={draft.country} onChange={(value) => setDraft((prev) => ({ ...prev, country: value }))} placeholder="Country" disabled={saving} />
-                            <EditableField label="City/State" value={draft.cityState} onChange={(value) => setDraft((prev) => ({ ...prev, cityState: value }))} placeholder="City or State" disabled={saving} />
-                            <EditableField label="Postal Code" value={draft.postalCode} onChange={(value) => setDraft((prev) => ({ ...prev, postalCode: value }))} placeholder="Postal code" disabled={saving} />
+                            <EditableField label="Country" value={draft.country} onChange={(value) => setDraft((prev) => ({ ...prev, country: value }))} placeholder="Country" />
+                            <EditableField label="City/State" value={draft.cityState} onChange={(value) => setDraft((prev) => ({ ...prev, cityState: value }))} placeholder="City or State" />
+                            <EditableField label="Postal Code" value={draft.postalCode} onChange={(value) => setDraft((prev) => ({ ...prev, postalCode: value }))} placeholder="Postal code" />
                         </div>
                     )}
                 </div>

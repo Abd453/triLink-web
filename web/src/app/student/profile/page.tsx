@@ -6,6 +6,8 @@ import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
 import { useToastStore } from "@/store/toastStore";
 import { patchMe, uploadProfileImage } from "@/lib/admin-api";
 import { refreshStoredProfile } from "@/lib/auth";
+import { PageHeader } from "@/components/ui";
+import { UserCircle2, Pencil } from "lucide-react";
 
 type StudentProfile = {
     firstName: string;
@@ -181,17 +183,23 @@ export default function StudentProfilePage() {
 
     return (
         <div className="page-wrapper">
-            <div className="page-header" style={{ marginBottom: "1rem" }}>
-                <h1 className="page-title">My Profile</h1>
-                {!isEditing ? (
-                    <button className="btn btn-primary" onClick={startEditing}>Edit</button>
+            <PageHeader
+                kicker="Profile"
+                title="My Profile"
+                subtitle="View and update your personal details."
+                icon={<UserCircle2 size={22} />}
+                variant="light"
+                actions={!isEditing ? (
+                    <button className="btn btn-primary" onClick={startEditing} style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        <Pencil size={14} /> Edit Profile
+                    </button>
                 ) : (
                     <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <button className="btn btn-secondary" onClick={cancelEditing} disabled={saving}>Cancel</button>
-                        <button className="btn btn-primary" onClick={saveProfile} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>
+                        <button className="btn btn-secondary" onClick={cancelEditing} disabled={saving} style={{ borderRadius: 12 }}>Cancel</button>
+                        <button className="btn btn-primary" onClick={saveProfile} disabled={saving} style={{ borderRadius: 12 }}>{saving ? "Saving..." : "Save Changes"}</button>
                     </div>
                 )}
-            </div>
+            />
 
             <div className="card">
                 <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.9fr)", gap: "1rem", alignItems: "center" }}>

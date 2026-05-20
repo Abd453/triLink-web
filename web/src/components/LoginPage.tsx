@@ -1,10 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { refreshStoredProfile, setTokens, setStoredUser } from "@/lib/auth";
 import { apiPath, getApiBase } from "@/lib/api";
-import { Button, Input } from "@/components/ui";
 
 type PortalRole = "admin" | "teacher" | "student" | "parent";
 
@@ -50,7 +48,7 @@ export default function LoginPage({ role, rolePlural, dashboardPath, gradient, t
             const res = await fetch(`${apiBase}${loginPath}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: email.toLowerCase(), password, role: role.toLowerCase() }),
+                body: JSON.stringify({ email: email.trim().toLowerCase(), password, role: role.toLowerCase() }),
             });
 
             const data = await res.json().catch(() => ({}));
@@ -157,54 +155,151 @@ export default function LoginPage({ role, rolePlural, dashboardPath, gradient, t
 
                     {!showForgotPassword || !canUseForgotPassword ? (
                         <>
-                            <form className="login-form" onSubmit={handleLogin} noValidate>
-                                <Input
-                                    id="login-email"
-                                    label="Email"
-                                    type="email"
-                                    autoComplete="email"
-                                    placeholder={`${role.toLowerCase()}@school.edu`}
-                                    leftIcon={<Mail size={16} />}
-                                    value={email}
-                                    onChange={(e) => {
-                                        setEmail(e.target.value);
-                                        if (loginError) setLoginError("");
-                                    }}
-                                    disabled={loading}
-                                />
+                            {role.toLowerCase() === "student" && (
+                                <div style={{
+                                    marginBottom: "1.25rem",
+                                    padding: "1rem",
+                                    background: "linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(59, 130, 246, 0.08) 100%)",
+                                    borderRadius: "var(--radius-lg, 12px)",
+                                    border: "1px dashed rgba(59, 130, 246, 0.3)",
+                                    boxShadow: "inset 0 1px 2px rgba(255,255,255,0.8)",
+                                }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "0.6rem" }}>
+                                        <span style={{ fontSize: "1.1rem" }}>⚡</span>
+                                        <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--primary-700, #1d4ed8)", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                                            Quick Sandbox Demo Logins
+                                        </span>
+                                    </div>
+                                    <p style={{ fontSize: "0.78rem", color: "var(--gray-600)", marginBottom: "0.75rem", lineHeight: 1.4 }}>
+                                        Select an active, pre-seeded student account to log in instantly using the deployed Render database:
+                                    </p>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                                        {[
+                                            { name: "Hiwot Teka (Grade 9A)", email: "hiwot.teka1@grade9a.trilink.edu" },
+                                            { name: "Selam Abreham (Grade 9B)", email: "selam.abreham1@grade9b.trilink.edu" },
+                                            { name: "Chala Beyene (Grade 9B)", email: "chala.beyene2@grade9b.trilink.edu" },
+                                        ].map((student) => (
+                                            <button
+                                                key={student.email}
+                                                type="button"
+                                                onClick={async () => {
+                                                    setEmail(student.email);
+                                                    setPassword("Student@123");
+                                                    setLoginError("");
+                                                    // Automatically submit after a brief UI feedback delay
+                                                    setTimeout(() => {
+                                                        const form = document.querySelector(".login-form") as HTMLFormElement;
+                                                        if (form) {
+                                                            form.requestSubmit();
+                                                        }
+                                                    }, 100);
+                                                }}
+                                                style={{
+                                                    display: "flex",
+                                                    justifyContent: "space-between",
+                                                    alignItems: "center",
+                                                    padding: "0.5rem 0.75rem",
+                                                    background: "#ffffff",
+                                                    border: "1px solid rgba(226, 232, 240, 0.8)",
+                                                    borderRadius: "var(--radius-md, 8px)",
+                                                    cursor: "pointer",
+                                                    textAlign: "left",
+                                                    transition: "all 0.2s ease",
+                                                    boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    e.currentTarget.style.borderColor = "var(--primary-400)";
+                                                    e.currentTarget.style.background = "var(--primary-50)";
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    e.currentTarget.style.borderColor = "rgba(226, 232, 240, 0.8)";
+                                                    e.currentTarget.style.background = "#ffffff";
+                                                }}
+                                            >
+                                                <div style={{ display: "flex", flexDirection: "column" }}>
+                                                    <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--gray-800)" }}>{student.name}</span>
+                                                    <span style={{ fontSize: "0.7rem", color: "var(--gray-400)", fontFamily: "monospace" }}>{student.email}</span>
+                                                </div>
+                                                <span style={{ fontSize: "0.85rem", color: "var(--primary-500)" }}>🔑</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            <form className="login-form" onSubmit={handleLogin}>
+                                {loginError && (
+                                    <div style={{ marginBottom: "0.1rem", color: "#dc2626", fontSize: "0.82rem", fontWeight: 600, lineHeight: 1.25 }}>
+                                        {loginError}
+                                    </div>
+                                )}
 
-                                <Input
-                                    id="login-password"
-                                    label="Password"
-                                    type={showPwd ? "text" : "password"}
-                                    autoComplete="current-password"
-                                    placeholder="Enter your password"
-                                    leftIcon={<Lock size={16} />}
-                                    rightAddon={
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPwd((v) => !v)}
+                                <div className="input-group">
+                                    <label htmlFor="login-email">Email</label>
+                                    <div className="input-field">
+                                        <svg className="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <rect width="20" height="16" x="2" y="4" rx="2" />
+                                            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                                        </svg>
+                                        <input
+                                            id="login-email"
+                                            type="email"
+                                            placeholder={`${role.toLowerCase()}@school.edu`}
+                                            value={email}
+                                            onChange={(e) => {
+                                                setEmail(e.target.value);
+                                                if (loginError) {
+                                                    setLoginError("");
+                                                }
+                                            }}
                                             disabled={loading}
-                                            aria-label={showPwd ? "Hide password" : "Show password"}
-                                            style={{ background: "none", border: "none", padding: "0 4px", color: "var(--gray-400)", cursor: "pointer", display: "inline-flex" }}
-                                        >
-                                            {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="input-group">
+                                    <label htmlFor="login-password">Password</label>
+                                    <div className="input-field">
+                                        <svg className="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                        </svg>
+                                        <input
+                                            id="login-password"
+                                            type={showPwd ? "text" : "password"}
+                                            placeholder="Enter your password"
+                                            value={password}
+                                            onChange={(e) => {
+                                                setPassword(e.target.value);
+                                                if (loginError) {
+                                                    setLoginError("");
+                                                }
+                                            }}
+                                            disabled={loading}
+                                        />
+                                        <button type="button" onClick={() => setShowPwd(!showPwd)} style={{ color: "var(--gray-400)" }} disabled={loading}>
+                                            {showPwd ? (
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                                                    <circle cx="12" cy="12" r="3" />
+                                                </svg>
+                                            ) : (
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+                                                    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+                                                    <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                                                    <line x1="2" x2="22" y1="2" y2="22" />
+                                                </svg>
+                                            )}
                                         </button>
-                                    }
-                                    value={password}
-                                    onChange={(e) => {
-                                        setPassword(e.target.value);
-                                        if (loginError) setLoginError("");
-                                    }}
-                                    disabled={loading}
-                                />
+                                    </div>
+                                </div>
 
                                 {canUseForgotPassword && (
                                     <div className="login-forgot">
                                         <button
                                             type="button"
                                             onClick={() => setShowForgotPassword(true)}
-                                            style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", textDecoration: "underline", padding: 0, fontSize: "0.875rem" }}
+                                            style={{ background: "none", border: "none", color: "var(--blue-600)", cursor: "pointer", textDecoration: "underline" }}
                                         >
                                             Forgot password?
                                         </button>
@@ -212,13 +307,13 @@ export default function LoginPage({ role, rolePlural, dashboardPath, gradient, t
                                 )}
 
                                 {loginError && (
-                                    <div role="alert" style={{
+                                    <div style={{
                                         padding: "0.75rem 1rem",
                                         marginBottom: "0.75rem",
-                                        background: "#fef2f2",
-                                        border: "1px solid #fecaca",
-                                        borderRadius: "8px",
-                                        color: "#991b1b",
+                                        background: "var(--red-50, #fff5f5)",
+                                        border: "1px solid var(--red-300, #fc8181)",
+                                        borderRadius: "var(--radius-md, 8px)",
+                                        color: "var(--red-700, #c53030)",
                                         fontSize: "0.875rem",
                                         fontWeight: 500,
                                     }}>
@@ -226,17 +321,36 @@ export default function LoginPage({ role, rolePlural, dashboardPath, gradient, t
                                     </div>
                                 )}
 
-                                <Button type="submit" loading={loading} fullWidth size="lg">
-                                    {loading ? "Logging in…" : "Log in"}
-                                </Button>
+                                <button type="submit" className="login-btn" disabled={loading}>
+                                    {loading ? (
+                                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                                            <svg width="18" height="18" viewBox="0 0 24 24" style={{ animation: "spin 1s linear infinite" }}>
+                                                <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3" fill="none" />
+                                                <path d="M12 2a10 10 0 0 1 10 10" stroke="#fff" strokeWidth="3" fill="none" strokeLinecap="round" />
+                                            </svg>
+                                            Logging in...
+                                        </span>
+                                    ) : "LOG IN"}
+                                </button>
                             </form>
 
+                            <div className="login-offline">
+                                <a href="#">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+                                        <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+                                        <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+                                        <line x1="12" y1="20" x2="12.01" y2="20" />
+                                    </svg>
+                                    Continue offline
+                                </a>
+                            </div>
                         </>
                     ) : (
                         <>
-                            <div style={{ marginBottom: "1rem", padding: "0.75rem 0.875rem", background: "#eff6ff", borderRadius: "8px", borderLeft: "3px solid #3b82f6" }}>
-                                <p style={{ margin: 0, fontSize: "0.875rem", color: "#1e40af" }}>
-                                    Enter your email and we&apos;ll send you a link to reset your password.
+                            <div style={{ marginBottom: "1rem", padding: "0.75rem", background: "var(--blue-50)", borderRadius: "var(--radius-md)", borderLeft: "3px solid var(--blue-500)" }}>
+                                <p style={{ fontSize: "0.875rem", color: "var(--blue-700)" }}>
+                                    Enter your email and we'll send you a link to reset your password.
                                 </p>
                             </div>
 
@@ -260,13 +374,13 @@ export default function LoginPage({ role, rolePlural, dashboardPath, gradient, t
                                 </div>
 
                                 {resetError && (
-                                    <div role="alert" style={{ padding: "0.75rem 0.875rem", marginBottom: "0.75rem", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", color: "#991b1b", fontSize: "0.875rem" }}>
+                                    <div style={{ padding: "0.75rem", marginBottom: "1rem", background: "var(--red-50)", borderRadius: "var(--radius-md)", color: "var(--red-700)", fontSize: "0.875rem" }}>
                                         {resetError}
                                     </div>
                                 )}
 
                                 {resetMessage && (
-                                    <div role="status" style={{ padding: "0.75rem 0.875rem", marginBottom: "0.75rem", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", color: "#166534", fontSize: "0.875rem" }}>
+                                    <div style={{ padding: "0.75rem", marginBottom: "1rem", background: "var(--green-50)", borderRadius: "var(--radius-md)", color: "var(--green-700)", fontSize: "0.875rem" }}>
                                         {resetMessage}
                                     </div>
                                 )}
@@ -294,12 +408,12 @@ export default function LoginPage({ role, rolePlural, dashboardPath, gradient, t
                                     style={{
                                         width: "100%",
                                         padding: "0.75rem 1rem",
-                                        background: "var(--gray-100, #f3f4f6)",
-                                        border: "1px solid var(--gray-200, #e5e7eb)",
-                                        borderRadius: "8px",
+                                        background: "var(--gray-100)",
+                                        border: "1px solid var(--gray-200)",
+                                        borderRadius: "var(--radius-md)",
                                         cursor: "pointer",
                                         fontWeight: 600,
-                                        color: "var(--gray-700, #374151)",
+                                        color: "var(--gray-700)",
                                     }}
                                 >
                                     Back to Login

@@ -12,6 +12,10 @@ import { useCurrentUser } from "@/lib/useCurrentUser";
 import Select from "@/components/Select";
 import TablePagination from "@/components/TablePagination";
 import { cachedFetch } from "@/lib/cache";
+import TermSelector from "@/components/TermSelector";
+import { useTermStore } from "@/store/termStore";
+import { PageHeader, PageHeaderSkeleton, ListSkeleton, EmptyState } from "@/components/ui";
+import { FileText, Plus } from "lucide-react";
 
 function offeringLabel(o: ClassOffering) {
   const g = (o as any).gradeName || "";
@@ -32,13 +36,24 @@ function submissionBadge(s: AssignmentSubmission) {
   return <span className={`badge ${colors[s.status] ?? ""}`}>{s.status}</span>;
 }
 
+function AssignmentsSkeleton() {
+  return (
+    <div className="page-wrapper">
+      <PageHeaderSkeleton />
+      <ListSkeleton rows={4} />
+    </div>
+  );
+}
+
 export default function TeacherAssignments() {
   useCurrentUser("teacher");
+  const { selectedTermId } = useTermStore();
   const [offerings, setOfferings] = useState<ClassOffering[]>([]);
   const [selectedClass, setSelectedClass] = useState("");
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [activeYearId, setActiveYearId] = useState<string | null>(null);
 
   // Create/edit form
   const [showForm, setShowForm] = useState(false);
@@ -61,6 +76,7 @@ export default function TeacherAssignments() {
     try {
       const year = await cachedFetch("active-year", () => getActiveAcademicYear(), 120_000);
       if (!year?.id) return;
+      setActiveYearId(year.id);
       const mine = await cachedFetch(`offerings:${year.id}`, () => listMyClassOfferings(year.id), 60_000);
       setOfferings(mine);
       if (mine.length > 0) setSelectedClass(c => c || mine[0].id);
@@ -70,14 +86,14 @@ export default function TeacherAssignments() {
   const loadAssignments = useCallback(async (classId?: string) => {
     setLoading(true);
     try {
-      const list = await listMyAssignments(classId || undefined);
+      const list = await listMyAssignments(classId || undefined, selectedTermId ?? undefined);
       setAssignments(list);
     } catch { /* ignore */ }
     finally { setLoading(false); }
-  }, []);
+  }, [selectedTermId]);
 
   useEffect(() => { void loadOfferings(); }, [loadOfferings]);
-  useEffect(() => { void loadAssignments(selectedClass); }, [selectedClass, loadAssignments]);
+  useEffect(() => { void loadAssignments(selectedClass); }, [selectedClass, selectedTermId, loadAssignments]);
 
   const openCreate = () => {
     setEditing(null);
@@ -107,7 +123,7 @@ export default function TeacherAssignments() {
         await updateAssignment(editing.id, { title: form.title, description: form.description || undefined, submissionType: form.submissionType, deadline: new Date(form.deadline).toISOString(), maxScore: parseFloat(form.maxScore) || 100 });
         showToast("Assignment updated");
       } else {
-        await createAssignment({ classOfferingId: selectedClass, title: form.title, description: form.description || undefined, submissionType: form.submissionType, deadline: new Date(form.deadline).toISOString(), maxScore: parseFloat(form.maxScore) || 100 });
+        await createAssignment({ classOfferingId: selectedClass, title: form.title, description: form.description || undefined, submissionType: form.submissionType, deadline: new Date(form.deadline).toISOString(), maxScore: parseFloat(form.maxScore) || 100, termId: selectedTermId ?? undefined });
         showToast("Assignment created");
       }
       setShowForm(false);
@@ -173,39 +189,56 @@ export default function TeacherAssignments() {
 
   const pagedSubs = submissions.slice((subPage - 1) * 10, subPage * 10);
 
+  if (loading && assignments.length === 0) return <AssignmentsSkeleton />;
+
   return (
     <div className="page-wrapper">
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       {toast && (
-        <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, background: "#fff", borderRadius: 8, padding: "0.85rem 1.25rem", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: `1.5px solid ${toast.ok ? "var(--success)" : "var(--danger)"}`, fontWeight: 600, fontSize: "0.9rem" }}>
+        <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, background: "#fff", borderRadius: 12, padding: "0.875rem 1.25rem", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: `1.5px solid ${toast.ok ? "var(--success)" : "var(--danger)"}`, fontWeight: 600, fontSize: "0.9rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: toast.ok ? "var(--success)" : "var(--danger)", flexShrink: 0 }} />
           {toast.msg}
         </div>
       )}
 
-      {/* Header */}
-      <div className="page-header" style={{ flexWrap: "wrap", gap: "0.75rem" }}>
-        <div>
-          <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-            Assignments
-          </h1>
-          <p className="page-subtitle">Create, publish, and grade student assignments</p>
-        </div>
-        <button className="btn btn-primary" onClick={openCreate} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          New Assignment
-        </button>
-      </div>
+      <PageHeader
+        kicker="Coursework"
+        title="Assignments"
+        subtitle="Create, publish, and grade student assignments."
+        icon={<FileText size={22} />}
+        variant="dark"
+        actions={(
+          <button className="btn btn-primary" onClick={openCreate} style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 12 }}>
+            <Plus size={14} strokeWidth={2.5} /> New Assignment
+          </button>
+        )}
+      />
 
       {/* Class filter */}
-      <div className="card" style={{ marginBottom: "1.25rem", padding: "0.85rem 1.25rem" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-          <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--gray-600)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Class</label>
-          <Select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} style={{ padding: "0.45rem 0.75rem", border: "1.5px solid var(--gray-200)", borderRadius: 4, fontSize: "0.9rem", background: "#fff", minWidth: 200 }}>
-            <option value="">All my classes</option>
-            {offerings.map(o => <option key={o.id} value={o.id}>{offeringLabel(o)}</option>)}
-          </Select>
-        </div>
+      <div style={{ background: "#fff", borderRadius: 16, padding: "0.875rem 1.5rem", marginBottom: "1.25rem", border: "1.5px solid var(--gray-100)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+        <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>Filter by class</label>
+        <Select
+          value={selectedClass}
+          onChange={e => setSelectedClass(e.target.value)}
+          style={{
+            padding: "0.45rem 1.15rem",
+            borderRadius: "9999px",
+            border: "1.5px solid var(--primary-200)",
+            background: "var(--primary-50)",
+            color: "var(--primary-800)",
+            fontWeight: 600,
+            fontSize: "0.85rem",
+            minWidth: 220
+          }}
+        >
+          <option value="">All my classes</option>
+          {offerings.map(o => <option key={o.id} value={o.id}>{offeringLabel(o)}</option>)}
+        </Select>
+        <TermSelector
+          academicYearId={activeYearId || null}
+          onTermChange={() => { /* re-fetch handled by useEffect dep */ }}
+          style={{ marginLeft: 8 }}
+        />
       </div>
 
       {/* Create/Edit form */}
@@ -227,7 +260,20 @@ export default function TeacherAssignments() {
               </div>
               <div className="input-group">
                 <label>Submission Type</label>
-                <Select value={form.submissionType} onChange={e => setForm(f => ({ ...f, submissionType: e.target.value as SubmissionType }))} style={{ padding: "0.65rem 0.9rem", border: "1.5px solid var(--gray-200)", borderRadius: 4, fontSize: "0.9rem", background: "#fff", width: "100%" }}>
+                <Select
+                  value={form.submissionType}
+                  onChange={e => setForm(f => ({ ...f, submissionType: e.target.value as SubmissionType }))}
+                  style={{
+                    padding: "0.45rem 1.15rem",
+                    borderRadius: "9999px",
+                    border: "1.5px solid var(--primary-200)",
+                    background: "var(--primary-50)",
+                    color: "var(--primary-800)",
+                    fontWeight: 600,
+                    fontSize: "0.85rem",
+                    width: "100%"
+                  }}
+                >
                   <option value="file">File Upload</option>
                   <option value="text">Text Response</option>
                   <option value="none">No Submission (Info only)</option>
@@ -358,32 +404,35 @@ export default function TeacherAssignments() {
 
       {/* Assignment list */}
       {loading ? (
-        <div className="card" style={{ display: "flex", justifyContent: "center", padding: "3rem" }}>
+        <div style={{ background: "#fff", borderRadius: 16, padding: "3rem", textAlign: "center", border: "1.5px solid var(--gray-100)" }}>
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
         </div>
       ) : assignments.length === 0 ? (
-        <div className="card" style={{ padding: "3rem", textAlign: "center", color: "var(--gray-400)" }}>
-          <div style={{ fontSize: "2.5rem", marginBottom: "0.5rem" }}>📋</div>
-          <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>No assignments yet</div>
-          <div style={{ fontSize: "0.85rem" }}>Click "New Assignment" to create your first one.</div>
-        </div>
+        <EmptyState
+          icon={<FileText size={26} />}
+          title="No assignments yet"
+          description="Click 'New Assignment' to create your first one."
+          action={<button className="btn btn-primary" onClick={openCreate} style={{ borderRadius: 12 }}>+ New Assignment</button>}
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           {assignments.map(a => {
-            const subCount = 0; // would need to fetch per assignment
             const deadlineDate = new Date(a.deadline);
             const daysLeft = Math.ceil((deadlineDate.getTime() - Date.now()) / 86400000);
             return (
-              <div key={a.id} className="card" style={{ overflow: "hidden" }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem", padding: "1rem 1.25rem", flexWrap: "wrap" }}>
+              <div key={a.id} style={{ background: "#fff", borderRadius: 16, border: "1.5px solid var(--gray-100)", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", transition: "box-shadow 0.15s" }}
+                onMouseEnter={e => (e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.08)")}
+                onMouseLeave={e => (e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.04)")}
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem", padding: "1.25rem 1.5rem", flexWrap: "wrap" }}>
                   {/* Icon */}
-                  <div style={{ width: 44, height: 44, borderRadius: 10, background: a.published ? "var(--primary-50)" : "var(--gray-100)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: a.published ? "var(--primary-50)" : "var(--gray-100)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={a.published ? "var(--primary-500)" : "var(--gray-400)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   </div>
 
                   {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.25rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.3rem" }}>
                       <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--gray-900)" }}>{a.title}</span>
                       {statusBadge(a)}
                       <span className={`badge ${a.submissionType === "file" ? "badge-primary" : a.submissionType === "text" ? "badge-warning" : ""}`} style={{ fontSize: "0.7rem" }}>{a.submissionType}</span>
@@ -400,18 +449,18 @@ export default function TeacherAssignments() {
                   </div>
 
                   {/* Actions */}
-                  <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0, flexWrap: "wrap" }}>
-                    <button className="btn btn-outline btn-sm" onClick={() => openSubmissions(a)}>
+                  <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0, flexWrap: "wrap", alignItems: "center" }}>
+                    <button className="btn btn-outline btn-sm" onClick={() => openSubmissions(a)} style={{ borderRadius: 8 }}>
                       Submissions
                     </button>
                     {!a.published ? (
                       <>
-                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(a)}>Edit</button>
-                        <button className="btn btn-primary btn-sm" onClick={() => handlePublish(a)}>Publish</button>
-                        <button className="btn btn-sm" style={{ background: "var(--danger-light)", color: "var(--danger)", border: "none", cursor: "pointer", borderRadius: 4, padding: "0.3rem 0.6rem", fontSize: "0.8rem" }} onClick={() => handleDelete(a)}>Delete</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(a)} style={{ borderRadius: 8 }}>Edit</button>
+                        <button className="btn btn-primary btn-sm" onClick={() => handlePublish(a)} style={{ borderRadius: 8 }}>Publish</button>
+                        <button className="btn btn-sm" style={{ background: "var(--danger-light)", color: "var(--danger)", border: "none", cursor: "pointer", borderRadius: 8, padding: "0.3rem 0.6rem", fontSize: "0.8rem" }} onClick={() => handleDelete(a)}>Delete</button>
                       </>
                     ) : (
-                      <button className="btn btn-secondary btn-sm" onClick={() => handleUnpublish(a)}>Unpublish</button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => handleUnpublish(a)} style={{ borderRadius: 8 }}>Unpublish</button>
                     )}
                   </div>
                 </div>

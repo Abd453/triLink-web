@@ -1,21 +1,17 @@
 # Teacher Attendance (`/teacher/attendance`)
 
-Daily attendance marking per class with present, absent, and excused states.
+Daily attendance marking per class with present / absent / excused states and excuse notes.
 
-## Current Status
+## Fixes Applied
 
-| Area | Status |
+| Issue | Status |
 |---|---|
-| Class selection | API-backed teacher class offerings |
-| Student list | API-backed active enrollments per class |
-| Daily submission | Creates attendance session and bulk-upserts marks |
-| Submitted-session edits | Existing daily sessions can be updated with corrected marks |
-| Excuse notes | Sent to backend with excused marks |
-| History | API-backed session/mark history per student |
+| Stats bar (Total / Present / Absent / Excused) used raw inline `div` styles inconsistent with design system | ✅ Fixed — now uses `.stats-grid` + `.stat-card` + `.stat-icon` + `.stat-info` classes with semantic SVG icons |
 
-## Known Remaining Work
+## Known / Remaining
 
 | Item | Status |
 |---|---|
-| Historical date picker | Deferred |
-| Admin override audit trail | Deferred |
+| "Save Attendance" logs nothing — no API call | ⬜ Needs backend |
+| Class selection only changes the label; student list doesn't change per class | ⬜ Needs per-class student data |
+| Date is always today — no date picker for historical records | ⬜ Needs date picker component |

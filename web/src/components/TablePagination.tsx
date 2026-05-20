@@ -1,6 +1,6 @@
 "use client";
-
 import Select from "./Select";
+
 
 interface TablePaginationProps {
   total: number;
@@ -33,26 +33,29 @@ export default function TablePagination({
         fontSize: "0.875rem", 
         color: "var(--gray-600)",
         background: "var(--gray-50)",
-        borderBottomLeftRadius: "inherit",
-        borderBottomRightRadius: "inherit"
+        borderBottomLeftRadius: "16px",
+        borderBottomRightRadius: "16px"
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
         <span style={{ fontWeight: 500 }}>Rows per page:</span>
         <Select
+          direction="up"
+          dropdownMinWidth="100%"
+          optionTextAlign="center"
+          optionPadding="0.35rem 0.5rem"
           value={rowsPerPage}
           onChange={(e) => {
             onRowsPerPageChange(Number(e.target.value));
           }}
           style={{ 
-            border: "1px solid var(--gray-200)", 
-            background: "#fff", 
-            cursor: "pointer", 
-            outline: "none", 
-            color: "var(--gray-800)", 
+            border: "1px solid var(--primary-200)", 
+            background: "var(--primary-50)", 
+            color: "var(--primary-800)", 
             fontWeight: 600, 
-            padding: "0.35rem 0.85rem", 
-            borderRadius: "12px",
-            fontSize: "0.85rem"
+            padding: "0.25rem 0.65rem", 
+            borderRadius: "20px",
+            fontSize: "0.85rem",
+            minWidth: "65px"
           }}
         >
           {[5, 10, 25, 50].map((v) => (

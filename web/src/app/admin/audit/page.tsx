@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { listAuditLogs, listUsers, type PublicUser } from "@/lib/admin-api";
 import Select from "@/components/Select";
 import TablePagination from "@/components/TablePagination";
+import { PageHeader, TableSkeleton, EmptyState } from "@/components/ui";
+import { ShieldCheck, Search } from "lucide-react";
 
 type Row = {
   id: string;
@@ -99,14 +101,15 @@ export default function AdminAuditPage() {
 
   return (
     <div className="page-wrapper">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Activity log</h1>
-          <p className="page-subtitle">Important account and security events across your school</p>
-        </div>
-      </div>
+      <PageHeader
+        kicker="Security"
+        title="Activity log"
+        subtitle="Important account and security events across your school."
+        icon={<ShieldCheck size={22} />}
+        variant="light"
+      />
 
-      <div className="card" style={{ marginBottom: "1.5rem", background: "var(--primary-50)", border: "1px solid var(--primary-100)", borderRadius: "12px", display: "flex", gap: "1.25rem", alignItems: "flex-start", padding: "1.5rem" }}>
+      <div className="card" style={{ marginBottom: "1.5rem", background: "var(--primary-50)", border: "1.5px solid var(--primary-200)", borderRadius: 20, display: "flex", gap: "1.25rem", alignItems: "flex-start", padding: "2rem" }}>
         <div style={{ padding: "0.65rem", background: "white", borderRadius: "50%", color: "var(--primary-600)", display: "flex", flexShrink: 0, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"></circle>
@@ -125,27 +128,41 @@ export default function AdminAuditPage() {
 
       {err && <div className="card" style={{ color: "var(--danger)", marginBottom: "1rem" }}>{err}</div>}
       <div className="card">
-        <div style={{ padding: "1rem", borderBottom: "1px solid var(--gray-200)" }}>
-          <input
-            type="text"
-            placeholder="Filter logs..."
-            value={filterText}
-            onChange={(e) => {
-              setFilterText(e.target.value);
-              setPage(0);
-            }}
-            style={{
-        width: "100%",
-        maxWidth: "340px",
-        padding: "0.65rem 1rem",
-        borderRadius: "12px",
-        border: "1px solid var(--gray-200)",
-        fontSize: "0.9rem",
-        outline: "none",
-        background: "var(--gray-50)",
-        transition: "all 0.2s"
-    }}
-          />
+        <div style={{ padding: "1.25rem 2rem", borderBottom: "1.5px solid var(--gray-50)", display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ position: "relative", width: "100%", maxWidth: "340px" }}>
+            <Search size={16} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "var(--gray-400)", pointerEvents: "none" }} />
+            <input
+              type="text"
+              placeholder="Filter logs..."
+              value={filterText}
+              onChange={(e) => {
+                setFilterText(e.target.value);
+                setPage(0);
+              }}
+              style={{
+                width: "100%",
+                padding: "0.75rem 1rem 0.75rem 2.75rem",
+                borderRadius: "20px",
+                border: "1.5px solid var(--gray-300)",
+                backgroundColor: "var(--gray-50)",
+                fontSize: "0.95rem",
+                outline: "none",
+                transition: "all 0.2s ease",
+                color: "var(--gray-800)",
+                boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)",
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = "var(--primary-400)";
+                e.target.style.backgroundColor = "#fff";
+                e.target.style.boxShadow = "0 0 0 3px var(--primary-50)";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "var(--gray-300)";
+                e.target.style.backgroundColor = "var(--gray-50)";
+                e.target.style.boxShadow = "inset 0 1px 2px rgba(0,0,0,0.02)";
+              }}
+            />
+          </div>
         </div>
         <div className="table-wrapper">
           <table>
@@ -160,18 +177,14 @@ export default function AdminAuditPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: "center", padding: "5rem 2rem" }}>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
-                      <div style={{ width: "36px", height: "36px", border: "3px solid var(--gray-200)", borderTopColor: "var(--primary)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                      <div style={{ color: "var(--gray-500)", fontWeight: 500 }}>Loading activity logs...</div>
-                    </div>
-                    <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+                  <td colSpan={4} style={{ padding: 0, border: 0 }}>
+                    <TableSkeleton rows={5} columns={4} />
                   </td>
                 </tr>
               ) : visibleRows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ color: "var(--gray-500)", textAlign: "center", padding: "4rem 2rem" }}>
-                    No activity found matching your criteria.
+                  <td colSpan={4} style={{ padding: 0, border: 0 }}>
+                    <EmptyState icon={<ShieldCheck size={26} />} title="No activity found" description="No audit logs match your current filters." />
                   </td>
                 </tr>
               ) : (

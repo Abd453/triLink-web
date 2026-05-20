@@ -3,10 +3,13 @@ import { useState, useEffect, useCallback } from "react";
 import {
     myChildren,
     getChildUpcoming,
+    getActiveAcademicYear,
     type ChildUpcomingResponse,
     type ChildUpcomingExam,
     type ChildUpcomingAssignment,
 } from "@/lib/admin-api";
+import TermSelector from "@/components/TermSelector";
+import { useTermStore } from "@/store/termStore";
 
 function examStatusBadge(status: ChildUpcomingExam["status"]) {
     const map: Record<string, { label: string; cls: string }> = {
@@ -47,13 +50,16 @@ export default function ParentChildrenPage() {
     const [loading, setLoading] = useState(true);
     const [dataLoading, setDataLoading] = useState(false);
     const [tab, setTab] = useState<"exams" | "assignments">("exams");
+    const [activeYearId, setActiveYearId] = useState<string | null>(null);
+    const { selectedTermId } = useTermStore();
 
     const loadChildren = useCallback(async () => {
         setLoading(true);
         try {
-            const list = await myChildren();
+            const [list, year] = await Promise.all([myChildren(), getActiveAcademicYear()]);
             setChildren(list);
             if (list.length > 0) setSelected(list[0].studentId);
+            if (year?.id) setActiveYearId(year.id);
         } catch { /* ignore */ }
         finally { setLoading(false); }
     }, []);
@@ -63,14 +69,14 @@ export default function ParentChildrenPage() {
         setDataLoading(true);
         setData(null);
         try {
-            const res = await getChildUpcoming(studentId);
+            const res = await getChildUpcoming(studentId, selectedTermId ?? undefined);
             setData(res);
         } catch { /* ignore */ }
         finally { setDataLoading(false); }
-    }, []);
+    }, [selectedTermId]);
 
     useEffect(() => { void loadChildren(); }, [loadChildren]);
-    useEffect(() => { if (selected) void loadData(selected); }, [selected, loadData]);
+    useEffect(() => { if (selected) void loadData(selected); }, [selected, loadData, selectedTermId]);
 
     const selectedChild = children.find(c => c.studentId === selected);
 
@@ -79,10 +85,17 @@ export default function ParentChildrenPage() {
             <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
             <div style={{ marginBottom: "1.5rem" }}>
-                <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--gray-900)", marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                    My Children
-                </h1>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "0.25rem" }}>
+                    <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--gray-900)", margin: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        My Children
+                    </h1>
+                    <TermSelector
+                        academicYearId={activeYearId}
+                        readOnly={true}
+                        onTermChange={() => { /* re-fetch handled by useEffect dep */ }}
+                    />
+                </div>
                 <p style={{ color: "var(--gray-500)", fontSize: "0.9rem" }}>Upcoming exams and assignments for your children</p>
             </div>
 

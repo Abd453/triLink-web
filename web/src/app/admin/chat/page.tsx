@@ -3,5 +3,9 @@
 import RestChat from "@/components/RestChat";
 
 export default function AdminChat() {
-  return <RestChat />;
+  return (
+    <div className="page-wrapper">
+      <RestChat role="admin" />
+    </div>
+  );
 }

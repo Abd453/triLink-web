@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { useTermStore } from "./termStore";
 
 /** Legacy seed list; admin header year dropdown uses GET /api/academic-years instead. */
 export const ACADEMIC_YEARS = [
@@ -24,13 +25,21 @@ export const useAcademicYearStore = create<AcademicYearStore>()(
             years: ACADEMIC_YEARS,
             currentSystemYear: "2024/2025",
             adminSelectedYear: "2024/2025",
-            
-            setAdminSelectedYear: (year) => set({ adminSelectedYear: year }),
-            setCurrentSystemYear: (year) => set((state) => ({ 
-                currentSystemYear: year, 
-                // Optionally move admin to the new year as well to avoid confusion
-                adminSelectedYear: year 
-            })),
+
+            setAdminSelectedYear: (year) => {
+                // Clear selected term whenever the academic year changes
+                useTermStore.getState().clearSelectedTerm();
+                set({ adminSelectedYear: year });
+            },
+            setCurrentSystemYear: (year) => {
+                // Clear selected term whenever the system year changes
+                useTermStore.getState().clearSelectedTerm();
+                set((state) => ({
+                    currentSystemYear: year,
+                    // Optionally move admin to the new year as well to avoid confusion
+                    adminSelectedYear: year
+                }));
+            },
             addYear: (year) => set((state) => {
                 if (state.years.includes(year)) return state;
                 return { years: [...state.years, year] };

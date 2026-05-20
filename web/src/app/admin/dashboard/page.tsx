@@ -12,48 +12,20 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
+  MessageSquare,
 } from "lucide-react";
 import { adminAnalytics, adminDashboard } from "@/lib/admin-api";
+import { PageHeader, PageHeaderSkeleton, StatGridSkeleton, CardSkeleton, EmptyState } from "@/components/ui";
+import { AlertCircle } from "lucide-react";
 
 function DashboardSkeleton() {
   return (
     <div className="page-wrapper">
-      <div className="admin-dash-hero admin-dash-skeleton-block">
-        <div style={{ width: "100%", maxWidth: 420 }}>
-          <div className="admin-skeleton shimmer" style={{ height: 12, width: 140, marginBottom: 12 }} />
-          <div className="admin-skeleton shimmer" style={{ height: 32, width: "90%", marginBottom: 10 }} />
-          <div className="admin-skeleton shimmer" style={{ height: 14, width: "70%" }} />
-        </div>
-        <div className="admin-skeleton shimmer" style={{ height: 32, width: 100, borderRadius: 999 }} />
-      </div>
-
-      <div className="stats-grid admin-dash-stats-grid">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div className="stat-card admin-dash-stat-card admin-dash-skeleton-block" key={i}>
-            <div className="admin-skeleton shimmer" style={{ width: 48, height: 48, borderRadius: 14 }} />
-            <div style={{ flex: 1 }}>
-              <div className="admin-skeleton shimmer" style={{ width: "60%", height: 12, marginBottom: 10 }} />
-              <div className="admin-skeleton shimmer" style={{ width: "35%", height: 24, marginBottom: 10 }} />
-              <div className="admin-skeleton shimmer" style={{ width: "55%", height: 10 }} />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="content-grid admin-dash-bottom-grid" style={{ marginTop: "1.5rem" }}>
-        {Array.from({ length: 2 }).map((_, cardIndex) => (
-          <div className="card admin-dash-bottom-card admin-dash-skeleton-block" key={cardIndex}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-              <div className="admin-skeleton shimmer" style={{ width: 210, height: 20 }} />
-              <div className="admin-skeleton shimmer" style={{ width: 95, height: 28, borderRadius: 999 }} />
-            </div>
-            <div style={{ display: "grid", gap: "0.6rem" }}>
-              {Array.from({ length: 4 }).map((_, row) => (
-                <div className="admin-skeleton shimmer" style={{ width: "100%", height: 42, borderRadius: 10 }} key={row} />
-              ))}
-            </div>
-          </div>
-        ))}
+      <PageHeaderSkeleton />
+      <StatGridSkeleton count={6} />
+      <div className="content-grid admin-dash-bottom-grid" style={{ marginTop: "1.5rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px,1fr))", gap: 16 }}>
+        <CardSkeleton lines={4} />
+        <CardSkeleton lines={4} />
       </div>
     </div>
   );
@@ -85,9 +57,8 @@ export default function AdminDashboard() {
   if (err) {
     return (
       <div className="page-wrapper">
-        <div className="card" style={{ padding: "1.5rem", color: "var(--danger)" }}>
-          {err}
-        </div>
+        <PageHeader kicker="Command Center" title="School overview" subtitle="Couldn't load the dashboard." icon={<ShieldCheck size={22} />} variant="light" />
+        <EmptyState icon={<AlertCircle size={26} />} title="Couldn't load dashboard" description={err} />
       </div>
     );
   }
@@ -150,20 +121,17 @@ export default function AdminDashboard() {
 
   return (
     <div className="page-wrapper">
-      <div className="admin-dash-hero">
-        <div>
-          <p className="admin-dash-kicker">
-            <Sparkles size={14} />
-            Command Center
-          </p>
-          <h1 className="admin-dash-title">School overview</h1>
-          <p className="admin-dash-subtitle">Snapshot updated {new Date(analytics.generatedAt).toLocaleString()}</p>
-        </div>
-        <div className="admin-dash-pill">
-          <ShieldCheck size={16} />
-          Admin view
-        </div>
-      </div>
+      <PageHeader
+        kicker="Command Center"
+        title="School overview"
+        subtitle={`Snapshot updated ${new Date(analytics.generatedAt).toLocaleString()}`}
+        icon={<ShieldCheck size={22} />}
+        actions={(
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0.4rem 0.85rem", borderRadius: 999, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)", fontSize: "0.78rem", fontWeight: 700, color: "#fff" }}>
+            <Sparkles size={13} /> Admin view
+          </span>
+        )}
+      />
 
       <div className="stats-grid admin-dash-stats-grid">
         {stats.map((s) => (
@@ -217,7 +185,13 @@ export default function AdminDashboard() {
             </div>
           </div>
           {analytics.feedbackTicketsByStatus.length === 0 ? (
-            <p style={{ color: "var(--gray-500)" }}>No feedback yet.</p>
+            <div style={{ padding: "2.5rem 1rem", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", minHeight: "220px" }}>
+              <div style={{ width: "64px", height: "64px", background: "#edf2fa", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.25rem" }}>
+                <MessageSquare size={28} style={{ color: "#a0aabf" }} strokeWidth={2.5} />
+              </div>
+              <h4 style={{ fontSize: "1.15rem", fontWeight: 700, color: "var(--gray-600)", marginBottom: "0.5rem" }}>No feedback yet.</h4>
+              <p style={{ fontSize: "0.85rem", color: "var(--gray-400)", lineHeight: 1.5, maxWidth: "260px", fontWeight: 500 }}>Feedback from teachers and parents will appear here once they start reaching out.</p>
+            </div>
           ) : (
             <ul className="admin-dash-feedback-list">
               {analytics.feedbackTicketsByStatus.map((f) => (

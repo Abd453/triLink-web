@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Select from "@/components/Select";
+import TablePagination from "@/components/TablePagination";
 import {
     getActiveAcademicYear,
     listMyClassOfferings,
@@ -16,8 +17,12 @@ import {
     type GradeEntry,
 } from "@/lib/admin-api";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import TermSelector from "@/components/TermSelector";
+import { useTermStore } from "@/store/termStore";
 import { filterOfferingsBySubject } from "@/lib/teacher-utils";
 import { cachedFetch } from "@/lib/cache";
+import { PageHeader, PageHeaderSkeleton, TableSkeleton, EmptyState } from "@/components/ui";
+import { Users, AlertCircle, ArrowLeft } from "lucide-react";
 
 type StudentRow = {
     id: string;
@@ -39,16 +44,8 @@ function offeringLabel(o: ClassOffering) {
 function TeacherStudentsSkeleton() {
     return (
         <div className="page-wrapper">
-            <div className="page-header admin-dash-skeleton-block">
-                <div style={{ width: "100%", maxWidth: 380 }}>
-                    <div className="admin-skeleton shimmer" style={{ width: 120, height: 12, marginBottom: 12 }} />
-                    <div className="admin-skeleton shimmer" style={{ width: "55%", height: 28, marginBottom: 8 }} />
-                    <div className="admin-skeleton shimmer" style={{ width: "70%", height: 12 }} />
-                </div>
-            </div>
-            <div className="card admin-dash-skeleton-block">
-                <div className="admin-skeleton shimmer" style={{ width: "100%", height: 320, borderRadius: 12 }} />
-            </div>
+            <PageHeaderSkeleton withActions={false} />
+            <TableSkeleton rows={8} columns={5} />
         </div>
     );
 }
@@ -64,9 +61,31 @@ export default function TeacherStudents() {
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
     const [studentGrades, setStudentGrades] = useState<GradeEntry[]>([]);
     const [gradesLoading, setGradesLoading] = useState(false);
+    
+    // Pagination and Roster Tab state
+    const [page, setPage] = useState(0);
+    const [rowsPerPage, setRowsPerPage] = useState(10);
+    const [showMoreDropdown, setShowMoreDropdown] = useState(false);
+
+    // Reset page on class change
+    useEffect(() => {
+        setPage(0);
+        setShowMoreDropdown(false);
+    }, [selectedOffering]);
+
+    // Close dropdown on click outside
+    useEffect(() => {
+        if (!showMoreDropdown) return;
+        const handler = () => setShowMoreDropdown(false);
+        window.addEventListener("click", handler);
+        return () => window.removeEventListener("click", handler);
+    }, [showMoreDropdown]);
     const [detailTab, setDetailTab] = useState<"exams" | "grades">("grades");
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
+    const [activeYearId, setActiveYearId] = useState<string | null>(null);
+
+    const { selectedTermId } = useTermStore();
 
     const loadOfferings = useCallback(async () => {
         if (!isClient) return;
@@ -75,6 +94,7 @@ export default function TeacherStudents() {
         try {
             const year = await cachedFetch("active-year", () => getActiveAcademicYear(), 120_000);
             if (!year) { setErr("No active academic year"); return; }
+            setActiveYearId(year.id);
             const mine = await cachedFetch(`offerings:${year.id}`, () => listMyClassOfferings(year.id), 60_000);
             const scoped = filterOfferingsBySubject(mine, user?.subject);
             setOfferings(scoped);
@@ -84,11 +104,11 @@ export default function TeacherStudents() {
         } finally {
             setLoading(false);
         }
-    }, [isClient, user?.subject]);
+    }, [isClient, user?.subject, selectedTermId]);
 
     useEffect(() => {
         loadOfferings();
-    }, [loadOfferings]);
+    }, [loadOfferings, selectedTermId]);
 
     // Load students for selected offering
     useEffect(() => {
@@ -106,7 +126,7 @@ export default function TeacherStudents() {
                 const [enrollments, allUsers, exams, attendanceReport] = await Promise.all([
                     cachedFetch(`enroll:${selectedOffering}:${year.id}`, () => listEnrollments({ classOfferingId: selectedOffering, academicYearId: year.id }), 60_000),
                     cachedFetch("students:all", () => listUsers("student"), 120_000),
-                    cachedFetch(`exams:${year.id}`, () => listExams(year.id), 30_000),
+                    cachedFetch(`exams:${year.id}:${selectedTermId ?? 'all'}`, () => listExams(year.id, selectedTermId ?? undefined), 30_000),
                     cachedFetch(`attendance:${selectedOffering}`, () => classAttendanceReport(selectedOffering), 30_000).catch(() => null),
                 ]);
                 if (cancelled) return;
@@ -182,7 +202,25 @@ export default function TeacherStudents() {
         return sorted.map((s, i) => ({ ...s, rank: i + 1 }));
     }, [students]);
 
+    // Slice current page students
+    const paginatedStudents = useMemo(() => {
+        const start = page * rowsPerPage;
+        return rankedStudents.slice(start, start + rowsPerPage);
+    }, [rankedStudents, page, rowsPerPage]);
+
     const selected = useMemo(() => rankedStudents.find(s => s.id === selectedStudentId), [rankedStudents, selectedStudentId]);
+
+    // Re-fetch grades when the active term changes (or when a student is first selected)
+    useEffect(() => {
+        if (!selectedStudentId) return;
+        let cancelled = false;
+        setGradesLoading(true);
+        listGradesForStudent(selectedStudentId, selectedTermId ?? undefined)
+            .then(g => { if (!cancelled) setStudentGrades(g); })
+            .catch(() => { if (!cancelled) setStudentGrades([]); })
+            .finally(() => { if (!cancelled) setGradesLoading(false); });
+        return () => { cancelled = true; };
+    }, [selectedStudentId, selectedTermId]);
 
     if (!isClient || loading) {
         return <TeacherStudentsSkeleton />;
@@ -191,24 +229,26 @@ export default function TeacherStudents() {
     if (err) {
         return (
             <div className="page-wrapper">
-                <div className="page-header"><div><h1 className="page-title">Students</h1></div></div>
-                <div className="card" style={{ color: "var(--danger)", padding: "2rem" }}>{err}</div>
+                <PageHeader kicker="Roster" title="Students" subtitle="Couldn't load data." icon={<Users size={22} />} variant="dark" />
+                <EmptyState icon={<AlertCircle size={26} />} title="Couldn't load students" description={err} action={<button className="btn btn-primary" onClick={() => loadOfferings()} style={{ borderRadius: 12 }}>Try again</button>} />
             </div>
         );
     }
 
     return (
         <div className="page-wrapper">
-            <div className="page-header" style={{ marginBottom: "0.75rem" }}>
-                <div>
-                    <h1 className="page-title">Students</h1>
-                    <p className="page-subtitle">Student analytics per class</p>
-                </div>
-            </div>
+            <PageHeader
+                kicker="Roster"
+                title="Students"
+                subtitle="Student analytics and performance per class."
+                icon={<Users size={22} />}
+                variant="dark"
+                actions={<TermSelector academicYearId={activeYearId} onTermChange={() => undefined} />}
+            />
 
-            {/* Class Tabs (Buttons instead of dropdown) */}
+            {/* Class Tabs (Buttons with "More" dropdown) */}
             <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                {offerings.map(c => (
+                {offerings.slice(0, 4).map(c => (
                     <button
                         key={c.id}
                         className={`btn ${selectedOffering === c.id ? "btn-primary" : "btn-secondary"}`}
@@ -218,6 +258,118 @@ export default function TeacherStudents() {
                         {offeringLabel(c)}
                     </button>
                 ))}
+
+                {offerings.length > 4 && (
+                    <div style={{ position: "relative" }}>
+                        <button
+                            type="button"
+                            className={`btn ${offerings.slice(4).some(c => c.id === selectedOffering) ? "btn-primary" : "btn-secondary"}`}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowMoreDropdown(!showMoreDropdown);
+                            }}
+                            style={{ 
+                                display: "flex", 
+                                alignItems: "center", 
+                                gap: "0.45rem", 
+                                padding: "0.6rem 1.25rem", 
+                                borderRadius: "12px", 
+                                fontSize: "0.85rem", 
+                                fontWeight: 600 
+                            }}
+                        >
+                            {offerings.slice(4).some(c => c.id === selectedOffering) 
+                                ? offeringLabel(offerings.find(c => c.id === selectedOffering)!) 
+                                : "More"}
+                            <svg 
+                                width="12" 
+                                height="12" 
+                                viewBox="0 0 24 24" 
+                                fill="none" 
+                                stroke="currentColor" 
+                                strokeWidth="2.5" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round"
+                                style={{ 
+                                    transform: showMoreDropdown ? "rotate(180deg)" : "rotate(0deg)", 
+                                    transition: "transform 0.2s ease",
+                                    marginLeft: "0.15rem"
+                                }}
+                            >
+                                <path d="m6 9 6 6 6-6"/>
+                            </svg>
+                        </button>
+                        
+                        {showMoreDropdown && (
+                            <div 
+                                style={{
+                                    position: "absolute",
+                                    top: "calc(100% + 8px)",
+                                    left: 0,
+                                    zIndex: 100,
+                                    background: "#fff",
+                                    border: "1.5px solid var(--gray-100)",
+                                    borderRadius: "20px",
+                                    padding: "0.6rem",
+                                    minWidth: "220px",
+                                    boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "0.35rem",
+                                    animation: "fadeIn 0.15s ease-out"
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {offerings.slice(4).map(c => {
+                                    const isSelected = selectedOffering === c.id;
+                                    return (
+                                        <button
+                                            key={c.id}
+                                            type="button"
+                                            onClick={() => {
+                                                setSelectedOffering(c.id);
+                                                setShowMoreDropdown(false);
+                                            }}
+                                            style={{
+                                                padding: "0.65rem 1rem",
+                                                borderRadius: "12px",
+                                                background: isSelected ? "var(--primary-50)" : "transparent",
+                                                color: isSelected ? "var(--primary-700)" : "var(--gray-700)",
+                                                border: "none",
+                                                textAlign: "left",
+                                                fontSize: "0.85rem",
+                                                fontWeight: 600,
+                                                cursor: "pointer",
+                                                transition: "all 0.15s ease",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "space-between"
+                                            }}
+                                            onMouseEnter={e => {
+                                                if (!isSelected) {
+                                                    e.currentTarget.style.background = "var(--gray-50)";
+                                                    e.currentTarget.style.color = "var(--gray-900)";
+                                                }
+                                            }}
+                                            onMouseLeave={e => {
+                                                if (!isSelected) {
+                                                    e.currentTarget.style.background = "transparent";
+                                                    e.currentTarget.style.color = "var(--gray-700)";
+                                                }
+                                            }}
+                                        >
+                                            {offeringLabel(c)}
+                                            {isSelected && (
+                                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--primary-600)" }} />
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {offerings.length === 0 && !loading && (
                     <div style={{ fontSize: "0.85rem", color: "var(--gray-500)", background: "var(--gray-50)", padding: "0.75rem 1.25rem", borderRadius: 12, border: "1.5px dashed var(--gray-200)" }}>
                         No classes found for your subject ({user?.subject || "—"})
@@ -226,70 +378,125 @@ export default function TeacherStudents() {
             </div>
 
             {rankedStudents.length === 0 && !loading ? (
-                <div className="card" style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--gray-400)" }}>
-                    <div style={{ fontWeight: 600, fontSize: "1rem", color: "var(--gray-500)", marginBottom: "0.25rem" }}>No students enrolled</div>
-                    <div style={{ fontSize: "0.85rem" }}>Students will appear once enrolled by the admin.</div>
+                <div style={{ background: "#fff", borderRadius: 20, padding: "4rem 2rem", textAlign: "center", border: "1.5px solid var(--gray-100)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+                    <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#f0fdf4", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: "1rem", color: "var(--gray-700)", marginBottom: "0.25rem" }}>No students enrolled</div>
+                    <div style={{ fontSize: "0.875rem", color: "var(--gray-400)" }}>Students will appear once enrolled by the admin.</div>
                 </div>
             ) : (
-                <div style={{ display: "grid", gridTemplateColumns: selected ? "minmax(0,1fr) minmax(0,1.5fr)" : "1fr", gap: "1.25rem" }}>
-                    <div className="card">
+                <div className={`students-main-layout ${selected ? "has-selected" : ""}`}>
+                    <div className="card students-list-card">
                         <div className="table-wrapper">
                             <table>
-                                <thead><tr><th>Student</th><th>Avg</th><th>Attendance</th><th>Rank</th></tr></thead>
+                                <thead>
+                                    <tr style={{ background: "var(--gray-50)" }}>
+                                        <th style={{ padding: "0.6rem 0.75rem", textAlign: "left", fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)" }}>Student</th>
+                                        <th style={{ padding: "0.6rem 0.75rem", textAlign: "center", fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 90 }}>Avg</th>
+                                        <th style={{ padding: "0.6rem 0.75rem", textAlign: "center", fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 110 }}>Attendance</th>
+                                        <th style={{ padding: "0.6rem 0.75rem", textAlign: "center", fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 90 }}>Rank</th>
+                                    </tr>
+                                </thead>
                                 <tbody>
-                                    {rankedStudents.map(s => (
+                                    {paginatedStudents.map(s => (
                                         <tr key={s.id} onClick={() => {
                                             setSelectedStudentId(s.id);
                                             setDetailTab("grades");
-                                            setGradesLoading(true);
-                                            listGradesForStudent(s.id)
-                                                .then(g => setStudentGrades(g))
-                                                .catch(() => setStudentGrades([]))
-                                                .finally(() => setGradesLoading(false));
-                                        }} style={{ cursor: "pointer", background: selectedStudentId === s.id ? "var(--primary-50)" : undefined }}>
-                                            <td style={{ fontWeight: 600 }}>
-                                                {s.name}<br />
-                                                <span style={{ fontSize: "0.7rem", color: "var(--gray-400)" }}>{s.email}</span>
+                                        }} style={{ cursor: "pointer", background: selectedStudentId === s.id ? "var(--primary-50)" : undefined, borderBottom: "1px solid var(--gray-100)" }}>
+                                            <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                {s.name}
+                                                <div style={{ fontSize: "0.72rem", color: "var(--gray-400)", fontWeight: 400 }}>{s.email}</div>
                                             </td>
-                                            <td>
+                                            <td style={{ padding: "0.45rem 0.5rem", textAlign: "center" }}>
                                                 <span className={`badge ${s.avg >= 90 ? "badge-success" : s.avg >= 80 ? "badge-primary" : s.avg >= 60 ? "badge-warning" : "badge-danger"}`}>
                                                     {s.avg > 0 ? `${s.avg}%` : "-"}
                                                 </span>
                                             </td>
-                                            <td>{s.attendance}%</td>
-                                            <td>#{s.rank}</td>
+                                            <td style={{ padding: "0.45rem 0.5rem", textAlign: "center" }}>{s.attendance}%</td>
+                                            <td style={{ padding: "0.45rem 0.5rem", textAlign: "center" }}>#{s.rank}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
+                        {rankedStudents.length > 0 && (
+                            <TablePagination
+                                total={rankedStudents.length}
+                                page={page}
+                                rowsPerPage={rowsPerPage}
+                                onPageChange={setPage}
+                                onRowsPerPageChange={(n) => {
+                                    setRowsPerPage(n);
+                                    setPage(0);
+                                }}
+                            />
+                        )}
                     </div>
 
                                         {selected && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                            {/* Back button for mobile/tablet */}
+                            <button
+                                type="button"
+                                className="students-back-button"
+                                onClick={() => setSelectedStudentId(null)}
+                                style={{
+                                    alignItems: "center",
+                                    gap: "0.5rem",
+                                    background: "#fff",
+                                    border: "1.5px solid var(--gray-150)",
+                                    borderRadius: "12px",
+                                    padding: "0.55rem 1.15rem",
+                                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
+                                    color: "var(--gray-800)",
+                                    fontSize: "0.85rem",
+                                    fontWeight: 700,
+                                    cursor: "pointer",
+                                    alignSelf: "flex-start",
+                                    transition: "all 0.2s ease-in-out",
+                                }}
+                                onMouseEnter={e => {
+                                    e.currentTarget.style.borderColor = "var(--primary-300)";
+                                    e.currentTarget.style.boxShadow = "0 4px 16px rgba(37, 99, 235, 0.08)";
+                                    e.currentTarget.style.transform = "translateY(-1px)";
+                                }}
+                                onMouseLeave={e => {
+                                    e.currentTarget.style.borderColor = "var(--gray-150)";
+                                    e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.04)";
+                                    e.currentTarget.style.transform = "none";
+                                }}
+                            >
+                                <ArrowLeft size={14} strokeWidth={3} style={{ color: "var(--primary-600)" }} />
+                                <span>Back to List</span>
+                            </button>
+
                             {/* ── Student header ── */}
-                            <div className="card">
-                                <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1rem", flexWrap: "wrap" }}>
-                                    <div className="avatar avatar-initials avatar-lg" style={{ fontSize: "1rem", flexShrink: 0 }}>
+                            <div style={{ background: "#fff", borderRadius: 16, border: "1.5px solid var(--gray-100)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", padding: "1.5rem" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
+                                    <div style={{ width: 56, height: 56, borderRadius: 12, background: "var(--primary-100)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "1.1rem", color: "var(--primary-600)", flexShrink: 0 }}>
                                         {selected.name.split(" ").map((n: string) => n[0]).join("")}
                                     </div>
-                                    <div style={{ minWidth: 0 }}>
-                                        <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selected.name}</h3>
-                                        <p style={{ fontSize: "0.78rem", color: "var(--gray-500)", margin: "0.1rem 0 0" }}>{selected.offeringLabel} · Rank #{selected.rank}</p>
-                                        <p style={{ fontSize: "0.72rem", color: "var(--gray-400)", margin: 0 }}>{selected.email}</p>
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                        <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--gray-900)" }}>{selected.name}</h3>
+                                        <p style={{ fontSize: "0.78rem", color: "var(--gray-600)", margin: "0.1rem 0 0" }}>{selected.offeringLabel}</p>
+                                        <p style={{ fontSize: "0.72rem", color: "var(--gray-500)", margin: "0.1rem 0 0" }}>{selected.email}</p>
+                                    </div>
+                                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                        <div style={{ fontWeight: 800, fontSize: "1.25rem", color: "var(--primary-600)" }}>#{selected.rank}</div>
+                                        <div style={{ fontSize: "0.7rem", color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Rank</div>
                                     </div>
                                 </div>
 
                                 {/* Stats row */}
-                                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "0.5rem", marginBottom: "1rem" }}>
+                                <div className="students-stats-grid">
                                     {[
                                         { label: "Avg Score", value: selected.avg > 0 ? `${selected.avg}%` : "—", color: selected.avg >= 80 ? "var(--success)" : selected.avg >= 60 ? "var(--primary-600)" : "var(--warning)" },
                                         { label: "Attendance", value: `${selected.attendance}%`, color: selected.attendance >= 80 ? "var(--success)" : selected.attendance >= 60 ? "var(--warning)" : "var(--danger)" },
-                                        { label: "Rank", value: `#${selected.rank}`, color: "var(--gray-700)" },
                                     ].map(stat => (
-                                        <div key={stat.label} style={{ background: "var(--gray-50)", borderRadius: 8, padding: "0.6rem 0.75rem", textAlign: "center" }}>
-                                            <div style={{ fontSize: "0.68rem", color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.2rem" }}>{stat.label}</div>
-                                            <div style={{ fontWeight: 800, fontSize: "1rem", color: stat.color }}>{stat.value}</div>
+                                        <div key={stat.label} style={{ background: "var(--gray-50)", borderRadius: 10, border: "1px solid var(--gray-100)", padding: "0.75rem", textAlign: "center" }}>
+                                            <div style={{ fontSize: "0.7rem", color: "var(--gray-600)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.3rem", fontWeight: 600 }}>{stat.label}</div>
+                                            <div style={{ fontWeight: 800, fontSize: "1.1rem", color: stat.color }}>{stat.value}</div>
                                         </div>
                                     ))}
                                 </div>

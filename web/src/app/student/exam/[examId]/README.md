@@ -2,20 +2,33 @@
 
 Full-screen timed exam with anti-cheat enforcement.
 
-## Current Status
+## Fixes Applied
 
-| Area | Status |
+| Issue | Status |
 |---|---|
-| Exam metadata and questions | API-backed; student question payload does not expose answer keys |
-| Attempt lifecycle | Starts/resumes, autosaves answers, submits, and navigates to result |
-| Integrity events | Records tab switch and fullscreen exit through `/api/attempts/:id/violations` |
-| Teacher controls | Listens for Socket.IO `attempt:control` events |
-| Access checks | Filters visible exams by active enrollment when available |
+| No fullscreen enforcement — exam could be taken in a windowed browser | ✅ Fixed — `requestFullscreen()` is called on mount; exiting fullscreen counts as a violation and re-entry is attempted automatically |
+| Inline "submitted" card was shown instead of navigating to the result page | ✅ Fixed — on submit, results are saved to Zustand store and router navigates to `/student/result/[examId]` |
+| Tab violation auto-submit threshold existed but exam result was never persisted | ✅ Fixed — all submit paths (timer expiry, manual submit, tab violation limit) now save to store before navigating |
+| `submittedRef` was missing — fullscreen exit on navigation could incorrectly log a violation | ✅ Fixed — `submittedRef` tracks submission state synchronously for use inside event handlers |
 
-## Known Remaining Work
+## Anti-Cheat Summary
+
+| Feature | Status |
+|---|---|
+| Tab visibility detection (`visibilitychange`) | ✅ Active |
+| Fullscreen enforcement with violation on exit | ✅ Active |
+| Right-click disabled | ✅ Active |
+| Copy / Paste / DevTools keyboard shortcuts blocked | ✅ Active |
+| `beforeunload` warning | ✅ Active |
+| Auto-submit after 3 violations | ✅ Active |
+| Minimum time before submission allowed | ✅ Active |
+| Timer turns red under 5 minutes | ✅ Active |
+| Question navigator (answered / flagged / unanswered grid) | ✅ Active |
+
+## Known / Remaining
 
 | Item | Status |
 |---|---|
-| Client-side anti-cheat bypass resistance | Browser enforcement is best-effort only |
-| Richer locked/rejoin UX | Current flow redirects after lock and waits for teacher action |
-| Complete lint/type cleanup | Deferred unless it blocks build/runtime |
+| Exam questions are hardcoded mock data | ⬜ Needs real API |
+| Correct answers are hardcoded inside the component | ⬜ Should come from API (not exposed to client) |
+| Teacher real-time notification on tab switch | ⬜ Needs backend / WebSocket |

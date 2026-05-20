@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
     BookOpen,
     CheckCircle2,
@@ -8,13 +9,16 @@ import {
     ShieldCheck,
     Sparkles,
     Users,
+    ArrowLeft,
     type LucideIcon,
 } from "lucide-react";
 import { apiPath, getApiBase } from "@/lib/api";
 import { authFetch, getAccessToken } from "@/lib/auth";
-import { listUsers, type PublicUser } from "@/lib/admin-api";
+import { getSectionsForGrade, listGrades, listUsers, type Grade, type PublicUser, type Section } from "@/lib/admin-api";
 import Select from "@/components/Select";
 import { useToastStore } from "@/store/toastStore";
+import { PageHeader } from "@/components/ui";
+import { UserPlus, ShieldCheck as ShieldCheckIcon } from "lucide-react";
 
 type RegistrationType = "student" | "teacher" | "parent";
 
@@ -78,8 +82,32 @@ const ROLE_META = {
     parent:  { icon: Users as LucideIcon, color: "#7c3aed", light: "#f5f3ff", label: "Parent" },
 };
 
-export default function AdminRegistration() {
+function RegistrationForm() {
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const fromVal = searchParams.get("from");
+    const isFromOrigin = fromVal === "students" || fromVal === "teachers" || fromVal === "parents";
+
+    const getOriginMeta = () => {
+        if (fromVal === "teachers") {
+            return { label: "teachers", route: "/admin/teachers" };
+        }
+        if (fromVal === "parents") {
+            return { label: "parents", route: "/admin/parents" };
+        }
+        return { label: "students", route: "/admin/students" };
+    };
+
+    const originMeta = getOriginMeta();
+
     const [regType, setRegType] = useState<RegistrationType>("student");
+
+    useEffect(() => {
+        if (fromVal === "teachers") setRegType("teacher");
+        else if (fromVal === "parents") setRegType("parent");
+        else if (fromVal === "students") setRegType("student");
+    }, [fromVal]);
+
     const [loading, setLoading] = useState(false);
     const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null);
     const [errorMessage, setErrorMessage] = useState("");
@@ -88,6 +116,10 @@ export default function AdminRegistration() {
     const [emailStatus, setEmailStatus] = useState<"idle" | "sent" | "failed" | "skipped">("idle");
     const [studentOptions, setStudentOptions] = useState<PublicUser[]>([]);
     const [loadingStudents, setLoadingStudents] = useState(false);
+    const [gradeOptions, setGradeOptions] = useState<Grade[]>([]);
+    const [sectionOptions, setSectionOptions] = useState<Section[]>([]);
+    const [loadingCatalog, setLoadingCatalog] = useState(false);
+    const [selectedGradeId, setSelectedGradeId] = useState("");
 
     const [formData, setFormData] = useState({
         firstName: "",
@@ -102,6 +134,49 @@ export default function AdminRegistration() {
         linkedStudentId: "",
         relationship: "Father",
     });
+
+    useEffect(() => {
+        let cancelled = false;
+        setLoadingCatalog(true);
+
+        (async () => {
+            try {
+                const grades = await listGrades();
+                if (cancelled) return;
+
+                setGradeOptions(grades);
+
+                const initialGrade = grades[0];
+                if (!initialGrade) {
+                    setSelectedGradeId("");
+                    setSectionOptions([]);
+                    return;
+                }
+
+                setSelectedGradeId(initialGrade.id);
+                setFormData((fd) => ({ ...fd, grade: initialGrade.name }));
+
+                const sections = await getSectionsForGrade(initialGrade.id);
+                if (cancelled) return;
+
+                setSectionOptions(sections);
+                const initialSection = sections[0];
+                setFormData((fd) => ({ ...fd, section: initialSection?.name ?? "" }));
+            } catch {
+                if (!cancelled) {
+                    setGradeOptions([]);
+                    setSectionOptions([]);
+                    setSelectedGradeId("");
+                }
+            } finally {
+                if (!cancelled) setLoadingCatalog(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         if (regType !== "parent") return;
@@ -127,6 +202,35 @@ export default function AdminRegistration() {
             c = true;
         };
     }, [regType]);
+
+    const handleGradeChange = async (gradeId: string) => {
+        setSelectedGradeId(gradeId);
+        const grade = gradeOptions.find((g) => g.id === gradeId);
+        setFormData((prev) => ({ ...prev, grade: grade?.name ?? "", section: "" }));
+
+        if (!gradeId) {
+            setSectionOptions([]);
+            return;
+        }
+
+        try {
+            const sections = await getSectionsForGrade(gradeId);
+            setSectionOptions(sections);
+            const firstSection = sections[0];
+            setFormData((prev) => ({
+                ...prev,
+                section: firstSection?.name ?? "",
+            }));
+        } catch {
+            setSectionOptions([]);
+            setFormData((prev) => ({ ...prev, section: "" }));
+        }
+    };
+
+    const handleSectionChange = (sectionId: string) => {
+        const section = sectionOptions.find((s) => s.id === sectionId);
+        setFormData((prev) => ({ ...prev, section: section?.name ?? "" }));
+    };
 
     const validateEmail = (email: string): boolean =>
         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -276,20 +380,56 @@ export default function AdminRegistration() {
 
     return (
         <div className="page-wrapper">
-            <div className="registration-hero">
-                <div>
-                    <p className="registration-kicker">
-                        <Sparkles size={14} />
-                        Onboarding Studio
-                    </p>
-                    <h1 className="registration-title">Registration</h1>
-                    <p className="registration-subtitle">Register students, teachers, and parents with role-specific data</p>
+            {isFromOrigin && (
+                <div style={{ marginBottom: "1.25rem" }}>
+                    <button
+                        type="button"
+                        onClick={() => router.push(originMeta.route)}
+                        style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            background: "#ffffff",
+                            border: "1px solid var(--gray-200)",
+                            boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+                            borderRadius: "12px",
+                            padding: "0.6rem 1.2rem",
+                            color: "var(--gray-700)",
+                            fontSize: "0.88rem",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                            outline: "none",
+                        }}
+                        onMouseOver={(e) => {
+                            e.currentTarget.style.borderColor = "var(--primary-300)";
+                            e.currentTarget.style.boxShadow = "0 4px 14px rgba(37, 99, 235, 0.08)";
+                            e.currentTarget.style.color = "var(--primary-600)";
+                            e.currentTarget.style.transform = "translateY(-1px)";
+                        }}
+                        onMouseOut={(e) => {
+                            e.currentTarget.style.borderColor = "var(--gray-200)";
+                            e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.04)";
+                            e.currentTarget.style.color = "var(--gray-700)";
+                            e.currentTarget.style.transform = "translateY(0)";
+                        }}
+                    >
+                        <ArrowLeft size={16} color="var(--primary-600)" />
+                        Back to {originMeta.label}
+                    </button>
                 </div>
-                <div className="admin-dash-pill">
-                    <ShieldCheck size={15} />
-                    Admin-only flow
-                </div>
-            </div>
+            )}
+            <PageHeader
+                kicker="Onboarding Studio"
+                title="Registration"
+                subtitle="Register students, teachers, and parents with role-specific data."
+                icon={<UserPlus size={22} />}
+                actions={(
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0.4rem 0.85rem", borderRadius: 999, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)", fontSize: "0.78rem", fontWeight: 700, color: "#fff" }}>
+                        <ShieldCheckIcon size={13} /> Admin-only flow
+                    </span>
+                )}
+            />
 
             {/* Role tabs */}
             <div className="registration-role-tabs">
@@ -353,12 +493,7 @@ export default function AdminRegistration() {
 
                     {/* Card body */}
                     <div style={{ padding: "24px 28px" }}>
-                        <div style={{
-                            display: "grid",
-                            gridTemplateColumns: "1fr 1fr",
-                            gap: "12px",
-                            marginBottom: "20px",
-                        }}>
+                            <div className="info-grid">
                             <InfoRow label="Email" value={successInfo.email} />
                             <InfoRow label="Role" value={
                                 <span style={{
@@ -472,13 +607,13 @@ export default function AdminRegistration() {
             )}
 
             {/* ── Form ── */}
-            <div className="card registration-form-card">
+                    <div className="card registration-form-card">
                 <h3 className="card-title registration-form-title" style={{ marginBottom: "1.25rem" }}>
                     <RoleIcon size={18} /> Register New {meta.label}
                 </h3>
 
                 <form onSubmit={handleSubmit}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.25rem" }}>
+                    <div className="registration-grid">
                         <div className="input-group">
                             <label htmlFor="firstName">First Name <span style={{ color: "var(--red-500)" }}>*</span></label>
                             <div className="input-field">
@@ -546,9 +681,9 @@ export default function AdminRegistration() {
                                     <label htmlFor="grade">Grade <span style={{ color: "var(--red-500)" }}>*</span></label>
                                     <Select
                                         id="grade"
-                                        value={formData.grade}
-                                        onChange={(e) => handleInputChange("grade", e.target.value)}
-                                        disabled={loading}
+                                        value={selectedGradeId}
+                                        onChange={(e) => void handleGradeChange(e.target.value)}
+                                        disabled={loading || loadingCatalog || gradeOptions.length === 0}
                                         style={{
                                             padding: "0.75rem",
                                             background: "var(--primary-50)",
@@ -558,10 +693,17 @@ export default function AdminRegistration() {
                                             fontFamily: "inherit",
                                         }}
                                     >
-                                        <option>Grade 9</option>
-                                        <option>Grade 10</option>
-                                        <option>Grade 11</option>
-                                        <option>Grade 12</option>
+                                        {loadingCatalog ? (
+                                            <option value="">Loading grades…</option>
+                                        ) : gradeOptions.length === 0 ? (
+                                            <option value="">No grades available</option>
+                                        ) : (
+                                            gradeOptions.map((grade) => (
+                                                <option key={grade.id} value={grade.id}>
+                                                    {grade.name}
+                                                </option>
+                                            ))
+                                        )}
                                     </Select>
                                     {errors.grade && <p style={{ color: "var(--red-500)", fontSize: "0.875rem", marginTop: "0.25rem" }}>{errors.grade}</p>}
                                 </div>
@@ -570,9 +712,9 @@ export default function AdminRegistration() {
                                     <label htmlFor="section">Section <span style={{ color: "var(--red-500)" }}>*</span></label>
                                     <Select
                                         id="section"
-                                        value={formData.section}
-                                        onChange={(e) => handleInputChange("section", e.target.value)}
-                                        disabled={loading}
+                                        value={sectionOptions.find((s) => s.name === formData.section)?.id ?? ""}
+                                        onChange={(e) => handleSectionChange(e.target.value)}
+                                        disabled={loading || loadingCatalog || sectionOptions.length === 0}
                                         style={{
                                             padding: "0.75rem",
                                             background: "var(--primary-50)",
@@ -582,9 +724,17 @@ export default function AdminRegistration() {
                                             fontFamily: "inherit",
                                         }}
                                     >
-                                        <option>A</option>
-                                        <option>B</option>
-                                        <option>C</option>
+                                        {loadingCatalog ? (
+                                            <option value="">Loading sections…</option>
+                                        ) : sectionOptions.length === 0 ? (
+                                            <option value="">No sections available</option>
+                                        ) : (
+                                            sectionOptions.map((section) => (
+                                                <option key={section.id} value={section.id}>
+                                                    {section.name}
+                                                </option>
+                                            ))
+                                        )}
                                     </Select>
                                     {errors.section && <p style={{ color: "var(--red-500)", fontSize: "0.875rem", marginTop: "0.25rem" }}>{errors.section}</p>}
                                 </div>
@@ -721,5 +871,13 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
             <p style={{ margin: "0 0 3px", fontSize: 11, fontWeight: 700, color: "#94a3b8", letterSpacing: 0.8, textTransform: "uppercase" }}>{label}</p>
             <div style={{ fontSize: 14, fontWeight: 600, color: "#1e293b" }}>{value}</div>
         </div>
+    );
+}
+
+export default function AdminRegistration() {
+    return (
+        <Suspense fallback={<div className="page-wrapper registration-fallback">Loading Registration Studio...</div>}>
+            <RegistrationForm />
+        </Suspense>
     );
 }

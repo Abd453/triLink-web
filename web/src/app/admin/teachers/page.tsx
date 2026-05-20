@@ -1,145 +1,263 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { BookOpen, Building2, Search, Sparkles, Users } from "lucide-react";
-import { type PublicUser, listUsers } from "@/lib/admin-api";
+import { useEffect, useMemo, useState } from "react";
+import { BookOpen, Building2, Sparkles, Users, Search } from "lucide-react";
+import { type PublicUser, listUsers, patchUser } from "@/lib/admin-api";
+import Select from "@/components/Select";
 import TablePagination from "@/components/TablePagination";
+import { PageHeader, PageHeaderSkeleton, StatGridSkeleton, TableSkeleton } from "@/components/ui";
 
 function TeachersSkeleton() {
   return (
     <div className="page-wrapper">
-      <div className="teachers-hero admin-dash-skeleton-block">
-        <div style={{ width: "100%", maxWidth: 500 }}>
-          <div className="admin-skeleton shimmer" style={{ width: 140, height: 12, marginBottom: 12 }} />
-          <div className="admin-skeleton shimmer" style={{ width: "80%", height: 34, marginBottom: 10 }} />
-          <div className="admin-skeleton shimmer" style={{ width: "64%", height: 14 }} />
-        </div>
-      </div>
-      <div className="teachers-summary-grid">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div className="card teachers-summary-card admin-dash-skeleton-block" key={i}>
-            <div className="admin-skeleton shimmer" style={{ width: 42, height: 42, borderRadius: 12, marginBottom: 10 }} />
-            <div className="admin-skeleton shimmer" style={{ width: "55%", height: 12, marginBottom: 8 }} />
-            <div className="admin-skeleton shimmer" style={{ width: "35%", height: 22 }} />
-          </div>
-        ))}
-      </div>
-      <div className="card admin-dash-skeleton-block">
-        <div className="admin-skeleton shimmer" style={{ width: "100%", height: 240, borderRadius: 12 }} />
-      </div>
+      <PageHeaderSkeleton />
+      <StatGridSkeleton count={3} />
+      <TableSkeleton rows={6} columns={5} />
     </div>
   );
 }
 
+type EditState = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+};
+
 export default function AdminTeachers() {
   const [rows, setRows] = useState<PublicUser[]>([]);
-  const [q, setQ] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  const load = async () => {
-    setLoading(true);
-    setErr(null);
-    try {
-      setRows(await listUsers("teacher", q.trim() || undefined));
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed to load");
-    } finally {
-      setLoading(false);
-    }
+  // Filters
+  const [q, setQ] = useState("");
+  const [subjectFilter, setSubjectFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
+
+  // Edit modal
+  const [editState, setEditState] = useState<EditState | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+
+  // Toast
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
   };
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setLoading(true);
+    setErr(null);
+    listUsers("teacher")
+      .then(setRows)
+      .catch((e) => setErr(e instanceof Error ? e.message : "Failed to load"))
+      .finally(() => setLoading(false));
   }, []);
 
-  const withSubject = rows.filter((t) => !!t.subject).length;
-  const withDepartment = rows.filter((t) => !!t.department).length;
+  // Derived filter options
+  const subjectOptions = useMemo(() => {
+    return Array.from(new Set(rows.map((r) => r.subject).filter(Boolean) as string[])).sort();
+  }, [rows]);
 
-  
-  const total = rows.length;
+  const departmentOptions = useMemo(() => {
+    return Array.from(new Set(rows.map((r) => r.department).filter(Boolean) as string[])).sort();
+  }, [rows]);
+
+  // Filtered rows
+  const filtered = useMemo(() => {
+    const qLow = q.toLowerCase();
+    return rows.filter((t) => {
+      if (q && !`${t.firstName} ${t.lastName}`.toLowerCase().includes(qLow) && !t.email.toLowerCase().includes(qLow)) return false;
+      if (subjectFilter && t.subject !== subjectFilter) return false;
+      if (departmentFilter && t.department !== departmentFilter) return false;
+      return true;
+    });
+  }, [rows, q, subjectFilter, departmentFilter]);
+
+  const total = filtered.length;
   const maxPage = Math.max(0, Math.ceil(total / rowsPerPage) - 1);
   const currentPage = Math.min(page, maxPage);
   const startIdx = currentPage * rowsPerPage;
   const endIdx = Math.min(startIdx + rowsPerPage, total);
-  const visibleRows = rows.slice(startIdx, endIdx);
+  const visibleRows = filtered.slice(startIdx, endIdx);
 
+  const withSubject = rows.filter((t) => !!t.subject).length;
+  const withDepartment = rows.filter((t) => !!t.department).length;
+
+  const openEdit = (t: PublicUser) => {
+    setSaveErr(null);
+    setEditState({ id: t.id, firstName: t.firstName, lastName: t.lastName, phone: t.phone ?? "" });
+  };
+
+  const handleSave = async () => {
+    if (!editState) return;
+    setSaving(true);
+    setSaveErr(null);
+    try {
+      const updated = await patchUser(editState.id, {
+        firstName: editState.firstName,
+        lastName: editState.lastName,
+        phone: editState.phone || null,
+      });
+      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      setEditState(null);
+      showToast("Teacher updated successfully");
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading && rows.length === 0) {
     return <TeachersSkeleton />;
   }
 
+  const inputStyle: React.CSSProperties = {
+    padding: "0.5rem 0.75rem",
+    borderRadius: 8,
+    border: "1px solid var(--gray-200)",
+    fontSize: "0.9rem",
+    outline: "none",
+    background: "var(--gray-50)",
+    width: "100%",
+  };
+
+  const selectStyle: React.CSSProperties = {
+    padding: "0.5rem 0.75rem",
+    borderRadius: 8,
+    border: "1px solid var(--gray-200)",
+    fontSize: "0.9rem",
+    outline: "none",
+    background: "var(--gray-50)",
+    cursor: "pointer",
+  };
+
   return (
     <div className="page-wrapper">
-      <div className="teachers-hero">
-        <div>
-          <p className="teachers-kicker">
-            <Sparkles size={14} />
-            Faculty Directory
-          </p>
-          <h1 className="teachers-title">Teachers</h1>
-          <p className="teachers-subtitle">Teachers on staff</p>
+      {/* Toast */}
+      {toast && (
+        <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, background: "var(--success, #22c55e)", color: "#fff", padding: "0.75rem 1.25rem", borderRadius: 10, fontWeight: 600, boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>
+          {toast}
         </div>
-        <Link href="/admin/registration" className="btn btn-primary">
-          + Register
-        </Link>
+      )}
+
+      <PageHeader
+        kicker="Faculty Directory"
+        title="Teachers"
+        subtitle="Teachers on staff."
+        icon={<BookOpen size={22} />}
+        actions={(
+          <Link href="/admin/registration?from=teachers" className="btn btn-primary" style={{ borderRadius: 12 }}>+ Register</Link>
+        )}
+      />
+
+      <div className="stats-grid admin-dash-stats-grid">
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon blue">
+            <Users size={20} />
+          </div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Total teachers</div>
+            <div className="stat-value">{rows.length}</div>
+            <div className="admin-dash-stat-note">Faculty members</div>
+          </div>
+        </div>
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon teal">
+            <BookOpen size={20} />
+          </div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">With subject</div>
+            <div className="stat-value">{withSubject}</div>
+            <div className="admin-dash-stat-note">Assigned expertise</div>
+          </div>
+        </div>
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon orange">
+            <Building2 size={20} />
+          </div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">With department</div>
+            <div className="stat-value">{withDepartment}</div>
+            <div className="admin-dash-stat-note">Departmentalized staff</div>
+          </div>
+        </div>
       </div>
 
-      <div className="teachers-summary-grid">
-        <div className="card teachers-summary-card">
-          <div className="teachers-summary-icon blue">
-            <Users size={18} />
-          </div>
-          <div className="teachers-summary-label">Total teachers</div>
-          <div className="teachers-summary-value">{rows.length}</div>
-        </div>
-        <div className="card teachers-summary-card">
-          <div className="teachers-summary-icon teal">
-            <BookOpen size={18} />
-          </div>
-          <div className="teachers-summary-label">With subject</div>
-          <div className="teachers-summary-value">{withSubject}</div>
-        </div>
-        <div className="card teachers-summary-card">
-          <div className="teachers-summary-icon orange">
-            <Building2 size={18} />
-          </div>
-          <div className="teachers-summary-label">With department</div>
-          <div className="teachers-summary-value">{withDepartment}</div>
-        </div>
-      </div>
+      {err && <div className="card" style={{ color: "var(--danger)", marginBottom: "1rem" }}>{err}</div>}
 
-      <div className="card" style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--gray-100)", borderBottomLeftRadius: 0, borderBottomRightRadius: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-        <div style={{ position: "relative", width: "100%", maxWidth: "340px" }}>
-          <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--gray-400)" }} />
+      {/* Filters */}
+      <div className="card" style={{ marginBottom: "1rem", padding: "1rem 1.25rem", display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ position: "relative", minWidth: 220, flex: "1 1 220px" }}>
+          <Search size={16} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "var(--gray-400)", pointerEvents: "none" }} />
           <input
             value={q}
             onChange={(e) => { setQ(e.target.value); setPage(0); }}
-            onKeyDown={(e) => e.key === "Enter" && load()}
-            placeholder="Search faculty members..."
-            style={{ 
-                width: "100%", 
-                padding: "0.65rem 1rem 0.65rem 2.5rem", 
-                borderRadius: "12px", 
-                border: "1px solid var(--gray-200)", 
-                fontSize: "0.9rem",
-                outline: "none",
-                background: "var(--gray-50)",
-                transition: "all 0.2s"
+            placeholder="Search name or email…"
+            style={{
+              padding: "0.75rem 1rem 0.75rem 2.75rem",
+              borderRadius: "20px",
+              border: "1.5px solid var(--gray-300)",
+              backgroundColor: "var(--gray-50)",
+              fontSize: "0.95rem",
+              width: "100%",
+              outline: "none",
+              transition: "all 0.2s ease",
+              color: "var(--gray-800)",
+              boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)",
             }}
-            onFocus={e => (e.currentTarget.style.borderColor = "var(--primary-300)", e.currentTarget.style.background = "#fff", e.currentTarget.style.boxShadow = "0 0 0 4px rgba(59, 130, 246, 0.06)")}
-            onBlur={e => (e.currentTarget.style.borderColor = "var(--gray-200)", e.currentTarget.style.background = "var(--gray-50)", e.currentTarget.style.boxShadow = "none")}
+            onFocus={(e) => {
+              e.target.style.borderColor = "var(--primary-400)";
+              e.target.style.backgroundColor = "#fff";
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = "var(--gray-300)";
+              e.target.style.backgroundColor = "var(--gray-50)";
+            }}
           />
         </div>
-        <button type="button" className="btn btn-primary btn-sm" onClick={load} style={{ height: "40px", borderRadius: "12px" }}>
-            Search
-        </button>
+        <Select
+          value={subjectFilter}
+          onChange={(e) => { setSubjectFilter(e.target.value); setPage(0); }}
+          style={{
+            padding: "0.65rem 1.75rem 0.65rem 1rem",
+            borderRadius: "20px",
+            border: "1.5px solid var(--primary-200)",
+            backgroundColor: "var(--primary-50)",
+            color: "var(--primary-800)",
+            fontWeight: 600,
+            outline: "none",
+            cursor: "pointer",
+          }}
+        >
+          <option value="">All subjects</option>
+          {subjectOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+        </Select>
+        <Select
+          value={departmentFilter}
+          onChange={(e) => { setDepartmentFilter(e.target.value); setPage(0); }}
+          style={{
+            padding: "0.65rem 1.75rem 0.65rem 1rem",
+            borderRadius: "20px",
+            border: "1.5px solid var(--primary-200)",
+            backgroundColor: "var(--primary-50)",
+            color: "var(--primary-800)",
+            fontWeight: 600,
+            outline: "none",
+            cursor: "pointer",
+          }}
+        >
+          <option value="">All departments</option>
+          {departmentOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+        </Select>
       </div>
-      {err && <div className="card" style={{ color: "var(--danger)", marginBottom: "1rem" }}>{err}</div>}
+
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <div className="table-wrapper">
           <table>
@@ -149,35 +267,93 @@ export default function AdminTeachers() {
                 <th>Email</th>
                 <th>Subject</th>
                 <th>Department</th>
+                <th>Phone</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={4} style={{ color: "var(--gray-500)" }}>
-                    Loading…
-                  </td>
+                  <td colSpan={6} style={{ color: "var(--gray-500)" }}>Loading…</td>
                 </tr>
-              ) : rows.length === 0 ? (
+              ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={4}>No teachers.</td>
+                  <td colSpan={6} style={{ color: "var(--gray-500)" }}>No teachers found.</td>
                 </tr>
               ) : (
                 visibleRows.map((t) => (
                   <tr key={t.id}>
-                    <td style={{ fontWeight: 600 }}>
-                      {t.firstName} {t.lastName}
-                    </td>
+                    <td style={{ fontWeight: 600 }}>{t.firstName} {t.lastName}</td>
                     <td>{t.email}</td>
                     <td>{t.subject ?? "—"}</td>
                     <td>{t.department ?? "—"}</td>
+                    <td>{t.phone ?? "—"}</td>
+                    <td>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(t)}>
+                        Edit
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
         </div>
+        <TablePagination
+          total={total}
+          page={currentPage}
+          rowsPerPage={rowsPerPage}
+          onPageChange={setPage}
+          onRowsPerPageChange={(v) => { setRowsPerPage(v); setPage(0); }}
+        />
       </div>
+
+      {/* Edit Modal */}
+      {editState && (
+        <div
+          className="modal-overlay"
+          style={{ zIndex: 9998, padding: "1rem" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setEditState(null); }}
+        >
+          <div className="modal" style={{ maxWidth: 420, width: "100%", padding: "2rem" }}>
+            <h2 style={{ fontSize: "1.05rem", fontWeight: 700, marginBottom: "1.25rem" }}>Edit teacher</h2>
+            <div style={{ display: "grid", gap: "0.75rem" }}>
+              <label style={{ fontSize: "0.875rem", fontWeight: 500 }}>
+                First name
+                <input
+                  value={editState.firstName}
+                  onChange={(e) => setEditState((s) => s ? { ...s, firstName: e.target.value } : s)}
+                  style={{ ...inputStyle, marginTop: 4 }}
+                />
+              </label>
+              <label style={{ fontSize: "0.875rem", fontWeight: 500 }}>
+                Last name
+                <input
+                  value={editState.lastName}
+                  onChange={(e) => setEditState((s) => s ? { ...s, lastName: e.target.value } : s)}
+                  style={{ ...inputStyle, marginTop: 4 }}
+                />
+              </label>
+              <label style={{ fontSize: "0.875rem", fontWeight: 500 }}>
+                Phone
+                <input
+                  value={editState.phone}
+                  onChange={(e) => setEditState((s) => s ? { ...s, phone: e.target.value } : s)}
+                  style={{ ...inputStyle, marginTop: 4 }}
+                  placeholder="Optional"
+                />
+              </label>
+            </div>
+            {saveErr && <div style={{ color: "var(--danger)", fontSize: "0.875rem", marginTop: "0.75rem" }}>{saveErr}</div>}
+            <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.5rem", justifyContent: "flex-end" }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setEditState(null)} disabled={saving}>Cancel</button>
+              <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

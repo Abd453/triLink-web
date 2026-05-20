@@ -42,17 +42,9 @@ export default function ExamResult() {
     }
 
     if (loadErr || !data) {
-        const pending = /release|released|not available|not found|pending/i.test(loadErr || "");
         return (
             <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "1rem" }}>
-                <div style={{ maxWidth: 520, textAlign: "center", background: "#fff", border: "1px solid var(--gray-200)", borderRadius: 18, padding: "2rem" }}>
-                    <h2 style={{ margin: 0, fontSize: "1.25rem", color: "var(--gray-900)" }}>{pending ? "Result pending release" : "Could not load result"}</h2>
-                    <p style={{ color: pending ? "var(--gray-600)" : "var(--danger)", fontWeight: pending ? 500 : 600, lineHeight: 1.6 }}>
-                        {pending
-                            ? "Your attempt has been submitted, but the teacher has not released the result yet. Check back after grading is complete."
-                            : loadErr || "Result not available yet."}
-                    </p>
-                </div>
+                <p style={{ color: "var(--danger)", fontWeight: 600 }}>{loadErr || "Result not available yet."}</p>
                 <button onClick={() => router.push("/student/dashboard")} style={{ padding: "0.6rem 1.5rem", borderRadius: 10, background: "var(--primary-500)", color: "#fff", border: "none", fontWeight: 600, cursor: "pointer" }}>Back to Dashboard</button>
             </div>
         );
@@ -105,14 +97,11 @@ export default function ExamResult() {
         <div>
             {/* Header */}
             <div style={{ marginBottom: "1.5rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap" }}>
-                    <button onClick={() => router.push("/student/dashboard")} style={{
-                        display: "flex", alignItems: "center", gap: "0.4rem",
-                        background: "none", border: "none", color: "var(--primary-500)",
-                        fontWeight: 600, fontSize: "0.85rem", cursor: "pointer",
-                    }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg> Back to Dashboard</button>
-                    <button onClick={() => downloadResultCsv(data, questions, scorePercent, gradeLetter)} style={{ padding: "0.55rem 1rem", borderRadius: 10, background: "#fff", color: "var(--primary-600)", border: "1px solid var(--primary-200)", fontWeight: 700, cursor: "pointer" }}>Download CSV</button>
-                </div>
+                <button onClick={() => router.push("/student/dashboard")} style={{
+                    display: "flex", alignItems: "center", gap: "0.4rem",
+                    background: "none", border: "none", color: "var(--primary-500)",
+                    fontWeight: 600, fontSize: "0.85rem", cursor: "pointer", marginBottom: "1rem",
+                }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg> Back to Dashboard</button>
                 <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--gray-900)", display: "flex", alignItems: "center", gap: "0.5rem" }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" /></svg> Exam Result</h1>
                 <p style={{ fontSize: "0.875rem", color: "var(--gray-500)", marginTop: "0.25rem" }}>{data.examTitle}</p>
                 <p style={{ fontSize: "0.8rem", color: "var(--gray-400)", marginTop: "0.4rem", lineHeight: 1.5 }}>
@@ -221,39 +210,4 @@ export default function ExamResult() {
             </div>
         </div>
     );
-}
-
-function csvCell(value: unknown) {
-    const text = String(value ?? "");
-    return `"${text.replace(/"/g, '""')}"`;
-}
-
-function downloadResultCsv(
-    data: AttemptResult,
-    questions: Array<{ order: number; text: string; studentAnswer: string; correctAnswer: string; points: number }>,
-    scorePercent: number,
-    gradeLetter: string,
-) {
-    const rows = [
-        ["Exam", data.examTitle],
-        ["Attempt ID", data.attemptId],
-        ["Score", `${data.score ?? 0}/${data.maxPoints}`],
-        ["Percent", `${scorePercent}%`],
-        ["Grade", gradeLetter],
-        ["Submitted", data.submittedAt],
-        ["Released", data.releasedAt ?? ""],
-        [],
-        ["Question", "Prompt", "Student Answer", "Correct Answer", "Points"],
-        ...questions.map((q) => [q.order, q.text, q.studentAnswer, q.correctAnswer, q.points]),
-    ];
-    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${data.examTitle.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "exam"}-result.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
 }
