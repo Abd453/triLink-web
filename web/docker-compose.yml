@@ -1,0 +1,34 @@
+# Next.js Web Frontend — run from triLink-web/web folder
+# Connects to external backend (Cloud Run or local)
+#
+# Usage:
+#   docker compose up --build        # Build and start
+#   docker compose up --build -d     # Detached mode
+#   docker compose down                # Stop
+#
+# The frontend expects NEXT_PUBLIC_API_BASE_URL to be set in .env.local
+# or passed as environment variable.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+    restart: unless-stopped
+    ports:
+      - "3000:3005"  # Host:3000 → Container:3005
+    environment:
+      - PORT=3005
+      - NODE_ENV=production
+    env_file:
+      - .env.local
+    networks:
+      - trilink
+
+# Connect to existing backend network (created by backend docker-compose)
+networks:
+  trilink:
+    external: true
+    name: trilink-backend_trilink
