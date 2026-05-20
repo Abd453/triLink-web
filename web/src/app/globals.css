@@ -1029,6 +1029,13 @@ table tbody tr:last-child td {
   padding: var(--page-buffer);
 }
 
+/* Chat pages need full width for the shell */
+.chat-page-wrapper {
+  max-width: 100%;
+  margin: 0;
+  padding: var(--page-buffer);
+}
+
 .page-header {
   display: flex;
   align-items: center;
@@ -3282,12 +3289,17 @@ table tbody tr:last-child td {
 }
 
 .chat-conv-card-sub {
-  color: #9aa0a6;
+  color: var(--chat-sidebar-text);
   font-size: 0.78rem;
   margin-top: 2px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.chat-conv-card-sub.typing {
+  color: #60a5fa;
+  font-style: italic;
 }
 
 .chat-conv-meta {
@@ -3431,12 +3443,39 @@ table tbody tr:last-child td {
 
 .chat-stage-subtitle {
   font-size: 0.75rem;
-  color: #22c55e;
+  color: #94a3b8;
   margin-top: 1px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chat-stage-subtitle.online {
+  color: #22c55e;
 }
 
 .chat-stage-subtitle.offline {
-  color: #9aa0a6;
+  color: #94a3b8;
+}
+
+.chat-stage-subtitle.online::before,
+.chat-stage-subtitle.offline::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.chat-stage-subtitle.typing {
+  color: #60a5fa;
+  font-style: italic;
+}
+
+.chat-stage-subtitle.connecting {
+  color: #f59e0b;
 }
 
 .chat-stage-actions {
@@ -4325,9 +4364,9 @@ table tbody tr:last-child td {
 .modal-overlay {
   position: fixed;
   inset: 0;
+  z-index: var(--z-modal-backdrop);
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
-  z-index: var(--z-modal-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4341,7 +4380,7 @@ table tbody tr:last-child td {
   max-width: 560px;
   width: 90%;
   max-height: 85vh;
-  overflow-y: auto;
+  overflow: auto;
   animation: slideUp var(--transition-base);
   z-index: var(--z-modal);
   padding: 1.75rem;
@@ -5131,7 +5170,7 @@ table tbody tr:last-child td {
 }
 
 .exam-topbar-title {
-  fontWeight: 700;
+  font-weight: 700;
   font-size: 1rem;
   color: var(--gray-900);
   white-space: nowrap;
@@ -5707,6 +5746,37 @@ table tbody tr:last-child td {
 .chat-conv-card:hover .chat-conv-pin-btn { opacity: 1 !important; }
 @keyframes chatPulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
 .chat-bubble-text { word-break: break-word; }
+
+/* Chat back button (e.g. teacher from homeroom) */
+.chat-back-row {
+  margin-bottom: 1rem;
+}
+
+.chat-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #fff;
+  border: 1.5px solid var(--gray-150);
+  border-radius: 12px;
+  padding: 0.55rem 1.15rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  color: var(--gray-800);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.chat-back-btn:hover {
+  border-color: var(--primary-300);
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.08);
+  transform: translateY(-1px);
+}
+
+.chat-back-btn svg {
+  color: var(--primary-600);
+}
 
 /* ── Mobile search toggle button ── */
 .mobile-search-toggle-btn {
