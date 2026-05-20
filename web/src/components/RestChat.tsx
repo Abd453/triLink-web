@@ -37,7 +37,8 @@ import {
   type Conversation,
   type PublicUser,
   createConversation,
-  blockConversation,
+  blockUser,
+  unblockUser,
   deleteChatMessage,
   editChatMessage,
   forwardChatMessage,
@@ -46,10 +47,20 @@ import {
   listMessages,
   postChatMessage,
   toggleChatMessageReaction,
-  unblockConversation,
   uploadChatFile,
   searchUsers,
+  listMembers,
+  addMembers,
+  removeMember,
+  getPresence,
+  markMessageAsRead,
 } from "@/lib/admin-api";
+import {
+  Users,
+  UserPlus,
+  UserMinus,
+  Crown,
+} from "lucide-react";
 import { chatRealtime, type RealtimeStatus } from "@/lib/chat-realtime";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { useChatUnreadStore } from "@/store/chatUnreadStore";
@@ -61,6 +72,9 @@ type ChatMessageView = ChatMessage & {
   senderName?: string;
   senderRole?: string;
   senderInitials?: string;
+  senderProfileImage?: string | null;
+  imageUrl?: string;
+  type?: "text" | "image" | "file" | "voice";
 };
 
 interface RestChatProps {
@@ -417,7 +431,11 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
   }, []);
 
   useEffect(() => {
-    if (!meId) return;
+    if (!meId || meId.startsWith("fallback-")) {
+      console.log("[Chat] Skipping socket connection - waiting for real user data");
+      return;
+    }
+    console.log(`[Chat] Connecting socket for user ${meId}`);
     chatRealtime.connect({ id: meId, name: meName });
     const offStatus = chatRealtime.on("status", (s) => setStatus(s));
     const offMessage = chatRealtime.on("message:new", (payload) => {
@@ -447,6 +465,9 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
           : undefined,
         senderRole: (raw as any).senderRole ?? (raw as any).sender?.role,
         senderInitials: (raw as any).senderInitials,
+        senderProfileImage: (raw as any).senderProfileImage ?? (raw as any).sender?.profileImageFileId
+          ? `/files/${(raw as any).sender.profileImageFileId}/download`
+          : null,
       };
       setConversations((prev) =>
         prev
@@ -874,11 +895,11 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
     mediaRecorderRef.current = null;
   }
 
-  async function handleEditMessage(messageId: string) {
+  async function handleEditMessage(messageId: string, conversationId: string) {
     const trimmed = editingText.trim();
     if (!trimmed) { setEditingMessageId(null); return; }
     try {
-      const updated = await editChatMessage(messageId, trimmed);
+      const updated = await editChatMessage(conversationId, messageId, trimmed);
       setMessagesByConversation((prev) => {
         const list = prev[updated.conversationId] ?? [];
         return {
@@ -896,7 +917,7 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
   async function handleDeleteMessage(messageId: string, conversationId: string) {
     if (!confirm("Delete this message?")) return;
     try {
-      await deleteChatMessage(messageId);
+      await deleteChatMessage(conversationId, messageId);
       setMessagesByConversation((prev) => {
         const list = prev[conversationId] ?? [];
         return {
@@ -1085,7 +1106,7 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
 
       async function applyReaction(emoji: string) {
         try {
-          const updated = await toggleChatMessageReaction(message.id, emoji);
+          const updated = await toggleChatMessageReaction(message.conversationId, message.id, emoji);
           setMessagesByConversation((prev) => ({
             ...prev,
             [activeConversationId ?? ""]: (prev[activeConversationId ?? ""] ?? []).map((item) => item.id === updated.id ? { ...item, reactions: updated.reactions ?? null } : item),
@@ -1109,9 +1130,22 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
           >
             {!mine && (
               <div className="chat-bubble-avatar-slot">
-                <div className="chat-participant-avatar" style={{ background: avatarColor(message.senderId) }}>
-                  {author.initials}
-                </div>
+                {message.senderProfileImage ? (
+                  <img
+                    src={message.senderProfileImage}
+                    alt={author.label}
+                    className="chat-participant-avatar"
+                    style={{ objectFit: "cover" }}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                      (e.target as HTMLImageElement).parentElement!.innerHTML = `<div class="chat-participant-avatar" style="background: ${avatarColor(message.senderId)}">${author.initials}</div>`;
+                    }}
+                  />
+                ) : (
+                  <div className="chat-participant-avatar" style={{ background: avatarColor(message.senderId) }}>
+                    {author.initials}
+                  </div>
+                )}
               </div>
             )}
             <div className={`chat-bubble ${mine ? "mine" : "other"} ${isPending ? "pending" : ""}`} style={isDeleted ? { opacity: 0.6, fontStyle: "italic" } : emojiOnly ? { background: "transparent", boxShadow: "none", padding: "0.15rem 0.25rem" } : undefined}>
@@ -1139,13 +1173,13 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
                     style={{ width: "100%", minWidth: 200, padding: "0.5rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.4)", background: mine ? "rgba(255,255,255,0.18)" : "#fff", color: mine ? "#fff" : "inherit", fontFamily: "inherit", fontSize: "0.85rem", resize: "vertical" }}
                     autoFocus
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleEditMessage(message.id); }
+                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleEditMessage(message.id, message.conversationId); }
                       if (e.key === "Escape") { setEditingMessageId(null); setEditingText(""); }
                     }}
                   />
                   <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setEditingMessageId(null); setEditingText(""); }} style={{ padding: "0.2rem 0.6rem", fontSize: "0.75rem" }}>Cancel</button>
-                    <button type="button" className="btn btn-primary btn-sm" onClick={() => void handleEditMessage(message.id)} style={{ padding: "0.2rem 0.6rem", fontSize: "0.75rem" }}>Save</button>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => void handleEditMessage(message.id, message.conversationId)} style={{ padding: "0.2rem 0.6rem", fontSize: "0.75rem" }}>Save</button>
                   </div>
                 </div>
               ) : message.text ? (
@@ -1300,10 +1334,34 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
               const displayName = conversationDisplayName(conv);
               const online = isConversationOnline(conv);
               const preview = typing.length ? "is typing…" : conv.lastMessageText?.trim() || conv.description || "No messages yet";
+              const convAvatar = conv.avatarFileId
+                ? `/files/${conv.avatarFileId}/download`
+                : null;
+              const otherParticipant = conv.type === "direct" && conv.participants?.length === 2
+                ? conv.participants.find(p => p.id !== meId)
+                : null;
+              const participantAvatar = otherParticipant?.profileImageFileId
+                ? `/files/${otherParticipant.profileImageFileId}/download`
+                : null;
+              const avatarUrl = convAvatar || participantAvatar;
+
               return (
                 <div key={conv.id} className={`chat-conv-card ${active ? "active" : ""}`} style={{ position: "relative", cursor: "pointer" }} onClick={() => selectConversation(conv.id)}>
                   <div className="chat-conv-avatar-shell">
-                    <div className="chat-conv-avatar-large" style={{ background: avatarColor(conv.id) }}>{initials(displayName)}</div>
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt={displayName}
+                        className="chat-conv-avatar-large"
+                        style={{ objectFit: "cover" }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                          (e.target as HTMLImageElement).parentElement!.innerHTML = `<div class="chat-conv-avatar-large" style="background: ${avatarColor(conv.id)}">${initials(displayName)}</div><span class="chat-avatar-dot ${online ? "online" : "offline"}"></span>`;
+                        }}
+                      />
+                    ) : (
+                      <div className="chat-conv-avatar-large" style={{ background: avatarColor(conv.id) }}>{initials(displayName)}</div>
+                    )}
                     <span className={`chat-avatar-dot ${online ? "online" : "offline"}`} />
                   </div>
                   <div className="chat-conv-copy">
@@ -1312,7 +1370,7 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
                       {mutedConvIds.has(conv.id) && <BellOff size={11} style={{ color: "#94a3b8" }} />}
                       <span>{displayName}</span>
                     </div>
-                    <div className="chat-conv-card-sub" style={typing.length ? { color: "var(--primary-600)", fontStyle: "italic" } : {}}>{preview}</div>
+                    <div className={`chat-conv-card-sub ${typing.length ? "typing" : ""}`}>{preview}</div>
                   </div>
                   <div className="chat-conv-meta">
                     <span>{relative(conv.lastMessageAt ?? conv.updatedAt ?? conv.createdAt)}</span>
@@ -1324,7 +1382,7 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
                     title={pinnedConvIds.has(conv.id) ? "Unpin" : "Pin to top"}
                     aria-label={pinnedConvIds.has(conv.id) ? "Unpin" : "Pin"}
                     className="chat-conv-pin-btn"
-                    style={{ position: "absolute", top: 8, right: 8, border: "none", background: "rgba(255,255,255,0.85)", borderRadius: 999, width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: pinnedConvIds.has(conv.id) ? "var(--primary-600)" : "#94a3b8", opacity: pinnedConvIds.has(conv.id) ? 1 : 0, transition: "opacity 0.15s" }}
+                    style={{ position: "absolute", top: 8, right: 8, border: "none", background: "rgba(30,35,55,0.9)", borderRadius: 999, width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: pinnedConvIds.has(conv.id) ? "#60a5fa" : "#6b7280", opacity: pinnedConvIds.has(conv.id) ? 1 : 0, transition: "opacity 0.15s" }}
                   >
                     {pinnedConvIds.has(conv.id) ? <Pin size={12} fill="var(--primary-600)" /> : <PinOff size={12} />}
                   </button>
@@ -1333,8 +1391,8 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
             })
           ) : (
             <div className="chat-empty-state">
-              <strong style={{ color: "#1a1a2e", fontSize: "0.88rem" }}>No conversations found</strong>
-              <span style={{ fontSize: "0.78rem" }}>Start a new thread.</span>
+              <strong style={{ color: "#e8eaf0", fontSize: "0.88rem" }}>No conversations found</strong>
+              <span style={{ fontSize: "0.78rem", color: "#6b7280" }}>Start a new thread.</span>
               <button className="btn btn-primary btn-sm" type="button" onClick={() => setShowCompose(true)} style={{ marginTop: 8 }}>New chat</button>
             </div>
           )}
@@ -1349,31 +1407,61 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
               <div className="chat-stage-contact">
                 <button
                   type="button"
-                  onClick={() => setActiveConversationId(null)}
-                  className="chat-mobile-back-btn"
-                  title="Back to Chats"
-                  aria-label="Back to Chats"
-                >
-                  <ArrowLeft size={20} />
-                </button>
                 <div className="chat-stage-contact-avatar" style={{ background: avatarColor(activeConversation.id) }}>
-                  {initials(conversationDisplayName(activeConversation))}
+                  {initials(displayName)}
                 </div>
-                <div>
-                  <div className="chat-stage-title">{conversationDisplayName(activeConversation)}</div>
-                  <div className={`chat-stage-subtitle ${status !== "open" ? "offline" : ""}`}>
-                    {activeTyping.length > 0
-                      ? "typing…"
+              );
+            })()}
+          <div>
+            <div className="chat-stage-title">{conversationDisplayName(activeConversation)}</div>
+            {(() => {
+              const isOnline = activeConversation.type === "direct"
+                ? isConversationOnline(activeConversation)
+                : status === "open";
+              const subtitleClass = activeTyping.length > 0
+                ? "typing"
+                : status === "connecting"
+                ? "connecting"
+                : isOnline
+                ? "online"
+                : "offline";
+              return (
+                <div className={`chat-stage-subtitle ${subtitleClass}`}>
+                  {activeTyping.length > 0
+                    ? "typing…"
+                    : status === "connecting"
+                    ? "Connecting…"
+                    : activeConversation.type === "direct"
+                    ? isOnline
+                      ? "Online"
+                      : `Last seen ${getLastSeenLabel(getOtherDirectMember(activeConversation)?.userId) ?? "recently"}`
+                    : isOnline
+                    ? "Connected"
+                    : "Offline"}
+                      : status === "open";
+                    const subtitleClass = activeTyping.length > 0
+                      ? "typing"
                       : status === "connecting"
-                      ? "Connecting…"
-                      : activeConversation.type === "direct"
-                      ? isConversationOnline(activeConversation)
-                        ? "Online"
-                        : `Last seen ${getLastSeenLabel(getOtherDirectMember(activeConversation)?.userId) ?? "recently"}`
-                      : status === "open"
-                      ? "Connected"
-                      : "Offline"}
-                  </div>
+                      ? "connecting"
+                      : isOnline
+                      ? "online"
+                      : "offline";
+                    return (
+                      <div className={`chat-stage-subtitle ${subtitleClass}`}>
+                        {activeTyping.length > 0
+                          ? "typing…"
+                          : status === "connecting"
+                          ? "Connecting…"
+                          : activeConversation.type === "direct"
+                          ? isOnline
+                            ? "Online"
+                            : `Last seen ${getLastSeenLabel(getOtherDirectMember(activeConversation)?.userId) ?? "recently"}`
+                          : isOnline
+                          ? "Connected"
+                          : "Offline"}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
               <div className="chat-stage-actions" style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1614,32 +1702,87 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
             <>
               <div className="chat-info-card">
                 <div className="chat-info-card-hero">
-                  <div className="chat-info-avatar" style={{ background: avatarColor(activeConversation.id) }}>{initials(conversationDisplayName(activeConversation))}</div>
+                  {(() => {
+                    const convAvatar = activeConversation.avatarFileId
+                      ? `/files/${activeConversation.avatarFileId}/download`
+                      : null;
+                    const otherParticipant = activeConversation.type === "direct" && activeConversation.participants?.length === 2
+                      ? activeConversation.participants.find(p => p.id !== meId)
+                      : null;
+                    const participantAvatar = otherParticipant?.profileImageFileId
+                      ? `/files/${otherParticipant.profileImageFileId}/download`
+                      : null;
+                    const avatarUrl = convAvatar || participantAvatar;
+                    const displayName = conversationDisplayName(activeConversation);
+
+                    if (avatarUrl) {
+                      return (
+                        <img
+                          src={avatarUrl}
+                          alt={displayName}
+                          className="chat-info-avatar"
+                          style={{ objectFit: "cover" }}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = "none";
+                            (e.target as HTMLImageElement).parentElement!.innerHTML = `<div class="chat-info-avatar" style="background: ${avatarColor(activeConversation.id)}">${initials(displayName)}</div>`;
+                          }}
+                        />
+                      );
+                    }
+                    return (
+                      <div className="chat-info-avatar" style={{ background: avatarColor(activeConversation.id) }}>
+                        {initials(displayName)}
+                      </div>
+                    );
+                  })()}
                   <div className="chat-info-name">{conversationDisplayName(activeConversation)}</div>
-                  <div className="chat-info-role">{activeConversation.type} thread</div>
+                  <div className="chat-info-role">
+                    {activeConversation.type} thread
+                    {conversationIsBlocked && (
+                      <span style={{ color: isBlockedByMe ? '#dc2626' : '#ea580c', marginLeft: 8, fontSize: '0.75rem' }}>
+                        {isBlockedByMe ? '• You blocked this chat' : '• You are blocked'}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
               <div className="chat-info-body">
-                {activeConversation.type === "direct" && (
+                {/* Block/Unblock - available for direct conversations only */}
+                {activeConversation.type === "direct" && activeConversation.members && (
                   <div className="chat-info-action-row">
                     <button
                       type="button"
-                      className="btn btn-outline btn-sm block-btn"
+                      className={`btn btn-sm ${isBlockedByMe ? 'btn-primary' : 'btn-outline'}`}
                       onClick={async () => {
                         try {
                           setIsBlocking(true);
-                          const result = isBlockedByMe ? await unblockConversation(activeConversation.id) : await blockConversation(activeConversation.id);
-                          setConversations((prev) => prev.map((conv) => conv.id === activeConversation.id ? { ...conv, blockedByMe: result.blockedByMe, blockedMe: result.blockedMe } : conv));
+                          // Find peer user (the other member in direct conversation)
+                          const currentUserId = (await import('@/lib/api')).getCurrentUserId?.();
+                          const peerMember = activeConversation.members?.find((m: { userId: string }) => m.userId !== currentUserId);
+                          const peerUserId = peerMember?.userId;
+                          
+                          if (!peerUserId) {
+                            throw new Error("Could not find peer user to block/unblock");
+                          }
+                          
+                          console.log(`[Block] ${isBlockedByMe ? 'Unblocking' : 'Blocking'} user ${peerUserId}`);
+                          const result = isBlockedByMe ? await unblockUser(peerUserId) : await blockUser(peerUserId);
+                          console.log('[Block] Result:', result);
+                          
+                          // Update conversation state to reflect block status
+                          setConversations((prev) => prev.map((conv) => conv.id === activeConversation.id ? { ...conv, blockedByMe: !isBlockedByMe } : conv));
                         } catch (err) {
+                          console.error('[Block] Error:', err);
                           setError(err instanceof Error ? err.message : "Unable to update block status.");
                         } finally {
                           setIsBlocking(false);
                         }
                       }}
-                      disabled={isBlocking}
+                      disabled={isBlocking || isBlockedMe}
+                      style={{ width: '100%' }}
                     >
-                      {isBlockedByMe ? "Unblock user" : "Block user"}
+                      {isBlockedByMe ? "Unblock user" : isBlockedMe ? "You are blocked" : "Block user"}
                     </button>
                   </div>
                 )}
@@ -1737,21 +1880,48 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
               <button className="chat-stage-icon-btn" type="button" onClick={() => setForwardingMessageId(null)} aria-label="Close"><X size={16} /></button>
             </div>
             <div style={{ maxHeight: 380, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-              {sortedConversations.filter((c) => c.id !== activeConversationId).map((conv) => (
+              {sortedConversations.filter((c) => c.id !== activeConversationId).map((conv) => {
+                const convAvatar = conv.avatarFileId
+                  ? `/files/${conv.avatarFileId}/download`
+                  : null;
+                const otherParticipant = conv.type === "direct" && conv.participants?.length === 2
+                  ? conv.participants.find(p => p.id !== meId)
+                  : null;
+                const participantAvatar = otherParticipant?.profileImageFileId
+                  ? `/files/${otherParticipant.profileImageFileId}/download`
+                  : null;
+                const avatarUrl = convAvatar || participantAvatar;
+                const displayName = conversationDisplayName(conv);
+
+                return (
                 <button
                   key={conv.id}
                   type="button"
                   className="chat-member-option-row"
                   onClick={() => void handleForward(conv.id)}
                 >
-                  <div className="chat-member-avatar" style={{ background: avatarColor(conv.id) }}>{initials(conversationDisplayName(conv))}</div>
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={displayName}
+                      className="chat-member-avatar"
+                      style={{ objectFit: "cover" }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                        (e.target as HTMLImageElement).parentElement!.innerHTML = `<div class="chat-member-avatar" style="background: ${avatarColor(conv.id)}">${initials(displayName)}</div>`;
+                      }}
+                    />
+                  ) : (
+                    <div className="chat-member-avatar" style={{ background: avatarColor(conv.id) }}>{initials(displayName)}</div>
+                  )}
                   <div className="chat-member-copy">
                     <div className="chat-member-name">{conversationDisplayName(conv)}</div>
                     <div className="chat-member-role">{conv.type === "direct" ? "Direct message" : "Group"}</div>
                   </div>
                   <span className="chat-member-action">Send</span>
                 </button>
-              ))}
+                );
+              })}
               {sortedConversations.filter((c) => c.id !== activeConversationId).length === 0 && (
                 <div className="chat-empty-note">No other conversations available.</div>
               )}

@@ -32,18 +32,22 @@ export interface CurrentUser {
 
 const FALLBACKS: Record<string, CurrentUser> = {
   admin: {
+    id: "fallback-admin",
     firstName: "Admin", lastName: "User", fullName: "Admin User",
     email: "", role: "admin", initials: "AU",
   },
   teacher: {
+    id: "fallback-teacher",
     firstName: "Teacher", lastName: "", fullName: "Teacher",
     email: "", role: "teacher", initials: "T",
   },
   student: {
+    id: "fallback-student",
     firstName: "Student", lastName: "", fullName: "Student",
     email: "", role: "student", initials: "S",
   },
   parent: {
+    id: "fallback-parent",
     firstName: "Parent", lastName: "", fullName: "Parent",
     email: "", role: "parent", initials: "P",
   },

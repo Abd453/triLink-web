@@ -31,6 +31,19 @@ export const apiPath = {
   register: "/api/auth/register",
 } as const;
 
+/** Get current user ID from localStorage session */
+export function getCurrentUserId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const session = localStorage.getItem("auth_session");
+    if (!session) return null;
+    const parsed = JSON.parse(session);
+    return parsed?.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Opens a file in a new tab using the direct Cloudinary URL.
  * Use this for documents (PDF, DOCX, etc.) to avoid browser zip issues.
@@ -40,6 +53,7 @@ export async function openFile(fileId: string | null | undefined): Promise<void>
   if (!fileId) return;
   try {
     const base = getApiBase() || "http://localhost:4000";
+    console.log("base", base)
     const { authFetch } = await import("./auth");
     const res = await authFetch(`${base}/api/files/${fileId}/url`);
     if (res.ok) {
