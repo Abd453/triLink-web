@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import { listTerms, type TermRow } from "@/lib/admin-api";
 import { useTermStore } from "@/store/termStore";
-import Select from "./Select";
 
 interface TermSelectorProps {
   academicYearId: string | null;
@@ -91,27 +90,27 @@ export default function TermSelector({
 
   if (terms.length === 0) {
     return (
-      <Select
+      <select
         disabled
         className={className}
         style={{
-          padding: "0.45rem 1.15rem",
-          borderRadius: "9999px",
+          padding: "0.4rem 0.75rem",
+          borderRadius: 8,
           border: "1.5px solid var(--gray-200, #e2e8f0)",
           background: "var(--gray-50, #f8fafc)",
           color: "var(--gray-400, #94a3b8)",
-          fontSize: "0.85rem",
-          minWidth: "160px",
+          fontSize: "0.875rem",
+          cursor: "not-allowed",
           ...style,
         }}
       >
         <option>No terms available</option>
-      </Select>
+      </select>
     );
   }
 
   return (
-    <Select
+    <select
       value={selectedTermId ?? "__all__"}
       onChange={(e) => {
         if (e.target.value === "__all__") {
@@ -127,18 +126,16 @@ export default function TermSelector({
       }}
       className={className}
       style={{
-        padding: "0.45rem 1.15rem",
-        borderRadius: "9999px",
-        border: "1.5px solid var(--primary-200)",
-        background: "var(--primary-50)",
-        color: "var(--primary-800)",
-        fontWeight: 600,
-        fontSize: "0.85rem",
+        padding: "0.4rem 0.75rem",
+        borderRadius: 8,
+        border: "1.5px solid var(--gray-200, #e2e8f0)",
+        background: "#fff",
+        color: "var(--gray-700, #334155)",
+        fontSize: "0.875rem",
         cursor: "pointer",
-        minWidth: "160px",
+        outline: "none",
         ...style,
       }}
-      dropdownMinWidth="240px"
     >
       <option value="__all__">All Terms</option>
       {terms.map((t) => (
@@ -146,6 +143,6 @@ export default function TermSelector({
           {optionLabel(t)}
         </option>
       ))}
-    </Select>
+    </select>
   );
 }

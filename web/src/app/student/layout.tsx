@@ -96,6 +96,22 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             Exams
           </a>
           <a
+            href="/student/tutor"
+            className="student-desktop-link"
+            style={{
+              padding: "0.35rem 0.7rem",
+              borderRadius: "8px",
+              background: pathname === "/student/tutor" ? "var(--primary-50)" : "transparent",
+              color: pathname === "/student/tutor" ? "var(--primary-600)" : "var(--gray-600)",
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              textDecoration: "none",
+              border: "1px solid transparent",
+            }}
+          >
+            AI Tutor
+          </a>
+          <a
             href="/student/settings"
             className="student-desktop-link"
             style={{
@@ -186,6 +202,14 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             <polyline points="14 2 14 8 20 8" />
           </svg>
           <span>Exams</span>
+        </a>
+        <a href="/student/tutor" className={`student-mobile-nav-item ${pathname === "/student/tutor" ? "active" : ""}`}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
+            <path d="M12 2a10 10 0 0 1 10 10" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          <span>AI Tutor</span>
         </a>
         <a href="/student/grades" className={`student-mobile-nav-item ${pathname.startsWith("/student/grades") ? "active" : ""}`}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">

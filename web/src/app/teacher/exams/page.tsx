@@ -108,8 +108,7 @@ function classOfferingLabel(o?: ClassOffering | null) {
 import { filterOfferingsBySubject, subjectNameMatchesProfile } from "@/lib/teacher-utils";
 import { useTermStore } from "@/store/termStore";
 import { PageHeader, PageHeaderSkeleton, CardSkeleton } from "@/components/ui";
-import { FileText, ArrowLeft } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { FileText } from "lucide-react";
 
 type QuestionListRow = { subjectId: string; subject?: { name?: string } };
 
@@ -133,7 +132,7 @@ function TeacherExamsSkeleton() {
     return (
         <div className="page-wrapper">
             <PageHeaderSkeleton />
-            <div className="exams-main-layout">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: "1.25rem", alignItems: "start" }}>
                 <CardSkeleton lines={5} />
                 <CardSkeleton lines={4} />
             </div>
@@ -531,9 +530,9 @@ interface Question {
     id: number;
     text: string;
     options: Record<"A" | "B" | "C" | "D", string>;
-    correct: "A" | "B" | "C" | "D" | "";
+    correct: string;
     points: number;
-    type: "mcq" | "truefalse" | "fillin";
+    type: "mcq" | "truefalse" | "fillin" | "long_answer";
     bankId?: string;
     edited?: boolean;
 }
@@ -684,12 +683,39 @@ function LatexField({ label, value, onChange, rows = 3, placeholder, mini = fals
 
 export default function TeacherExams() {
     const [isClient, setIsClient] = useState(false);
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const fromDashboard = searchParams?.get("from") === "dashboard";
     const user = useCurrentUser("teacher");
     const { selectedTermId } = useTermStore();
     const [activeTab, setActiveTab] = useState<"create" | "bank" | "results">("create");
+    
+    // Persist active tab and grouped result selection on reload
+    useEffect(() => {
+        const savedTab = sessionStorage.getItem("teacher_exam_active_tab");
+        if (savedTab && (savedTab === "create" || savedTab === "bank" || savedTab === "results")) {
+            setActiveTab(savedTab as any);
+        }
+        
+        const savedSelections = sessionStorage.getItem("teacher_exam_selections");
+        if (savedSelections) {
+            try {
+                setSelectedAttemptIdForExam(JSON.parse(savedSelections));
+            } catch (e) {
+                console.error("Failed to parse saved selections", e);
+            }
+        }
+    }, []);
+
+    const handleTabChange = (tab: "create" | "bank" | "results") => {
+        setActiveTab(tab);
+        sessionStorage.setItem("teacher_exam_active_tab", tab);
+    };
+
+    const handleSelectionChange = (examId: string, attemptId: string) => {
+        setSelectedAttemptIdForExam(prev => {
+            const next = { ...prev, [examId]: attemptId };
+            sessionStorage.setItem("teacher_exam_selections", JSON.stringify(next));
+            return next;
+        });
+    };
 
     // ── API-loaded data ──
     const [offerings, setOfferings] = useState<ClassOffering[]>([]);
@@ -698,6 +724,10 @@ export default function TeacherExams() {
     const [bankRows, setBankRows] = useState(10);
     const [resultsPage, setResultsPage] = useState(1);
     const [resultsRows, setResultsRows] = useState(10);
+
+    // Grouped results for compact view
+    const [groupedResults, setGroupedResults] = useState<any[]>([]);
+    const [selectedAttemptIdForExam, setSelectedAttemptIdForExam] = useState<Record<string, string>>({});
     const [publishBusy, setPublishBusy] = useState(false);
     const [scheduleBusy, setScheduleBusy] = useState(false);
     const [saveBankBusy, setSaveBankBusy] = useState(false);
@@ -810,7 +840,7 @@ export default function TeacherExams() {
 
     const publishQuiz = async (mode: "published" | "scheduled", opensAtIso: string) => {
         const parsedDuration = Number.parseInt(duration, 10);
-        const safeDuration = Number.isNaN(parsedDuration) ? 30 : Math.max(5, parsedDuration);
+        const safeDuration = Number.isNaN(parsedDuration) ? 30 : Math.max(1, parsedDuration);
         const parsedMinStay = Number.parseInt(minStayMinutes, 10);
         const safeMinStay = Number.isNaN(parsedMinStay) ? 0 : Math.max(0, Math.min(parsedMinStay, safeDuration));
 
@@ -866,7 +896,8 @@ export default function TeacherExams() {
 
                 if (qq.type === "mcq") {
                     optionsArr = [qq.options.A, qq.options.B, qq.options.C, qq.options.D];
-                    ans = qq.correct ? qq.options[qq.correct] : undefined;
+                    const key = qq.correct as "A" | "B" | "C" | "D";
+                    ans = qq.correct ? qq.options[key] : undefined;
                 } else if (qq.type === "truefalse") {
                     optionsArr = ["True", "False"];
                     ans = qq.correct === "A" ? "True" : qq.correct === "B" ? "False" : undefined;
@@ -990,13 +1021,13 @@ export default function TeacherExams() {
         };
         setQuestions(p => { const next = [...p, newQ]; setActiveQ(next.length - 1); return next; });
         setBank(p => p.map(b => b.id === item.id ? { ...b, used: b.used + 1 } : b));
-        setActiveTab("create");
+        handleTabChange("create");
         showToast("Question added from bank ✓");
     };
 
     // Load a bank question directly into full quiz builder for detailed editing.
     const editFromBank = (item: BankQ) => {
-        setActiveTab("create");
+        handleTabChange("create");
         const current = selectedSubject?.trim();
         const useSelected = current && SUBJECT_CONFIG[current];
         setSubject(useSelected ? current : item.subj);
@@ -1053,6 +1084,7 @@ export default function TeacherExams() {
 
             const rosters: Record<string, ExamRosterStudent[]> = {};
             const rows: ResultRow[] = [];
+            const groups: any[] = [];
             const activeExams = filteredExams.filter(e => e.published);
 
             await Promise.all(activeExams.map(async (ex) => {
@@ -1063,9 +1095,10 @@ export default function TeacherExams() {
                     const exOffering = mine.find(o => o.id === ex.classOfferingId);
                     const exSubject = (exOffering as any)?.subjectName || (exOffering as any)?.subject?.name || "Academic";
 
+                    const examAttempts: ResultRow[] = [];
                     for (const s of rosterData.students) {
                         if (s.status === "submitted") {
-                            rows.push({
+                            const row: ResultRow = {
                                 name: [s.firstName, s.lastName].filter(Boolean).join(" ") || s.email || s.studentId.slice(0, 8),
                                 quiz: ex.title,
                                 subject: exSubject,
@@ -1083,13 +1116,25 @@ export default function TeacherExams() {
                                 }],
                                 _attemptId: s.attemptId ?? undefined,
                                 _violationCount: s.violationCount,
-                            });
+                            };
+                            rows.push(row);
+                            examAttempts.push(row);
                         }
+                    }
+                    if (examAttempts.length > 0) {
+                        groups.push({
+                            examId: ex.id,
+                            title: ex.title,
+                            subject: exSubject,
+                            maxPoints: ex.maxPoints,
+                            attempts: examAttempts,
+                        });
                     }
                 } catch { /* skip */ }
             }));
 
             setResults(rows);
+            setGroupedResults(groups);
             setResultsPage(1);
             setRosterByExam(rosters);
         } catch (e) {
@@ -1303,22 +1348,19 @@ export default function TeacherExams() {
         setEvalComment(res.comment);
     };
 
-    const saveEval = async (sendNow: boolean) => {
+    const saveEval = async () => {
         if (!evaluating) return;
         setSaveEvalBusy(true);
         try {
             const evalAttemptId = (evaluating as ResultRow & { _attemptId?: string })._attemptId;
             const score = calcScore(evalAssessments);
             const grade = autoGrade(score);
-            const now = new Date().toISOString().slice(0, 10);
             const updated: ResultRow = {
                 ...evaluating,
                 score,
                 grade,
                 comment: evalComment,
                 assessments: evalAssessments,
-                sent: sendNow ? true : evaluating.sent,
-                sentAt: sendNow && !evaluating.sentAt ? now : evaluating.sentAt,
             };
             setResults((prev) =>
                 prev.map((r) => {
@@ -1328,23 +1370,16 @@ export default function TeacherExams() {
                 }),
             );
 
-            // Call real API for grading + releasing
+            // Call real API for grading
             if (evalAttemptId) {
                 try {
                     await apiGradeAttempt(evalAttemptId, score);
-                    if (sendNow) {
-                        await apiReleaseAttempt(evalAttemptId);
-                    }
                 } catch (e) {
                     showToast(e instanceof Error ? e.message : "Grading API failed", false);
                 }
             }
 
-            if (sendNow) {
-                showToast(`Grade sent to ${updated.name} ✓`);
-            } else {
-                showToast("Evaluation saved ✓");
-            }
+            showToast("Evaluation saved to Gradebook ✓");
             setEvaluating(null);
         } finally {
             setSaveEvalBusy(false);
@@ -1576,7 +1611,9 @@ export default function TeacherExams() {
                                         {Object.entries(evalAttemptDetails.answers || {}).map(([qId, answer]: [string, any], idx) => {
                                             const breakdown = evalAttemptDetails.breakdown?.perQuestion?.find((p: any) => p.questionId === qId);
                                             const isCorrect = breakdown ? breakdown.pointsEarned === breakdown.pointsMax : null;
-                                            const qStem = (evalAttemptDetails.examQuestions || []).find((eq: any) => eq.questionId === qId)?.question?.stem || `Question ${idx + 1}`;
+                                            const eq = (evalAttemptDetails.examQuestions || []).find((eq: any) => eq.questionId === qId);
+                                            const qStem = eq?.question?.stem || `Question ${idx + 1}`;
+                                            const correctAnswer = eq?.question?.answerKey;
 
                                             return (
                                                 <div key={qId} style={{ padding: "1.25rem", borderRadius: "12px", border: "1.5px solid var(--gray-100)", background: isCorrect === true ? "var(--success-50)" : isCorrect === false ? "var(--danger-50)" : "var(--gray-50)" }}>
@@ -1590,9 +1627,16 @@ export default function TeacherExams() {
                                                         </div>
                                                     </div>
                                                     <div style={{ fontSize: "1rem", color: "var(--gray-900)", fontWeight: 600, lineHeight: 1.5, marginBottom: "1rem" }}>{qStem}</div>
-                                                    <div style={{ background: "#fff", padding: "0.85rem 1rem", borderRadius: "8px", border: "1.5px solid var(--gray-100)", fontSize: "0.9rem" }}>
-                                                        <span style={{ color: "var(--gray-400)", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", display: "block", marginBottom: "0.25rem" }}>Student Response</span>
-                                                        <div style={{ color: "var(--gray-800)", fontWeight: 500 }}>{String(answer)}</div>
+                                                    
+                                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                                                        <div style={{ background: "#fff", padding: "0.85rem 1rem", borderRadius: "8px", border: "1.5px solid var(--gray-100)", fontSize: "0.9rem" }}>
+                                                            <span style={{ color: "var(--gray-400)", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", display: "block", marginBottom: "0.25rem" }}>Student Response</span>
+                                                            <div style={{ color: "var(--gray-800)", fontWeight: 500 }}>{String(answer)}</div>
+                                                        </div>
+                                                        <div style={{ background: "var(--success-50)", padding: "0.85rem 1rem", borderRadius: "8px", border: "1.5px solid var(--success-100)", fontSize: "0.9rem" }}>
+                                                            <span style={{ color: "var(--success-700)", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", display: "block", marginBottom: "0.25rem" }}>Correct Solution</span>
+                                                            <div style={{ color: "var(--success-900)", fontWeight: 700 }}>{String(correctAnswer ?? "Manual Review")}</div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );
@@ -1725,13 +1769,9 @@ export default function TeacherExams() {
                         {/* ── Footer ── */}
                         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", padding: "1rem 1.5rem", borderTop: "1.5px solid var(--gray-100)", flexShrink: 0 }}>
                             <button className="btn btn-secondary" disabled={saveEvalBusy} onClick={() => setEvaluating(null)}>Cancel</button>
-                            <button className="btn btn-outline" disabled={saveEvalBusy} onClick={() => saveEval(false)} style={{ display: "flex", alignItems: "center", gap: "0.35rem", opacity: saveEvalBusy ? 0.75 : 1 }}>
-                                {saveEvalBusy && <div className="spinner" style={{ width: 12, height: 12, border: "2px solid var(--gray-300)", borderTopColor: "var(--primary-600)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
-                                {saveEvalBusy ? "Saving..." : "Save Only"}
-                            </button>
-                            <button className="btn btn-primary" disabled={saveEvalBusy} onClick={() => saveEval(true)} style={{ display: "flex", alignItems: "center", gap: "0.35rem", opacity: saveEvalBusy ? 0.75 : 1 }}>
+                            <button className="btn btn-primary" disabled={saveEvalBusy} onClick={() => saveEval()} style={{ display: "flex", alignItems: "center", gap: "0.35rem", opacity: saveEvalBusy ? 0.75 : 1 }}>
                                 {saveEvalBusy && <div className="spinner" style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.45)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
-                                {saveEvalBusy ? "Sending..." : "Save & Send to Student"}
+                                {saveEvalBusy ? "Saving..." : "Save Result"}
                             </button>
                         </div>
                     </div>
@@ -1822,49 +1862,12 @@ export default function TeacherExams() {
 
             {/* ── CSV Column Picker Modal removed ── */}
 
-            {fromDashboard && (
-                <div style={{ marginBottom: "1rem" }}>
-                    <button
-                        type="button"
-                        onClick={() => router.push("/teacher/dashboard")}
-                        style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "0.5rem",
-                            background: "#fff",
-                            border: "1.5px solid var(--gray-150)",
-                            borderRadius: "12px",
-                            padding: "0.55rem 1.15rem",
-                            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
-                            color: "var(--gray-800)",
-                            fontSize: "0.85rem",
-                            fontWeight: 700,
-                            cursor: "pointer",
-                            transition: "all 0.2s ease-in-out",
-                        }}
-                        onMouseEnter={e => {
-                            e.currentTarget.style.borderColor = "var(--primary-300)";
-                            e.currentTarget.style.boxShadow = "0 4px 16px rgba(37, 99, 235, 0.08)";
-                            e.currentTarget.style.transform = "translateY(-1px)";
-                        }}
-                        onMouseLeave={e => {
-                            e.currentTarget.style.borderColor = "var(--gray-150)";
-                            e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.04)";
-                            e.currentTarget.style.transform = "none";
-                        }}
-                    >
-                        <ArrowLeft size={14} strokeWidth={3} style={{ color: "var(--primary-600)" }} />
-                        <span>Back to Dashboard</span>
-                    </button>
-                </div>
-            )}
-
             <PageHeader
                 kicker="Assessment"
                 title="Exams & Assessments"
                 subtitle="Create quizzes, manage your exam bank, and review student grades."
                 icon={<FileText size={22} />}
-                variant="dark"
+                variant="light"
                 actions={<TermSelector academicYearId={activeYearId || null} readOnly={false} />}
             />
 
@@ -1875,35 +1878,25 @@ export default function TeacherExams() {
             )}
 
             <div className="tabs" style={{ marginBottom: "1.5rem" }}>
-                <button className={`tab ${activeTab === "create" ? "active" : ""}`} onClick={() => setActiveTab("create")}>Create Quiz</button>
-                <button className={`tab ${activeTab === "bank" ? "active" : ""}`} onClick={() => setActiveTab("bank")}>Exam Bank ({bank.length})</button>
-                <button className={`tab ${activeTab === "results" ? "active" : ""}`} onClick={() => setActiveTab("results")}>Results &amp; Grades</button>
+                <button className={`tab ${activeTab === "create" ? "active" : ""}`} onClick={() => handleTabChange("create")}>Create Quiz</button>
+                <button className={`tab ${activeTab === "bank" ? "active" : ""}`} onClick={() => handleTabChange("bank")}>Exam Bank ({bank.length})</button>
+                <button className={`tab ${activeTab === "results" ? "active" : ""}`} onClick={() => handleTabChange("results")}>Results &amp; Grades</button>
             </div>
 
             {/* ── CREATE ── */}
             {activeTab === "create" && (
-                <div className="exams-main-layout">
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: "1.25rem", alignItems: "start" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                         {/* Meta */}
                         <div className="card">
                             <h3 className="card-title" style={{ marginBottom: "1rem" }}>Quiz Details</h3>
-                            <div className="exams-details-grid">
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
                                 <div className="input-group"><label>Quiz Title</label><div className="input-field"><input value={quizTitle} onChange={e => setQuizTitle(e.target.value)} placeholder={`e.g., ${subject} Chapter Quiz`} /></div></div>
                                 <div className="input-group"><label>Subject</label>
-                                    <Select
+                                    <select
                                         value={selectedSubject}
                                         onChange={(e) => setSelectedSubject(e.target.value)}
-                                        style={{
-                                            padding: "0.45rem 1.15rem",
-                                            borderRadius: "9999px",
-                                            border: "1.5px solid var(--primary-200)",
-                                            background: "var(--primary-50)",
-                                            color: "var(--primary-800)",
-                                            fontWeight: 600,
-                                            fontSize: "0.85rem",
-                                            width: "100%"
-                                        }}
-                                        dropdownMinWidth="100%"
+                                        style={{ padding: "0.75rem 1rem", background: "#fff", border: "1.5px solid var(--gray-200)", borderRadius: "12px", fontSize: "0.9rem", color: "var(--gray-700)", fontWeight: 600, width: "100%" }}
                                     >
                                         <option value="" disabled>
                                             {subjectOptions.length > 0 ? "Select your subject" : "No assigned subjects available"}
@@ -1913,74 +1906,22 @@ export default function TeacherExams() {
                                                 {name}
                                             </option>
                                         ))}
-                                    </Select>
+                                    </select>
                                     <div style={{ marginTop: "0.35rem", fontSize: "0.75rem", color: "var(--gray-500)" }}>
                                         Assigned subjects from your class offerings
                                     </div>
                                 </div>
                                 <div className="input-group" style={{ gridColumn: "1 / -1" }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-                                        <label style={{ margin: 0 }}>Classes Scope</label>
-                                        {offeringsForClassSelect.length > 0 && (
-                                            <div style={{ display: "flex", gap: "0.5rem" }}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setSelectedOfferingIds(offeringsForClassSelect.map(o => o.id));
-                                                        if (!subject && offeringsForClassSelect.length > 0) {
-                                                            const first = offeringsForClassSelect[0];
-                                                            const sName = (first as any).subjectName || (first as any).subject?.name;
-                                                            if (sName) setSubject(sName);
-                                                            else if (user?.subject) setSubject(user.subject);
-                                                        }
-                                                    }}
-                                                    style={{
-                                                        background: "var(--primary-50)",
-                                                        border: "none",
-                                                        color: "var(--primary-700)",
-                                                        padding: "0.25rem 0.65rem",
-                                                        borderRadius: "9999px",
-                                                        fontSize: "0.75rem",
-                                                        fontWeight: 700,
-                                                        cursor: "pointer",
-                                                        transition: "all 0.15s ease"
-                                                    }}
-                                                    onMouseEnter={e => { e.currentTarget.style.background = "var(--primary-100)"; }}
-                                                    onMouseLeave={e => { e.currentTarget.style.background = "var(--primary-50)"; }}
-                                                >
-                                                    Select All
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setSelectedOfferingIds([])}
-                                                    style={{
-                                                        background: "var(--gray-100)",
-                                                        border: "none",
-                                                        color: "var(--gray-600)",
-                                                        padding: "0.25rem 0.65rem",
-                                                        borderRadius: "9999px",
-                                                        fontSize: "0.75rem",
-                                                        fontWeight: 700,
-                                                        cursor: "pointer",
-                                                        transition: "all 0.15s ease"
-                                                    }}
-                                                    onMouseEnter={e => { e.currentTarget.style.background = "var(--gray-200)"; }}
-                                                    onMouseLeave={e => { e.currentTarget.style.background = "var(--gray-100)"; }}
-                                                >
-                                                    Clear
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "0.75rem" }}>
-                                        {offeringsForClassSelect.map(o => {
-                                            const isSelected = selectedOfferingIds.includes(o.id);
-                                            return (
-                                                <div
-                                                    key={o.id}
-                                                    onClick={() => {
+                                    <label>Classes</label>
+                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "0.5rem", padding: "1rem", background: "var(--gray-50)", border: "1.5px solid var(--gray-200)", borderRadius: "12px" }}>
+                                        {offeringsForClassSelect.map(o => (
+                                            <label key={o.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontSize: "0.9rem" }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedOfferingIds.includes(o.id)}
+                                                    onChange={e => {
                                                         const id = o.id;
-                                                        if (!isSelected) {
+                                                        if (e.target.checked) {
                                                             setSelectedOfferingIds(p => [...p, id]);
                                                             if (!subject) {
                                                                 const sName = (o as any).subjectName || (o as any).subject?.name;
@@ -1991,75 +1932,13 @@ export default function TeacherExams() {
                                                             setSelectedOfferingIds(p => p.filter(x => x !== id));
                                                         }
                                                     }}
-                                                    style={{
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        justifyContent: "space-between",
-                                                        gap: "0.75rem",
-                                                        padding: "0.85rem 1.15rem",
-                                                        background: isSelected ? "linear-gradient(135deg, var(--primary-600), var(--primary-700))" : "#fff",
-                                                        border: isSelected ? "1.5px solid transparent" : "1.5px solid var(--gray-200)",
-                                                        borderRadius: "16px",
-                                                        color: isSelected ? "#fff" : "var(--gray-700)",
-                                                        fontSize: "0.88rem",
-                                                        fontWeight: 650,
-                                                        cursor: "pointer",
-                                                        transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-                                                        boxShadow: isSelected ? "0 8px 20px rgba(37, 99, 235, 0.15)" : "0 2px 4px rgba(0,0,0,0.02)",
-                                                        userSelect: "none"
-                                                    }}
-                                                    onMouseEnter={e => {
-                                                        if (!isSelected) {
-                                                            e.currentTarget.style.borderColor = "var(--primary-300)";
-                                                            e.currentTarget.style.boxShadow = "0 4px 12px rgba(37,99,235,0.06)";
-                                                            e.currentTarget.style.transform = "translateY(-1px)";
-                                                        } else {
-                                                            e.currentTarget.style.transform = "translateY(-1px)";
-                                                        }
-                                                    }}
-                                                    onMouseLeave={e => {
-                                                        if (!isSelected) {
-                                                            e.currentTarget.style.borderColor = "var(--gray-200)";
-                                                            e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.02)";
-                                                            e.currentTarget.style.transform = "translateY(0)";
-                                                        } else {
-                                                            e.currentTarget.style.transform = "translateY(0)";
-                                                        }
-                                                    }}
-                                                >
-                                                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                                        {offeringLabel(o)}
-                                                    </span>
-                                                    <div style={{
-                                                        width: 20,
-                                                        height: 20,
-                                                        borderRadius: "50%",
-                                                        border: isSelected ? "2px solid #fff" : "2px solid var(--gray-300)",
-                                                        background: isSelected ? "#fff" : "transparent",
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        justifyContent: "center",
-                                                        flexShrink: 0,
-                                                        transition: "all 0.2s ease"
-                                                    }}>
-                                                        {isSelected && (
-                                                            <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                                                                <path d="M1 4L3.5 6.5L9 1" stroke="var(--primary-600)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                                            </svg>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                        {offerings.length === 0 && (
-                                            <div style={{ gridColumn: "1 / -1", padding: "2rem", textAlign: "center", background: "var(--gray-50)", borderRadius: "16px", border: "1.5px dashed var(--gray-200)" }}>
-                                                <span style={{ fontSize: "0.9rem", color: "var(--gray-500)", fontWeight: 500 }}>No classes assigned for this year</span>
-                                            </div>
-                                        )}
+                                                />
+                                                {offeringLabel(o)}
+                                            </label>
+                                        ))}
+                                        {offerings.length === 0 && <span style={{ fontSize: "0.9rem", color: "var(--gray-500)" }}>No classes assigned for this year</span>}
                                         {offerings.length > 0 && offeringsForClassSelect.length === 0 && (
-                                            <div style={{ gridColumn: "1 / -1", padding: "2rem", textAlign: "center", background: "var(--gray-50)", borderRadius: "16px", border: "1.5px dashed var(--gray-200)" }}>
-                                                <span style={{ fontSize: "0.9rem", color: "var(--gray-500)", fontWeight: 500 }}>No class matches the selected subject ({selectedSubject || "—"})</span>
-                                            </div>
+                                            <span style={{ fontSize: "0.9rem", color: "var(--gray-500)" }}>No class matches the selected subject ({selectedSubject || "—"})</span>
                                         )}
                                     </div>
                                 </div>
@@ -2101,13 +1980,14 @@ export default function TeacherExams() {
                                 </div>
                             </div>
 
-                            <div className="exams-details-grid" style={{ marginBottom: "0.875rem" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "0.875rem" }}>
                                 <div className="input-group">
                                     <label>Question Type</label>
                                     <Select value={q.type} onChange={e => updateQ({ type: e.target.value as any, correct: "" })} style={{ padding: "0.6rem", borderRadius: 8, border: "1.5px solid var(--gray-200)", width: "100%", fontSize: "0.85rem" }}>
                                         <option value="mcq">Multiple Choice (Choose)</option>
                                         <option value="truefalse">True / False</option>
                                         <option value="fillin">Blank Space (Fill in)</option>
+                                        <option value="long_answer">Description (Long Answer)</option>
                                     </Select>
                                 </div>
                             </div>
@@ -2116,7 +1996,7 @@ export default function TeacherExams() {
                             <LatexField label="Question Text" value={q.text} onChange={v => updateQ({ text: v })} rows={4} placeholder={q.type === "fillin" ? "Type question, use ____ for blank" : (SUBJECT_CONFIG[subject]?.placeholder ?? "Type question here…")} subject={subject} />
 
                             {q.type === "mcq" && (
-                                <div className="exams-details-grid" style={{ gap: "0.75rem", marginBottom: "0.875rem" }}>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.875rem" }}>
                                     {(["A", "B", "C", "D"] as const).map(opt => (
                                         <LatexField key={opt} label={`Option ${opt}`} value={q.options[opt]} onChange={v => updateQ({ options: { ...q.options, [opt]: v } })} rows={2} placeholder={`Option ${opt}`} mini subject={subject} />
                                     ))}
@@ -2153,12 +2033,18 @@ export default function TeacherExams() {
                                     </div>
                                 )}
 
+                                {q.type === "long_answer" && (
+                                    <div className="input-field">
+                                        <textarea value={q.correct} onChange={e => updateQ({ correct: e.target.value as any })} placeholder="Rubric or sample answer (optional)" rows={3} style={{ background: "#fff", padding: "0.6rem 0.75rem", width: "100%", borderRadius: 8, border: "1.5px solid var(--gray-200)", fontSize: "0.85rem", outline: "none", resize: "vertical" }} />
+                                    </div>
+                                )}
+
                                 {q.correct && q.type === "mcq" && <p style={{ fontSize: "0.78rem", color: "var(--success)", marginTop: "0.4rem", fontWeight: 500 }}>✓ Option {q.correct} is correct</p>}
                                 {q.correct && q.type !== "mcq" && <p style={{ fontSize: "0.78rem", color: "var(--success)", marginTop: "0.4rem", fontWeight: 500 }}>✓ Correct answer set</p>}
                             </div>
                         </div>
 
-                        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", gap: "0.75rem" }}>
                             <button type="button" className="btn btn-secondary" onClick={addQuestion} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                                 Add Question
@@ -2344,76 +2230,60 @@ export default function TeacherExams() {
 
                     <div className="card">
                         <div className="card-header">
-                            <h3 className="card-title">Student Results</h3>
-                            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                                <button className="btn btn-primary btn-sm" disabled={sendAllBusy} onClick={async () => {
-                                    setSendAllBusy(true);
-                                    try {
-                                        const now = new Date().toISOString().slice(0, 10);
-                                        const updated = results.map(r => r.sent ? r : { ...r, sent: true, sentAt: now });
-                                        setResults(updated);
-                                        for (const r of updated) {
-                                            if (r._attemptId) {
-                                                try { await apiReleaseAttempt(r._attemptId); } catch { /* best-effort */ }
-                                            }
-                                        }
-                                        showToast("All grades sent ✓");
-                                    } finally {
-                                        setSendAllBusy(false);
-                                    }
-                                }} style={{ opacity: sendAllBusy ? 0.75 : 1, display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                                    {sendAllBusy && <div className="spinner" style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.45)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
-                                    {sendAllBusy ? "Sending..." : "Send All Grades"}
-                                </button>
-                                <button className="btn btn-outline btn-sm" onClick={downloadPDF} style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                                    Download PDF
-                                </button>
-                            </div>
+                            <h3 className="card-title">Exam Results Evaluation</h3>
                         </div>
                         <div className="table-wrapper">
                             <table>
-                                <thead><tr><th>Student</th><th>Quiz</th><th>Score</th><th>Grade</th><th>Status</th><th>Actions</th></tr></thead>
+                                <thead><tr><th>Exam Title</th><th>Subject</th><th>Student Selection</th><th>Actions</th></tr></thead>
                                 <tbody>
-                                    {results.slice((resultsPage - 1) * resultsRows, resultsPage * resultsRows).map((s, i) => (
+                                    {groupedResults.slice((resultsPage - 1) * resultsRows, resultsPage * resultsRows).map((g, i) => (
                                         <tr key={i}>
-                                            <td style={{ fontWeight: 600 }}>{s.name}</td>
-                                            <td style={{ fontSize: "0.85rem" }}>{s.quiz}</td>
-                                            <td style={{ fontWeight: 700, color: s.score >= 90 ? "var(--success)" : s.score >= 80 ? "var(--primary-600)" : "var(--warning)" }}>{s.score}%</td>
-                                            <td><span className={`badge ${s.score >= 90 ? "badge-success" : s.score >= 80 ? "badge-primary" : "badge-warning"}`}>{s.grade}</span></td>
-                                            <td>{s.sent ? <span className="badge badge-success">Sent</span> : <span className="badge badge-warning">Pending</span>}</td>
+                                            <td style={{ fontWeight: 600 }}>{g.title}</td>
+                                            <td style={{ fontSize: "0.85rem" }}>{g.subject}</td>
                                             <td>
-                                                <div style={{ display: "flex", gap: "0.375rem" }}>
-                                                        <button className="btn btn-outline btn-sm" onClick={() => openEvaluate(s)}>Evaluate</button>
-                                                        {!s.sent && <button className="btn btn-primary btn-sm" disabled={sendingGradeId === s._attemptId} onClick={async () => {
-                                                            const key = s._attemptId ?? `${i}`;
-                                                            setSendingGradeId(key);
-                                                            try {
-                                                                const now = new Date().toISOString().slice(0, 10);
-                                                                const updated = { ...s, sent: true, sentAt: now };
-                                                                setResults(p => p.map((r, ri) => ri === i ? updated : r));
-                                                                if (s._attemptId) {
-                                                                    try { await apiReleaseAttempt(s._attemptId); } catch { /* best-effort */ }
-                                                                }
-                                                                showToast(`Grade sent to ${s.name} ✓`);
-                                                            } finally {
-                                                                setSendingGradeId(null);
-                                                            }
-                                                        }} style={{ opacity: sendingGradeId === s._attemptId ? 0.75 : 1, display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                                                            {sendingGradeId === s._attemptId && <div className="spinner" style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,0.45)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
-                                                            {sendingGradeId === s._attemptId ? "Sending..." : "Send Grade"}
-                                                        </button>}
-                                                </div>
+                                                <select 
+                                                    className="form-select" 
+                                                    style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem", width: "100%", maxWidth: "250px", borderRadius: "8px", border: "1.5px solid var(--gray-200)" }}
+                                                    value={selectedAttemptIdForExam[g.examId] || ""}
+                                                    onChange={(e) => handleSelectionChange(g.examId, e.target.value)}
+                                                >
+                                                    <option value="">Select a student...</option>
+                                                    {g.attempts.map((a: ResultRow) => (
+                                                        <option key={a._attemptId} value={a._attemptId}>
+                                                            {a.name} ({a.score}%)
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </td>
+                                            <td>
+                                                <button 
+                                                    className="btn btn-primary btn-sm" 
+                                                    disabled={!selectedAttemptIdForExam[g.examId]}
+                                                    onClick={() => {
+                                                        const attemptId = selectedAttemptIdForExam[g.examId];
+                                                        const attempt = g.attempts.find((a: ResultRow) => a._attemptId === attemptId);
+                                                        if (attempt) openEvaluate(attempt);
+                                                    }}
+                                                >
+                                                    Evaluate Student
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
+                                    {groupedResults.length === 0 && (
+                                        <tr>
+                                            <td colSpan={4} style={{ textAlign: "center", padding: "2rem", color: "var(--gray-400)" }}>
+                                                No exam results found for evaluation.
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
-                        {results.length > 0 && (
+                        {groupedResults.length > 0 && (
                             <div style={{ marginTop: "1rem" }}>
                                 <TablePagination
-                                    total={results.length}
+                                    total={groupedResults.length}
                                     page={resultsPage}
                                     rowsPerPage={resultsRows}
                                     onPageChange={setResultsPage}

@@ -226,7 +226,7 @@ describe("admin-api.ts: listGradesForClass appends termId when provided", () => 
         (classId, termId) => {
           const p = new URLSearchParams();
           p.set("termId", termId);
-          const url = `/api/grades/class/${classId}?${p.toString()}`;
+          const url = `/api/grade-entries/class/${classId}?${p.toString()}`;
           expect(url).toContain(`termId=${termId}`);
           expect(url).toContain(classId);
         }

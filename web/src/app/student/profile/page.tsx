@@ -5,9 +5,10 @@ import { useCurrentUser } from "@/lib/useCurrentUser";
 import AuthenticatedAvatar from "@/components/AuthenticatedAvatar";
 import { useToastStore } from "@/store/toastStore";
 import { patchMe, uploadProfileImage } from "@/lib/admin-api";
+import { getEngagementAnalytics } from "@/lib/ai-api";
 import { refreshStoredProfile } from "@/lib/auth";
-import { PageHeader } from "@/components/ui";
-import { UserCircle2, Pencil } from "lucide-react";
+import { PageHeader, Section } from "@/components/ui";
+import { UserCircle2, Pencil, BarChart3, TrendingUp, Zap, Clock } from "lucide-react";
 
 type StudentProfile = {
     firstName: string;
@@ -96,6 +97,7 @@ export default function StudentProfilePage() {
     const [isEditing, setIsEditing] = useState(false);
     const [profile, setProfile] = useState<StudentProfile>(defaultProfile);
     const [draft, setDraft] = useState<StudentProfile>(defaultProfile);
+    const [aiAnalytics, setAiAnalytics] = useState<any>(null);
     const [saving, setSaving] = useState(false);
     const [avatarUploading, setAvatarUploading] = useState(false);
     const { showToast } = useToastStore();
@@ -121,6 +123,13 @@ export default function StudentProfilePage() {
             setProfile(next);
             if (!isEditing) {
                 setDraft(next);
+            }
+
+            // Fetch AI Analytics
+            if (user.id) {
+                getEngagementAnalytics(user.id)
+                    .then(setAiAnalytics)
+                    .catch(err => console.warn("AI Analytics failed:", err));
             }
         }
     }, [user, isEditing]);
@@ -290,6 +299,68 @@ export default function StudentProfilePage() {
                     )}
                 </div>
             </div>
+
+            {/* AI Learning Insights */}
+            {aiAnalytics && (
+                <Section 
+                    title="AI Learning Insights" 
+                    description="AI-driven analysis of your learning patterns"
+                >
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1.5rem" }}>
+                        <div className="analytics-card" style={{ padding: "1.25rem", background: "#f8faff", borderRadius: 16, border: "1px solid #eef2ff" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: "var(--primary-600)" }}>
+                                <Zap size={16} />
+                                <span style={{ fontSize: "0.8rem", fontWeight: 700, textTransform: "uppercase" }}>Mastery Score</span>
+                            </div>
+                            <div style={{ fontSize: "1.75rem", fontWeight: 900, color: "var(--gray-900)" }}>
+                                {Math.round((aiAnalytics.average_mastery || 0) * 100)}%
+                            </div>
+                            <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: 4 }}>
+                                Average across all topics
+                            </div>
+                        </div>
+
+                        <div className="analytics-card" style={{ padding: "1.25rem", background: "#f8fff9", borderRadius: 16, border: "1px solid #ecfdf5" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: "#059669" }}>
+                                <TrendingUp size={16} />
+                                <span style={{ fontSize: "0.8rem", fontWeight: 700, textTransform: "uppercase" }}>Engagement</span>
+                            </div>
+                            <div style={{ fontSize: "1.75rem", fontWeight: 900, color: "var(--gray-900)" }}>
+                                {aiAnalytics.total_sessions || 0}
+                            </div>
+                            <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: 4 }}>
+                                Total learning sessions
+                            </div>
+                        </div>
+
+                        <div className="analytics-card" style={{ padding: "1.25rem", background: "#fffaf8", borderRadius: 16, border: "1px solid #fff7ed" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: "#ea580c" }}>
+                                <Clock size={16} />
+                                <span style={{ fontSize: "0.8rem", fontWeight: 700, textTransform: "uppercase" }}>Study Time</span>
+                            </div>
+                            <div style={{ fontSize: "1.75rem", fontWeight: 900, color: "var(--gray-900)" }}>
+                                {Math.round((aiAnalytics.total_study_minutes || 0))}m
+                            </div>
+                            <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: 4 }}>
+                                Time spent on AI resources
+                            </div>
+                        </div>
+
+                        <div className="analytics-card" style={{ padding: "1.25rem", background: "#fdf8ff", borderRadius: 16, border: "1px solid #faf5ff" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: "#9333ea" }}>
+                                <BarChart3 size={16} />
+                                <span style={{ fontSize: "0.8rem", fontWeight: 700, textTransform: "uppercase" }}>Assessments</span>
+                            </div>
+                            <div style={{ fontSize: "1.75rem", fontWeight: 900, color: "var(--gray-900)" }}>
+                                {aiAnalytics.total_assessments || 0}
+                            </div>
+                            <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: 4 }}>
+                                Adaptive questions solved
+                            </div>
+                        </div>
+                    </div>
+                </Section>
+            )}
 
             <div className="card" style={{ marginTop: "1rem" }}>
                 <h3 className="card-title" style={{ marginBottom: "1rem" }}>School Details (Read Only)</h3>
