@@ -1009,6 +1009,9 @@ table tbody tr:last-child td {
 
 .header-user-info {
   text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .header-user-name {
@@ -2011,7 +2014,9 @@ table tbody tr:last-child td {
   display: grid;
   grid-template-columns: clamp(230px, 21vw, 280px) minmax(0, 1fr) clamp(210px, 18vw, 250px);
   gap: 1rem;
+  height: calc(100vh - 140px);
   min-height: 560px;
+  max-height: 900px;
   width: 100%;
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { type FeedbackTicket, type PublicUser, listFeedback, listUsers, patchFeedback } from "@/lib/admin-api";
-import { Search, X, MessageSquare } from "lucide-react";
+import { Search, X, MessageSquare, Inbox, Clock, CheckCircle2, ShieldCheck } from "lucide-react";
 import Select from "@/components/Select";
 import TablePagination from "@/components/TablePagination";
 import { PageHeader, TableSkeleton, EmptyState } from "@/components/ui";
@@ -203,6 +203,42 @@ export default function AdminFeedback() {
         icon={<MessageSquare size={22} />}
         variant="light"
       />
+
+      <div className="stats-grid admin-dash-stats-grid">
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon blue"><Inbox size={20} /></div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Open</div>
+            <div className="stat-value">{rows.filter(r => r.status === "open" || r.status === "new").length}</div>
+            <div className="admin-dash-stat-note">Needs triage</div>
+          </div>
+        </div>
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon orange"><Clock size={20} /></div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">In progress</div>
+            <div className="stat-value">{rows.filter(r => r.status === "in_progress").length}</div>
+            <div className="admin-dash-stat-note">Being handled</div>
+          </div>
+        </div>
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon teal"><CheckCircle2 size={20} /></div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Resolved</div>
+            <div className="stat-value">{rows.filter(r => r.status === "resolved" || r.status === "closed").length}</div>
+            <div className="admin-dash-stat-note">Closed out</div>
+          </div>
+        </div>
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon purple"><ShieldCheck size={20} /></div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Anonymous</div>
+            <div className="stat-value">{rows.filter(r => r.isAnonymous || !r.authorId).length}</div>
+            <div className="admin-dash-stat-note">Of total tickets</div>
+          </div>
+        </div>
+      </div>
+
       {err && <div className="card" style={{ color: "var(--danger)", marginBottom: "1rem" }}>{err}</div>}
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--gray-100)", display: "flex", alignItems: "center", gap: "1rem" }}>

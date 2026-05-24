@@ -174,7 +174,7 @@ export default function Sidebar({ role, items, roleColor }: SidebarProps) {
                     <button
                         type="button"
                         className="nav-item"
-                        style={{ color: "var(--danger)", width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer" }}
+                        style={{ color: "var(--gray-600)", width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer" }}
                         onClick={() => {
                             clearAuth();
                             router.push(`/${role.toLowerCase()}/login`);

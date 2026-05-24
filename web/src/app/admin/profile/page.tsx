@@ -383,6 +383,16 @@ export default function AdminProfile() {
                   style={inputStyle("phone")}
                 />
               </label>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={saveProfile}
+                  style={{ borderRadius: 12, padding: "0.65rem 1.5rem", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                >
+                  <ShieldCheck size={16} /> Save profile
+                </button>
+              </div>
             </div>
           </div>
 
