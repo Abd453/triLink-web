@@ -42,15 +42,6 @@ function percentColor(p: number | null): string {
   return "var(--danger)";
 }
 
-function headerPercentColor(p: number | null): string {
-  if (p == null) return "rgba(255,255,255,0.4)";
-  if (p >= 85) return "#34d399";
-  if (p >= 70) return "#60a5fa";
-  if (p >= 50) return "#fbbf24";
-  return "#f87171";
-}
-
-
 function buildSubjectStats(subject: StudentTermGradesSubject): SubjectStats {
   const scored = subject.entries.filter(
     (e) => e.score != null && e.maxScore > 0,
@@ -162,13 +153,13 @@ export default function StudentGradesPage() {
                   color: "#fff",
                 }}
               >
-                <Award size={18} style={{ color: headerPercentColor(overall.percent) }} />
+                <Award size={18} style={{ color: "#34d399" }} />
                 <div>
                   <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.6)", fontWeight: 700 }}>
                     Overall
                   </div>
                   <div style={{ fontSize: "1.25rem", fontWeight: 800, lineHeight: 1 }}>
-                    {overall.percent}% <span style={{ color: headerPercentColor(overall.percent), fontSize: "0.9rem", fontWeight: 700 }}>{overall.letter}</span>
+                    {overall.percent}% <span style={{ color: "#34d399", fontSize: "0.9rem", fontWeight: 700 }}>{overall.letter}</span>
                   </div>
                 </div>
               </div>

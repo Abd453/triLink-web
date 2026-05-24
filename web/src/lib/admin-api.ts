@@ -155,14 +155,6 @@ export type Conversation = {
     displayName: string;
     role?: string | null;
     isOnline?: boolean;
-    profileImageFileId?: string | null;
-  }>;
-  participants?: Array<{
-    id: string;
-    firstName: string;
-    lastName: string;
-    role: string;
-    profileImageFileId?: string | null;
   }>;
   createdAt?: string;
   updatedAt?: string;
@@ -806,15 +798,15 @@ export async function postChatMessage(conversationId: string, body: { text?: str
   });
 }
 
-export async function editChatMessage(conversationId: string, messageId: string, text: string): Promise<ChatMessage> {
-  return adminJson<ChatMessage>(`/api/conversations/${conversationId}/messages/${messageId}`, {
+export async function editChatMessage(messageId: string, text: string): Promise<ChatMessage> {
+  return adminJson<ChatMessage>(`/api/messages/${messageId}`, {
     method: "PATCH",
     body: JSON.stringify({ text }),
   });
 }
 
-export async function deleteChatMessage(conversationId: string, messageId: string): Promise<{ ok: boolean }> {
-  return adminJson<{ ok: boolean }>(`/api/conversations/${conversationId}/messages/${messageId}`, { method: "DELETE" });
+export async function deleteChatMessage(messageId: string): Promise<{ ok: boolean }> {
+  return adminJson<{ ok: boolean }>(`/api/messages/${messageId}`, { method: "DELETE" });
 }
 
 export async function forwardChatMessage(targetConversationId: string, body: { text?: string | null; mediaFileId?: string | null }): Promise<ChatMessage> {
@@ -824,32 +816,19 @@ export async function forwardChatMessage(targetConversationId: string, body: { t
   });
 }
 
-export async function toggleChatMessageReaction(conversationId: string, messageId: string, emoji: string): Promise<ChatMessage> {
-  return adminJson<ChatMessage>(`/api/conversations/${conversationId}/messages/${messageId}/reactions`, {
+export async function toggleChatMessageReaction(messageId: string, emoji: string): Promise<ChatMessage> {
+  return adminJson<ChatMessage>(`/api/messages/${messageId}/reactions`, {
     method: "POST",
     body: JSON.stringify({ emoji }),
   });
 }
 
-export async function markMessageAsRead(conversationId: string, messageId: string): Promise<void> {
-  await adminJson(`/api/conversations/${conversationId}/messages/${messageId}/read`, { method: "POST" });
+export async function blockConversation(conversationId: string): Promise<{ blockedByMe: boolean; blockedMe: boolean; peerUserId: string | null }> {
+  return adminJson(`/api/conversations/${conversationId}/block`, { method: "POST" });
 }
 
-export async function blockUser(userId: string): Promise<{ ok: boolean }> {
-  return adminJson<{ ok: boolean }>(`/api/users/${userId}/block`, { method: "POST" });
-}
-
-export async function unblockUser(userId: string): Promise<{ ok: boolean }> {
-  return adminJson<{ ok: boolean }>(`/api/users/${userId}/block`, { method: "DELETE" });
-}
-
-// Legacy conversation-based functions (deprecated, use blockUser/unblockUser)
-export async function blockConversation(_conversationId: string): Promise<{ blockedByMe: boolean; blockedMe: boolean; peerUserId: string | null }> {
-  throw new Error("blockConversation is deprecated, use blockUser with userId");
-}
-
-export async function unblockConversation(_conversationId: string): Promise<{ blockedByMe: boolean; blockedMe: boolean; peerUserId: string | null }> {
-  throw new Error("unblockConversation is deprecated, use unblockUser with userId");
+export async function unblockConversation(conversationId: string): Promise<{ blockedByMe: boolean; blockedMe: boolean; peerUserId: string | null }> {
+  return adminJson(`/api/conversations/${conversationId}/block`, { method: "DELETE" });
 }
 
 export async function createConversation(body: {
@@ -867,27 +846,6 @@ export async function initiateDirectChat(targetUserId: string): Promise<{ conver
     method: "POST",
     body: JSON.stringify({ targetUserId }),
   });
-}
-
-// ── Chat Member Management ───────────────────────────────────────────────────
-
-export async function listMembers(conversationId: string): Promise<Array<{ userId: string; role: string; user: PublicUser }>> {
-  return adminJson<Array<{ userId: string; role: string; user: PublicUser }>>(`/api/conversations/${conversationId}/members`, { method: "GET" });
-}
-
-export async function addMembers(conversationId: string, userIds: string[]): Promise<{ ok: boolean; added: number }> {
-  return adminJson<{ ok: boolean; added: number }>(`/api/conversations/${conversationId}/members`, {
-    method: "POST",
-    body: JSON.stringify({ userIds }),
-  });
-}
-
-export async function removeMember(conversationId: string, userId: string): Promise<{ ok: boolean }> {
-  return adminJson<{ ok: boolean }>(`/api/conversations/${conversationId}/members/${userId}`, { method: "DELETE" });
-}
-
-export async function getPresence(userId: string): Promise<{ isOnline: boolean; lastSeenAt: string | null }> {
-  return adminJson<{ isOnline: boolean; lastSeenAt: string | null }>(`/api/users/${userId}/presence`, { method: "GET" });
 }
 
 export async function getUserSettings(): Promise<{ settingsJson: string | null } | Record<string, unknown>> {
@@ -932,17 +890,11 @@ export type Exam = {
   minStayMinutes?: number;
   maxPoints: number;
   published: boolean;
+  questionCount?: number;
   createdById: string;
   createdAt: string;
   /** Joined for students: their specific attempt for this exam */
-  attempts?: Array<{
-    id: string;
-    studentId: string;
-    startedAt: string;
-    submittedAt: string | null;
-    releasedAt: string | null;
-    score: number | null;
-  }>;
+  attempts?: AttemptHandle[];
 };
 
 export type ExamQuestion = {
@@ -1146,6 +1098,7 @@ export type AttemptHandle = {
   studentId: string;
   startedAt: string;
   submittedAt: string | null;
+  releasedAt?: string | null;
   answersJson: string | null;
   score: number | null;
 };
@@ -1272,7 +1225,7 @@ export async function bulkUpsertGrades(body: {
   termId?: string;
   entries: { studentId: string; score: number | null }[];
 }): Promise<{ saved: number; entries: GradeEntry[] }> {
-  return adminJson("/api/grades/bulk", { method: "POST", body: JSON.stringify(body) });
+  return adminJson("/api/grade-entries/bulk", { method: "POST", body: JSON.stringify(body) });
 }
 /** Alias for bulkUpsertGrades */
 export const bulkGradeEntries = bulkUpsertGrades;
@@ -1286,29 +1239,29 @@ export async function createGradeEntry(body: {
   maxScore?: number;
   note?: string | null;
 }): Promise<GradeEntry> {
-  return adminJson<GradeEntry>("/api/grades", { method: "POST", body: JSON.stringify(body) });
+  return adminJson<GradeEntry>("/api/grade-entries", { method: "POST", body: JSON.stringify(body) });
 }
 
 export async function updateGradeEntry(
   id: string,
   body: { title?: string; type?: GradeEntryType; score?: number | null; maxScore?: number; note?: string | null },
 ): Promise<GradeEntry> {
-  return adminJson<GradeEntry>(`/api/grades/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+  return adminJson<GradeEntry>(`/api/grade-entries/${id}`, { method: "PATCH", body: JSON.stringify(body) });
 }
 
 export async function releaseGrades(classOfferingId: string, title: string): Promise<{ released: number }> {
-  return adminJson("/api/grades/release", {
+  return adminJson("/api/grade-entries/release", {
     method: "POST",
     body: JSON.stringify({ classOfferingId, title }),
   });
 }
 
 export async function deleteGradeEntry(id: string): Promise<{ ok: boolean }> {
-  return adminJson(`/api/grades/${encodeURIComponent(id)}`, { method: "DELETE" });
+  return adminJson(`/api/grade-entries/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export async function deleteGradeGroup(classOfferingId: string, title: string): Promise<{ ok: boolean; deleted: number }> {
-  return adminJson("/api/grades/group", {
+  return adminJson("/api/grade-entries/group", {
     method: "DELETE",
     body: JSON.stringify({ classOfferingId, title }),
   });
@@ -1316,12 +1269,12 @@ export async function deleteGradeGroup(classOfferingId: string, title: string): 
 
 export async function listGradesForClass(classOfferingId: string, termId?: string): Promise<ClassGradesResponse> {
   const q = termId ? `?termId=${encodeURIComponent(termId)}` : "";
-  return adminJson<ClassGradesResponse>(`/api/grades/class/${encodeURIComponent(classOfferingId)}${q}`, { method: "GET" });
+  return adminJson<ClassGradesResponse>(`/api/grade-entries/class/${encodeURIComponent(classOfferingId)}${q}`, { method: "GET" });
 }
 
 export async function listGradesForStudent(studentId: string, termId?: string): Promise<GradeEntry[]> {
   const q = termId ? `?termId=${encodeURIComponent(termId)}` : "";
-  return adminJson<GradeEntry[]>(`/api/grades/student/${encodeURIComponent(studentId)}${q}`, { method: "GET" });
+  return adminJson<GradeEntry[]>(`/api/grade-entries/student/${encodeURIComponent(studentId)}${q}`, { method: "GET" });
 }
 
 export type StudentTermGradesEntry = {
@@ -1355,7 +1308,7 @@ export async function getStudentGradesByTerm(
   termId: string,
 ): Promise<StudentTermGradesResponse> {
   return adminJson<StudentTermGradesResponse>(
-    `/api/grades/student/${encodeURIComponent(studentId)}/term/${encodeURIComponent(termId)}`,
+    `/api/grade-entries/student/${encodeURIComponent(studentId)}/term/${encodeURIComponent(termId)}`,
     { method: "GET" },
   );
 }

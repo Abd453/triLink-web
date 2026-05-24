@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { GraduationCap, Layers3, Sparkles, Users, Search } from "lucide-react";
+import { GraduationCap, Layers3, Sparkles, Users } from "lucide-react";
 import { type PublicUser, listUsers, patchUser, listGrades, getSectionsForGrade, assignStudentsToSection, clearStudentsSection, getActiveAcademicYear } from "@/lib/admin-api";
-import Select from "@/components/Select";
 import TablePagination from "@/components/TablePagination";
 import { PageHeader, PageHeaderSkeleton, StatGridSkeleton, TableSkeleton } from "@/components/ui";
 
@@ -239,40 +238,31 @@ export default function AdminStudents() {
         subtitle="Directory of enrolled students."
         icon={<GraduationCap size={22} />}
         actions={(
-          <Link href="/admin/registration?from=students" className="btn btn-primary" style={{ borderRadius: 12 }}>+ Register</Link>
+          <Link href="/admin/registration" className="btn btn-primary" style={{ borderRadius: 12 }}>+ Register</Link>
         )}
       />
 
-      <div className="stats-grid admin-dash-stats-grid">
-        <div className="stat-card admin-dash-stat-card">
-          <div className="stat-icon admin-dash-stat-icon blue">
-            <Users size={20} />
+      <div className="students-summary-grid">
+        <div className="card students-summary-card">
+          <div className="students-summary-icon blue">
+            <Users size={18} />
           </div>
-          <div className="stat-info">
-            <div className="stat-label admin-dash-stat-label">Total students</div>
-            <div className="stat-value">{rows.length}</div>
-            <div className="admin-dash-stat-note">Enrolled learners</div>
-          </div>
+          <div className="students-summary-label">Total students</div>
+          <div className="students-summary-value">{rows.length}</div>
         </div>
-        <div className="stat-card admin-dash-stat-card">
-          <div className="stat-icon admin-dash-stat-icon teal">
-            <GraduationCap size={20} />
+        <div className="card students-summary-card">
+          <div className="students-summary-icon teal">
+            <GraduationCap size={18} />
           </div>
-          <div className="stat-info">
-            <div className="stat-label admin-dash-stat-label">With grade</div>
-            <div className="stat-value">{withGrade}</div>
-            <div className="admin-dash-stat-note">Graded students</div>
-          </div>
+          <div className="students-summary-label">With grade</div>
+          <div className="students-summary-value">{withGrade}</div>
         </div>
-        <div className="stat-card admin-dash-stat-card">
-          <div className="stat-icon admin-dash-stat-icon orange">
-            <Layers3 size={20} />
+        <div className="card students-summary-card">
+          <div className="students-summary-icon orange">
+            <Layers3 size={18} />
           </div>
-          <div className="stat-info">
-            <div className="stat-label admin-dash-stat-label">With section</div>
-            <div className="stat-value">{withSection}</div>
-            <div className="admin-dash-stat-note">Section assignments</div>
-          </div>
+          <div className="students-summary-label">With section</div>
+          <div className="students-summary-value">{withSection}</div>
         </div>
       </div>
 
@@ -280,68 +270,28 @@ export default function AdminStudents() {
 
       {/* Filters */}
       <div className="card" style={{ marginBottom: "1rem", padding: "1rem 1.25rem", display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ position: "relative", minWidth: 220, flex: "1 1 220px" }}>
-          <Search size={16} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "var(--gray-400)", pointerEvents: "none" }} />
-          <input
-            value={q}
-            onChange={(e) => { setQ(e.target.value); setPage(0); }}
-            placeholder="Search name or email…"
-            style={{
-              padding: "0.75rem 1rem 0.75rem 2.75rem",
-              borderRadius: "20px",
-              border: "1.5px solid var(--gray-300)",
-              backgroundColor: "var(--gray-50)",
-              fontSize: "0.95rem",
-              width: "100%",
-              outline: "none",
-              transition: "all 0.2s ease",
-              color: "var(--gray-800)",
-              boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)",
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = "var(--primary-400)";
-              e.target.style.backgroundColor = "#fff";
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = "var(--gray-300)";
-              e.target.style.backgroundColor = "var(--gray-50)";
-            }}
-          />
-        </div>
-        <Select
+        <input
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setPage(0); }}
+          placeholder="Search name or email…"
+          style={{ ...inputStyle, minWidth: 220, flex: "1 1 220px" }}
+        />
+        <select
           value={gradeFilter}
           onChange={(e) => { setGradeFilter(e.target.value); setSectionFilter(""); setPage(0); }}
-          style={{
-            padding: "0.65rem 1.75rem 0.65rem 1rem",
-            borderRadius: "20px",
-            border: "1.5px solid var(--primary-200)",
-            backgroundColor: "var(--primary-50)",
-            color: "var(--primary-800)",
-            fontWeight: 600,
-            outline: "none",
-            cursor: "pointer",
-          }}
+          style={selectStyle}
         >
           <option value="">All grades</option>
           {gradeOptions.map((g) => <option key={g} value={g}>{g}</option>)}
-        </Select>
-        <Select
+        </select>
+        <select
           value={sectionFilter}
           onChange={(e) => { setSectionFilter(e.target.value); setPage(0); }}
-          style={{
-            padding: "0.65rem 1.75rem 0.65rem 1rem",
-            borderRadius: "20px",
-            border: "1.5px solid var(--primary-200)",
-            backgroundColor: "var(--primary-50)",
-            color: "var(--primary-800)",
-            fontWeight: 600,
-            outline: "none",
-            cursor: "pointer",
-          }}
+          style={selectStyle}
         >
           <option value="">All sections</option>
           {sectionOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-        </Select>
+        </select>
       </div>
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>

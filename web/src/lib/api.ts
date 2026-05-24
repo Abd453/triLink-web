@@ -11,6 +11,23 @@ export function getApiBase(): string {
 }
 
 /**
+ * AI Core base URL.
+ */
+export function getAiCoreBase(): string {
+  const envBase =
+    (typeof process !== "undefined" && process.env.NEXT_PUBLIC_AI_CORE_URL?.replace(/\/$/, "")) || "";
+  if (envBase) return envBase;
+  return "https://trilink-ai-core-383699571084.us-central1.run.app";
+}
+
+/**
+ * AI Core Internal API Key.
+ */
+export function getAiInternalKey(): string {
+  return (typeof process !== "undefined" && process.env.NEXT_PUBLIC_AI_INTERNAL_KEY) || "trilink-internal-change-me";
+}
+
+/**
  * Robust helper to get a file download URL.
  * Handles cases where getApiBase might be empty or relative.
  */

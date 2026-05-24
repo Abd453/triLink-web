@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Select from "@/components/Select";
-import TablePagination from "@/components/TablePagination";
 import {
     getActiveAcademicYear,
     listMyClassOfferings,
@@ -11,18 +10,20 @@ import {
     listExamAttempts,
     classAttendanceReport,
     listGradesForStudent,
+    getClassTermReportCard,
     type ClassOffering,
     type PublicUser,
     type Exam,
     type GradeEntry,
 } from "@/lib/admin-api";
+import { getEngagementAnalytics, getWeakTopics } from "@/lib/ai-api";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import TermSelector from "@/components/TermSelector";
 import { useTermStore } from "@/store/termStore";
 import { filterOfferingsBySubject } from "@/lib/teacher-utils";
 import { cachedFetch } from "@/lib/cache";
 import { PageHeader, PageHeaderSkeleton, TableSkeleton, EmptyState } from "@/components/ui";
-import { Users, AlertCircle, ArrowLeft } from "lucide-react";
+import { Users, AlertCircle } from "lucide-react";
 
 type StudentRow = {
     id: string;
@@ -60,27 +61,10 @@ export default function TeacherStudents() {
     const [selectedOffering, setSelectedOffering] = useState("");
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
     const [studentGrades, setStudentGrades] = useState<GradeEntry[]>([]);
+    const [aiAnalytics, setAiAnalytics] = useState<any>(null);
+    const [weakTopics, setWeakTopics] = useState<any[]>([]);
     const [gradesLoading, setGradesLoading] = useState(false);
-    
-    // Pagination and Roster Tab state
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
-    const [showMoreDropdown, setShowMoreDropdown] = useState(false);
-
-    // Reset page on class change
-    useEffect(() => {
-        setPage(0);
-        setShowMoreDropdown(false);
-    }, [selectedOffering]);
-
-    // Close dropdown on click outside
-    useEffect(() => {
-        if (!showMoreDropdown) return;
-        const handler = () => setShowMoreDropdown(false);
-        window.addEventListener("click", handler);
-        return () => window.removeEventListener("click", handler);
-    }, [showMoreDropdown]);
-    const [detailTab, setDetailTab] = useState<"exams" | "grades">("grades");
+    const [detailTab, setDetailTab] = useState<"exams" | "grades" | "ai">("grades");
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
     const [activeYearId, setActiveYearId] = useState<string | null>(null);
@@ -122,70 +106,112 @@ export default function TeacherStudents() {
                 const offering = offerings.find(o => o.id === selectedOffering);
                 if (!offering) return;
 
-                // Fetch enrollments, users, exams, and attendance in parallel
-                const [enrollments, allUsers, exams, attendanceReport] = await Promise.all([
+                // Load basic data: enrollments, users, and the report card for overall performance
+                const [enrollments, allUsers, reportCard] = await Promise.all([
                     cachedFetch(`enroll:${selectedOffering}:${year.id}`, () => listEnrollments({ classOfferingId: selectedOffering, academicYearId: year.id }), 60_000),
                     cachedFetch("students:all", () => listUsers("student"), 120_000),
-                    cachedFetch(`exams:${year.id}:${selectedTermId ?? 'all'}`, () => listExams(year.id, selectedTermId ?? undefined), 30_000),
-                    cachedFetch(`attendance:${selectedOffering}`, () => classAttendanceReport(selectedOffering), 30_000).catch(() => null),
+                    selectedTermId ? getClassTermReportCard(offering.gradeId, offering.sectionId, selectedTermId).catch(() => null) : Promise.resolve(null)
                 ]);
+
                 if (cancelled) return;
 
                 const userMap = new Map<string, PublicUser>(allUsers.map(u => [u.id, u]));
-                const classExams = exams.filter(ex => ex.classOfferingId === selectedOffering && ex.published);
+                const reportMap = new Map(reportCard?.students.map(s => [s.studentId, s]) || []);
 
-                // Fetch all exam attempts in parallel
-                const attemptsByExam: Record<string, Record<string, { score: number | null }>> = {};
-                const attemptResults = await Promise.all(
-                    classExams.map(ex =>
-                        cachedFetch(`attempts:${ex.id}`, () => listExamAttempts(ex.id), 20_000)
-                            .then(res => ({ examId: ex.id, attempts: res?.attempts ?? [] }))
-                            .catch(() => ({ examId: ex.id, attempts: [] }))
-                    )
-                );
-                for (const { examId, attempts } of attemptResults) {
-                    const map: Record<string, { score: number | null }> = {};
-                    for (const a of attempts) map[a.studentId] = { score: a.score };
-                    attemptsByExam[examId] = map;
-                }
+                // If we don't have a report card (e.g. no term selected), we fallback to current offering stats
+                let rows: StudentRow[] = [];
+                
+                if (reportCard) {
+                     rows = enrollments.map(e => {
+                         const u = userMap.get(e.studentId);
+                         const r = reportMap.get(e.studentId);
+                         return {
+                             id: e.studentId,
+                             name: u ? `${u.firstName} ${u.lastName}` : e.studentId.slice(0, 8),
+                             email: u?.email ?? "",
+                             offeringLabel: offeringLabel(offering),
+                             subjects: [], // Overall report card mode
+                             avg: r?.overallPercent ?? 0,
+                             attendance: r?.attendancePercent ?? 0,
+                         };
+                     });
+                 } else {
+                     // Fallback to local class exams if no term/report card available
+                     const [exams, attendance] = await Promise.all([
+                         cachedFetch(`exams:${year.id}`, () => listExams(year.id, selectedTermId ?? undefined), 60_000),
+                         cachedFetch(`att-report:${selectedOffering}`, () => classAttendanceReport(selectedOffering), 60_000).catch(() => null),
+                     ]);
 
-                // Build attendance map
-                let attendanceMap: Record<string, { present: number; total: number }> = {};
-                try {
-                    if (attendanceReport?.sessions) {
-                        for (const session of attendanceReport.sessions) {
-                            for (const mark of session.marks ?? []) {
-                                if (!attendanceMap[mark.studentId]) attendanceMap[mark.studentId] = { present: 0, total: 0 };
-                                attendanceMap[mark.studentId].total++;
-                                if (mark.status === "present") attendanceMap[mark.studentId].present++;
-                            }
-                        }
-                    }
-                } catch { /* ignore */ }
+                     if (cancelled) return;
 
-                if (cancelled) return;
+                     const classExams = exams.filter(ex => ex.classOfferingId === selectedOffering);
+                     
+                     // Fetch all exam attempts in parallel
+                     const attemptResults = await Promise.all(
+                         classExams.map(ex =>
+                             cachedFetch(`attempts:${ex.id}`, () => listExamAttempts(ex.id), 20_000)
+                                 .then(res => ({ examId: ex.id, attempts: res?.attempts ?? [] }))
+                                 .catch(() => ({ examId: ex.id, attempts: [] }))
+                         )
+                     );
+                     
+                     const attemptsByExam: Record<string, Record<string, { score: number | null }>> = {};
+                     for (const { examId, attempts } of attemptResults) {
+                         const map: Record<string, { score: number | null }> = {};
+                         for (const a of attempts) map[a.studentId] = { score: a.score };
+                         attemptsByExam[examId] = map;
+                     }
 
-                const rows: StudentRow[] = enrollments.map(e => {
-                    const u = userMap.get(e.studentId);
-                    const att = attendanceMap[e.studentId];
-                    const attPct = att && att.total > 0 ? Math.round((att.present / att.total) * 100) : 0;
-                    const subjects = classExams.map(ex => {
-                        const attempt = attemptsByExam[ex.id]?.[e.studentId];
-                        const subj = (offering as any).subjectName || (offering as any).subject?.name || "Subject";
-                        return { name: subj, score: attempt?.score ?? null, attendance: attPct };
-                    });
-                    const scores = subjects.map(s => s.score).filter((s): s is number => s != null);
-                    const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
-                    return {
-                        id: e.studentId,
-                        name: u ? `${u.firstName} ${u.lastName}` : e.studentId.slice(0, 8),
-                        email: u?.email ?? "",
-                        offeringLabel: offeringLabel(offering),
-                        subjects,
-                        avg,
-                        attendance: attPct,
-                    };
-                });
+                     // Build attendance map
+                     const attendanceMap: Record<string, { present: number; total: number }> = {};
+                     if (attendance?.sessions) {
+                         for (const session of attendance.sessions) {
+                             for (const mark of session.marks ?? []) {
+                                 if (!attendanceMap[mark.studentId]) attendanceMap[mark.studentId] = { present: 0, total: 0 };
+                                 attendanceMap[mark.studentId].total++;
+                                 if (mark.status === "present") attendanceMap[mark.studentId].present++;
+                             }
+                         }
+                     }
+
+                     rows = enrollments.map(e => {
+                         const u = userMap.get(e.studentId);
+                         const att = attendanceMap[e.studentId];
+                         const attPct = att && att.total > 0 ? Math.round((att.present / att.total) * 100) : 0;
+
+                         const subjects = classExams.map(ex => {
+                             const attempt = attemptsByExam[ex.id]?.[e.studentId];
+                             return {
+                                 name: ex.title,
+                                 score: attempt?.score ?? 0,
+                                 total: (ex as any).totalPoints || (ex as any).maxPoints || 100,
+                             };
+                         });
+                         
+                         let totalWeighted = 0;
+                         let totalWeight = 0;
+                         classExams.forEach(ex => {
+                             const score = attemptsByExam[ex.id]?.[e.studentId]?.score;
+                             const weight = (ex as any).weight ?? 1;
+                             const max = (ex as any).totalPoints || (ex as any).maxPoints || 100;
+                             if (score !== null && score !== undefined) {
+                                 totalWeighted += (score / max) * 100 * weight;
+                                 totalWeight += weight;
+                             }
+                         });
+
+                         return {
+                             id: e.studentId,
+                             name: u ? `${u.firstName} ${u.lastName}` : e.studentId.slice(0, 8),
+                             email: u?.email ?? "",
+                             offeringLabel: offeringLabel(offering),
+                             subjects: subjects as any,
+                             avg: totalWeight > 0 ? Math.round((totalWeighted / totalWeight) * 10) / 10 : 0,
+                             attendance: attPct,
+                         };
+                     });
+                 }
+
                 if (!cancelled) setStudents(rows);
             } catch (e) {
                 if (!cancelled) setErr(e instanceof Error ? e.message : "Failed to load students");
@@ -194,19 +220,21 @@ export default function TeacherStudents() {
             }
         })();
         return () => { cancelled = true; };
-    }, [selectedOffering, offerings]);
+    }, [selectedOffering, offerings, selectedTermId]);
 
     // Sort by avg descending to compute rank
     const rankedStudents = useMemo(() => {
         const sorted = [...students].sort((a, b) => b.avg - a.avg);
-        return sorted.map((s, i) => ({ ...s, rank: i + 1 }));
+        let currentRank = 0;
+        let lastAvg = -1;
+        return sorted.map((s, i) => {
+            if (s.avg !== lastAvg) {
+                currentRank = i + 1;
+                lastAvg = s.avg;
+            }
+            return { ...s, rank: currentRank };
+        });
     }, [students]);
-
-    // Slice current page students
-    const paginatedStudents = useMemo(() => {
-        const start = page * rowsPerPage;
-        return rankedStudents.slice(start, start + rowsPerPage);
-    }, [rankedStudents, page, rowsPerPage]);
 
     const selected = useMemo(() => rankedStudents.find(s => s.id === selectedStudentId), [rankedStudents, selectedStudentId]);
 
@@ -222,6 +250,25 @@ export default function TeacherStudents() {
         return () => { cancelled = true; };
     }, [selectedStudentId, selectedTermId]);
 
+    useEffect(() => {
+        if (!selectedStudentId || detailTab !== "ai") return;
+        
+        const offering = offerings.find(o => o.id === selectedOffering);
+        const subjectId = (offering as any).subjectId;
+
+        Promise.all([
+            getEngagementAnalytics(selectedStudentId),
+            subjectId ? getWeakTopics(selectedStudentId, subjectId) : Promise.resolve([])
+        ]).then(([analytics, weak]) => {
+            setAiAnalytics(analytics);
+            setWeakTopics(weak.weak_topics || []);
+        }).catch(err => {
+            console.error("AI Insights fetch failed:", err);
+            setAiAnalytics(null);
+            setWeakTopics([]);
+        });
+    }, [selectedStudentId, detailTab, selectedOffering, offerings]);
+
     if (!isClient || loading) {
         return <TeacherStudentsSkeleton />;
     }
@@ -229,7 +276,7 @@ export default function TeacherStudents() {
     if (err) {
         return (
             <div className="page-wrapper">
-                <PageHeader kicker="Roster" title="Students" subtitle="Couldn't load data." icon={<Users size={22} />} variant="dark" />
+                <PageHeader kicker="Roster" title="Students" subtitle="Couldn't load data." icon={<Users size={22} />} variant="light" />
                 <EmptyState icon={<AlertCircle size={26} />} title="Couldn't load students" description={err} action={<button className="btn btn-primary" onClick={() => loadOfferings()} style={{ borderRadius: 12 }}>Try again</button>} />
             </div>
         );
@@ -242,13 +289,13 @@ export default function TeacherStudents() {
                 title="Students"
                 subtitle="Student analytics and performance per class."
                 icon={<Users size={22} />}
-                variant="dark"
+                variant="light"
                 actions={<TermSelector academicYearId={activeYearId} onTermChange={() => undefined} />}
             />
 
-            {/* Class Tabs (Buttons with "More" dropdown) */}
+            {/* Class Tabs (Buttons instead of dropdown) */}
             <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                {offerings.slice(0, 4).map(c => (
+                {offerings.map(c => (
                     <button
                         key={c.id}
                         className={`btn ${selectedOffering === c.id ? "btn-primary" : "btn-secondary"}`}
@@ -258,118 +305,6 @@ export default function TeacherStudents() {
                         {offeringLabel(c)}
                     </button>
                 ))}
-
-                {offerings.length > 4 && (
-                    <div style={{ position: "relative" }}>
-                        <button
-                            type="button"
-                            className={`btn ${offerings.slice(4).some(c => c.id === selectedOffering) ? "btn-primary" : "btn-secondary"}`}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowMoreDropdown(!showMoreDropdown);
-                            }}
-                            style={{ 
-                                display: "flex", 
-                                alignItems: "center", 
-                                gap: "0.45rem", 
-                                padding: "0.6rem 1.25rem", 
-                                borderRadius: "12px", 
-                                fontSize: "0.85rem", 
-                                fontWeight: 600 
-                            }}
-                        >
-                            {offerings.slice(4).some(c => c.id === selectedOffering) 
-                                ? offeringLabel(offerings.find(c => c.id === selectedOffering)!) 
-                                : "More"}
-                            <svg 
-                                width="12" 
-                                height="12" 
-                                viewBox="0 0 24 24" 
-                                fill="none" 
-                                stroke="currentColor" 
-                                strokeWidth="2.5" 
-                                strokeLinecap="round" 
-                                strokeLinejoin="round"
-                                style={{ 
-                                    transform: showMoreDropdown ? "rotate(180deg)" : "rotate(0deg)", 
-                                    transition: "transform 0.2s ease",
-                                    marginLeft: "0.15rem"
-                                }}
-                            >
-                                <path d="m6 9 6 6 6-6"/>
-                            </svg>
-                        </button>
-                        
-                        {showMoreDropdown && (
-                            <div 
-                                style={{
-                                    position: "absolute",
-                                    top: "calc(100% + 8px)",
-                                    left: 0,
-                                    zIndex: 100,
-                                    background: "#fff",
-                                    border: "1.5px solid var(--gray-100)",
-                                    borderRadius: "20px",
-                                    padding: "0.6rem",
-                                    minWidth: "220px",
-                                    boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: "0.35rem",
-                                    animation: "fadeIn 0.15s ease-out"
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                {offerings.slice(4).map(c => {
-                                    const isSelected = selectedOffering === c.id;
-                                    return (
-                                        <button
-                                            key={c.id}
-                                            type="button"
-                                            onClick={() => {
-                                                setSelectedOffering(c.id);
-                                                setShowMoreDropdown(false);
-                                            }}
-                                            style={{
-                                                padding: "0.65rem 1rem",
-                                                borderRadius: "12px",
-                                                background: isSelected ? "var(--primary-50)" : "transparent",
-                                                color: isSelected ? "var(--primary-700)" : "var(--gray-700)",
-                                                border: "none",
-                                                textAlign: "left",
-                                                fontSize: "0.85rem",
-                                                fontWeight: 600,
-                                                cursor: "pointer",
-                                                transition: "all 0.15s ease",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "space-between"
-                                            }}
-                                            onMouseEnter={e => {
-                                                if (!isSelected) {
-                                                    e.currentTarget.style.background = "var(--gray-50)";
-                                                    e.currentTarget.style.color = "var(--gray-900)";
-                                                }
-                                            }}
-                                            onMouseLeave={e => {
-                                                if (!isSelected) {
-                                                    e.currentTarget.style.background = "transparent";
-                                                    e.currentTarget.style.color = "var(--gray-700)";
-                                                }
-                                            }}
-                                        >
-                                            {offeringLabel(c)}
-                                            {isSelected && (
-                                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--primary-600)" }} />
-                                            )}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-                )}
-
                 {offerings.length === 0 && !loading && (
                     <div style={{ fontSize: "0.85rem", color: "var(--gray-500)", background: "var(--gray-50)", padding: "0.75rem 1.25rem", borderRadius: 12, border: "1.5px dashed var(--gray-200)" }}>
                         No classes found for your subject ({user?.subject || "—"})
@@ -386,91 +321,37 @@ export default function TeacherStudents() {
                     <div style={{ fontSize: "0.875rem", color: "var(--gray-400)" }}>Students will appear once enrolled by the admin.</div>
                 </div>
             ) : (
-                <div className={`students-main-layout ${selected ? "has-selected" : ""}`}>
-                    <div className="card students-list-card">
+                <div style={{ display: "grid", gridTemplateColumns: selected ? "minmax(0,1fr) minmax(0,1.5fr)" : "1fr", gap: "1.25rem" }}>
+                    <div className="card">
                         <div className="table-wrapper">
                             <table>
-                                <thead>
-                                    <tr style={{ background: "var(--gray-50)" }}>
-                                        <th style={{ padding: "0.6rem 0.75rem", textAlign: "left", fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)" }}>Student</th>
-                                        <th style={{ padding: "0.6rem 0.75rem", textAlign: "center", fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 90 }}>Avg</th>
-                                        <th style={{ padding: "0.6rem 0.75rem", textAlign: "center", fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 110 }}>Attendance</th>
-                                        <th style={{ padding: "0.6rem 0.75rem", textAlign: "center", fontWeight: 700, fontSize: "0.75rem", color: "var(--gray-600)", borderBottom: "2px solid var(--gray-200)", width: 90 }}>Rank</th>
-                                    </tr>
-                                </thead>
+                                <thead><tr><th>Student</th><th>Avg</th><th>Attendance</th><th>Rank</th></tr></thead>
                                 <tbody>
-                                    {paginatedStudents.map(s => (
+                                    {rankedStudents.map(s => (
                                         <tr key={s.id} onClick={() => {
                                             setSelectedStudentId(s.id);
                                             setDetailTab("grades");
-                                        }} style={{ cursor: "pointer", background: selectedStudentId === s.id ? "var(--primary-50)" : undefined, borderBottom: "1px solid var(--gray-100)" }}>
-                                            <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                                {s.name}
-                                                <div style={{ fontSize: "0.72rem", color: "var(--gray-400)", fontWeight: 400 }}>{s.email}</div>
+                                        }} style={{ cursor: "pointer", background: selectedStudentId === s.id ? "var(--primary-50)" : undefined }}>
+                                            <td style={{ fontWeight: 600 }}>
+                                                {s.name}<br />
+                                                <span style={{ fontSize: "0.7rem", color: "var(--gray-400)" }}>{s.email}</span>
                                             </td>
-                                            <td style={{ padding: "0.45rem 0.5rem", textAlign: "center" }}>
+                                            <td>
                                                 <span className={`badge ${s.avg >= 90 ? "badge-success" : s.avg >= 80 ? "badge-primary" : s.avg >= 60 ? "badge-warning" : "badge-danger"}`}>
                                                     {s.avg > 0 ? `${s.avg}%` : "-"}
                                                 </span>
                                             </td>
-                                            <td style={{ padding: "0.45rem 0.5rem", textAlign: "center" }}>{s.attendance}%</td>
-                                            <td style={{ padding: "0.45rem 0.5rem", textAlign: "center" }}>#{s.rank}</td>
+                                            <td>{s.attendance}%</td>
+                                            <td>#{s.rank}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
-                        {rankedStudents.length > 0 && (
-                            <TablePagination
-                                total={rankedStudents.length}
-                                page={page}
-                                rowsPerPage={rowsPerPage}
-                                onPageChange={setPage}
-                                onRowsPerPageChange={(n) => {
-                                    setRowsPerPage(n);
-                                    setPage(0);
-                                }}
-                            />
-                        )}
                     </div>
 
                                         {selected && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                            {/* Back button for mobile/tablet */}
-                            <button
-                                type="button"
-                                className="students-back-button"
-                                onClick={() => setSelectedStudentId(null)}
-                                style={{
-                                    alignItems: "center",
-                                    gap: "0.5rem",
-                                    background: "#fff",
-                                    border: "1.5px solid var(--gray-150)",
-                                    borderRadius: "12px",
-                                    padding: "0.55rem 1.15rem",
-                                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
-                                    color: "var(--gray-800)",
-                                    fontSize: "0.85rem",
-                                    fontWeight: 700,
-                                    cursor: "pointer",
-                                    alignSelf: "flex-start",
-                                    transition: "all 0.2s ease-in-out",
-                                }}
-                                onMouseEnter={e => {
-                                    e.currentTarget.style.borderColor = "var(--primary-300)";
-                                    e.currentTarget.style.boxShadow = "0 4px 16px rgba(37, 99, 235, 0.08)";
-                                    e.currentTarget.style.transform = "translateY(-1px)";
-                                }}
-                                onMouseLeave={e => {
-                                    e.currentTarget.style.borderColor = "var(--gray-150)";
-                                    e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.04)";
-                                    e.currentTarget.style.transform = "none";
-                                }}
-                            >
-                                <ArrowLeft size={14} strokeWidth={3} style={{ color: "var(--primary-600)" }} />
-                                <span>Back to List</span>
-                            </button>
-
                             {/* ── Student header ── */}
                             <div style={{ background: "#fff", borderRadius: 16, border: "1.5px solid var(--gray-100)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", padding: "1.5rem" }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
@@ -489,7 +370,7 @@ export default function TeacherStudents() {
                                 </div>
 
                                 {/* Stats row */}
-                                <div className="students-stats-grid">
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: "0.75rem" }}>
                                     {[
                                         { label: "Avg Score", value: selected.avg > 0 ? `${selected.avg}%` : "—", color: selected.avg >= 80 ? "var(--success)" : selected.avg >= 60 ? "var(--primary-600)" : "var(--warning)" },
                                         { label: "Attendance", value: `${selected.attendance}%`, color: selected.attendance >= 80 ? "var(--success)" : selected.attendance >= 60 ? "var(--warning)" : "var(--danger)" },
@@ -505,6 +386,7 @@ export default function TeacherStudents() {
                                 <div className="tabs" style={{ marginBottom: "1rem" }}>
                                     <button className={`tab ${detailTab === "grades" ? "active" : ""}`} onClick={() => setDetailTab("grades")}>Grades</button>
                                     <button className={`tab ${detailTab === "exams" ? "active" : ""}`} onClick={() => setDetailTab("exams")}>Exams</button>
+                                    <button className={`tab ${detailTab === "ai" ? "active" : ""}`} onClick={() => setDetailTab("ai")}>✨ AI Insights</button>
                                 </div>
 
                                 {/* ── Grades tab ── */}
@@ -600,14 +482,66 @@ export default function TeacherStudents() {
                                         </div>
                                     )
                                 )}
+
+                                {/* ── AI Insights tab ── */}
+                                {detailTab === "ai" && (
+                                    !aiAnalytics ? (
+                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem", gap: "0.5rem", color: "var(--gray-400)" }}>
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+                                            Analyzing student data…
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                                                <div style={{ padding: "1rem", background: "#f8faff", borderRadius: 12, border: "1px solid #eef2ff" }}>
+                                                    <div style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--primary-600)", textTransform: "uppercase", marginBottom: "0.25rem" }}>Mastery Score</div>
+                                                    <div style={{ fontSize: "1.25rem", fontWeight: 900, color: "var(--gray-900)" }}>{Math.round((aiAnalytics.average_mastery || 0) * 100)}%</div>
+                                                </div>
+                                                <div style={{ padding: "1rem", background: "#f8fff9", borderRadius: 12, border: "1px solid #ecfdf5" }}>
+                                                    <div style={{ fontSize: "0.65rem", fontWeight: 700, color: "#059669", textTransform: "uppercase", marginBottom: "0.25rem" }}>Engagement</div>
+                                                    <div style={{ fontSize: "1.25rem", fontWeight: 900, color: "var(--gray-900)" }}>{aiAnalytics.total_sessions || 0}</div>
+                                                </div>
+                                                <div style={{ padding: "1rem", background: "#fffaf8", borderRadius: 12, border: "1px solid #fff7ed" }}>
+                                                    <div style={{ fontSize: "0.65rem", fontWeight: 700, color: "#ea580c", textTransform: "uppercase", marginBottom: "0.25rem" }}>Study Time</div>
+                                                    <div style={{ fontSize: "1.25rem", fontWeight: 900, color: "var(--gray-900)" }}>{Math.round(aiAnalytics.total_study_minutes || 0)}m</div>
+                                                </div>
+                                                <div style={{ padding: "1rem", background: "#fdf8ff", borderRadius: 12, border: "1px solid #faf5ff" }}>
+                                                    <div style={{ fontSize: "0.65rem", fontWeight: 700, color: "#9333ea", textTransform: "uppercase", marginBottom: "0.25rem" }}>Assessments</div>
+                                                    <div style={{ fontSize: "1.25rem", fontWeight: 900, color: "var(--gray-900)" }}>{aiAnalytics.total_assessments || 0}</div>
+                                                </div>
+                                            </div>
+
+                                            {weakTopics.length > 0 && (
+                                                <div>
+                                                    <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-600)", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                                                        <span style={{ color: "var(--danger)" }}>⚠️</span> Weak Topics
+                                                    </div>
+                                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                                                        {weakTopics.map((wt: any, idx: number) => (
+                                                            <div key={idx} style={{ padding: "0.4rem 0.75rem", background: "#fff1f2", color: "#e11d48", borderRadius: "8px", fontSize: "0.75rem", fontWeight: 600, border: "1px solid #ffe4e6" }}>
+                                                                {wt.topic_name} ({Math.round(wt.mastery * 100)}%)
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                )}
                             </div>
 
                             {/* AI recommendation — separate card */}
                             <div style={{ background: "var(--primary-50)", border: "1.5px solid var(--primary-100)", borderRadius: 8, padding: "0.85rem 1rem" }}>
                                 <div style={{ fontWeight: 700, color: "var(--primary-700)", fontSize: "0.82rem", marginBottom: "0.35rem" }}>🤖 AI Recommendation</div>
                                 <p style={{ fontSize: "0.82rem", color: "var(--primary-800)", margin: 0, lineHeight: 1.5 }}>
-                                    {selected.avg >= 85
-                                        ? `${selected.name} is performing well. Keep providing challenging material.`
+                                    {aiAnalytics?.average_mastery !== undefined
+                                        ? aiAnalytics.average_mastery >= 0.85
+                                            ? `${selected.name} has a high mastery score (${Math.round(aiAnalytics.average_mastery * 100)}%). Continue providing advanced enrichment materials.`
+                                            : aiAnalytics.average_mastery >= 0.60
+                                            ? `${selected.name} is making steady progress (${Math.round(aiAnalytics.average_mastery * 100)}%). Focus on reinforcing the weak topics identified.`
+                                            : `${selected.name} is struggling with core concepts (${Math.round(aiAnalytics.average_mastery * 100)}%). Targeted intervention and 1-on-1 support are recommended.`
+                                        : selected.avg >= 85
+                                        ? `${selected.name} is performing well based on grades. Keep providing challenging material.`
                                         : selected.avg >= 60
                                         ? `${selected.name} needs support. Consider extra practice sessions.`
                                         : selected.avg > 0

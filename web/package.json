@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node -e \"const fs = require('fs'); const path = require('path'); const lockPath = path.join('.next', 'dev', 'lock'); if (fs.existsSync(lockPath)) { fs.rmSync(lockPath, {force: true}); }\" && next dev -p 3000",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

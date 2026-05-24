@@ -16,7 +16,7 @@ import {
 import { chatRealtime } from "@/lib/chat-realtime";
 import { getStoredUser } from "@/lib/auth";
 
-type QuestionType = "mcq" | "truefalse" | "fillin";
+type QuestionType = "mcq" | "truefalse" | "fillin" | "long_answer";
 
 interface Question {
     id: string;
@@ -24,6 +24,7 @@ interface Question {
     text: string;
     options?: string[];
     order: number;
+    points: number;
 }
 
 interface ExamData {
@@ -50,6 +51,9 @@ function normalizeQuestionType(rawType: string, options?: string[]): QuestionTyp
     }
     if (t === "fillin" || t === "fill_in" || t === "fill-in" || t === "short_answer" || t === "shortanswer") {
         return "fillin";
+    }
+    if (t === "long_answer" || t === "longanswer" || t === "description" || t === "essay") {
+        return "long_answer";
     }
     if (t === "mcq" || t === "choose" || t === "multiple_choice" || t === "multiple-choice") {
         return "mcq";
@@ -158,6 +162,7 @@ function mapApiQuestions(raw: ExamQuestionForStudent[]): Question[] {
                 text: stem || `Question ${i + 1}`,
                 options: safeOptions,
                 order: i + 1,
+                points: Number((item as any).points ?? 1),
             };
         })
         .filter((q) => q.text.trim().length > 0);
@@ -558,6 +563,14 @@ export default function ExamSession() {
                             }}>
                                 {question.type === "mcq" ? "Multiple Choice" : question.type === "truefalse" ? "True / False" : "Fill in the Blank"}
                             </span>
+                            <span style={{
+                                padding: "0.3rem 0.75rem", borderRadius: 8,
+                                background: "var(--gray-100)",
+                                color: "var(--gray-600)",
+                                fontWeight: 700, fontSize: "0.7rem",
+                            }}>
+                                {question.points} {question.points === 1 ? "Mark" : "Marks"}
+                            </span>
                         </div>
                         <button onClick={() => toggleFlag(question.id)} style={{
                             display: "flex", alignItems: "center", gap: "0.4rem",
@@ -622,6 +635,13 @@ export default function ExamSession() {
                             <input type="text" value={answers[question.id] || ""} onChange={(e) => setAnswer(question.id, e.target.value)}
                                 placeholder="Type your answer here..."
                                 style={{ width: "100%", padding: "1rem 1.25rem", borderRadius: 14, border: "2px solid var(--gray-200)", fontSize: "1rem", background: "#fff", outline: "none" }}
+                                onFocus={(e) => e.target.style.borderColor = "var(--primary-500)"}
+                                onBlur={(e) => e.target.style.borderColor = "var(--gray-200)"} />
+                        )}
+                        {question.type === "long_answer" && (
+                            <textarea value={answers[question.id] || ""} onChange={(e) => setAnswer(question.id, e.target.value)}
+                                placeholder="Write your detailed answer here..."
+                                style={{ width: "100%", minHeight: "150px", padding: "1rem 1.25rem", borderRadius: 14, border: "2px solid var(--gray-200)", fontSize: "1rem", background: "#fff", outline: "none", resize: "vertical" }}
                                 onFocus={(e) => e.target.style.borderColor = "var(--primary-500)"}
                                 onBlur={(e) => e.target.style.borderColor = "var(--gray-200)"} />
                         )}

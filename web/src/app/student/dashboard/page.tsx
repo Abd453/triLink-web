@@ -10,6 +10,7 @@ import {
     type Announcement,
     type Exam as BackendExam,
 } from "@/lib/admin-api";
+import { getRecommendations } from "@/lib/ai-api";
 import { getStoredUser } from "@/lib/auth";
 import {
     PageHeader,
@@ -58,6 +59,7 @@ export default function StudentDashboard() {
     const [apiAnnouncements, setApiAnnouncements] = useState<Announcement[]>([]);
     const [apiDash, setApiDash] = useState<{ activeEnrollments: number; unreadNotifications: number } | null>(null);
     const [apiExams, setApiExams] = useState<BackendExam[]>([]);
+    const [aiRecommendations, setAiRecommendations] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [year, setYear] = useState<{ id: string; label: string } | null>(null);
 
@@ -75,6 +77,16 @@ export default function StudentDashboard() {
                 announcementsForMe(),
                 studentDashboard(),
             ]);
+
+            const me = getStoredUser();
+            if (me?.id) {
+                try {
+                    const recs = await getRecommendations(me.id);
+                    setAiRecommendations(recs.resources || []);
+                } catch (recErr) {
+                    console.warn("AI Recommendations load failed:", recErr);
+                }
+            }
 
             let examsRes: BackendExam[] = [];
             if (activeYear) {
@@ -151,10 +163,12 @@ export default function StudentDashboard() {
             let status: ExamStatus = "upcoming";
             if (attempt?.submittedAt) {
                 status = "completed";
-            } else if (now > closesAt && !attempt?.submittedAt) {
-                status = "missed";
             } else if (now >= opensAt && now <= closesAt) {
                 status = "available";
+            } else if (now > closesAt) {
+                status = "missed";
+            } else {
+                status = "upcoming";
             }
 
             return {
@@ -165,12 +179,12 @@ export default function StudentDashboard() {
                 title: e.title,
                 date: opensAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
                 time: opensAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
-                duration: e.durationMinutes,
+                duration: e.durationMinutes || 0,
                 totalQuestions: (e as any).questionCount || 0,
                 status,
                 score: attempt?.score,
                 maxPoints: e.maxPoints,
-                room: "Digital Hall"
+                room: (e as any).room || "Online"
             };
         });
     }, [apiExams, isClient]);
@@ -220,6 +234,68 @@ export default function StudentDashboard() {
                     </button>
                 )}
             />
+
+            {/* AI Recommendations Section */}
+            {aiRecommendations.length > 0 && (
+                <Section title="AI Learning Recommendations" description="Personalized for you">
+                    <div className="recommendations-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1.5rem", marginBottom: "2rem" }}>
+                        {aiRecommendations.map((rec, i) => (
+                            <div key={i} className="rec-card" style={{ 
+                                background: "#fff", 
+                                padding: "1.25rem", 
+                                borderRadius: "12px", 
+                                border: "1px solid var(--gray-200)",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "0.75rem",
+                                position: "relative",
+                                overflow: "hidden"
+                            }}>
+                                <div style={{ 
+                                    position: "absolute", 
+                                    top: 0, 
+                                    left: 0, 
+                                    width: "4px", 
+                                    height: "100%", 
+                                    background: "var(--primary-500)" 
+                                }} />
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                                    <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--primary-600)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                        {rec.type || "Resource"}
+                                    </span>
+                                    <span style={{ fontSize: "0.7rem", color: "var(--gray-400)" }}>
+                                        {rec.difficulty || "Medium"}
+                                    </span>
+                                </div>
+                                <h4 style={{ fontSize: "1rem", fontWeight: 700, margin: 0, color: "var(--gray-900)" }}>{rec.title}</h4>
+                                <p style={{ fontSize: "0.85rem", color: "var(--gray-500)", margin: 0, lineClamp: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                                    {rec.description || "Personalized learning resource based on your performance."}
+                                </p>
+                                <button 
+                                    onClick={() => rec.url && window.open(rec.url, "_blank")}
+                                    style={{ 
+                                        marginTop: "auto",
+                                        padding: "0.5rem", 
+                                        borderRadius: "8px", 
+                                        border: "1px solid var(--primary-100)", 
+                                        background: "var(--primary-50)", 
+                                        color: "var(--primary-700)",
+                                        fontSize: "0.8rem",
+                                        fontWeight: 600,
+                                        cursor: "pointer",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        gap: "0.5rem"
+                                    }}
+                                >
+                                    Start Learning <ChevronRight size={14} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </Section>
+            )}
 
             {/* Stat tiles */}
             <div className="exam-stats-grid">

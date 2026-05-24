@@ -113,12 +113,8 @@ class ChatRealtimeClient {
   connect(user?: { id: string; name: string }) {
     if (typeof window === "undefined") return;
     if (user) this.userInfo = user;
-    if (this.socket?.connected) {
-      console.log("[ChatRealtime] Already connected");
-      return;
-    }
+    if (this.socket?.connected) return;
     if (this.socket && !this.socket.connected) {
-      console.log("[ChatRealtime] Reconnecting existing socket...");
       this.socket.connect();
       return;
     }
@@ -127,8 +123,6 @@ class ChatRealtimeClient {
     const token = getAccessToken() ?? undefined;
     const baseUrl = deriveWsUrl();
     const path = process.env.NEXT_PUBLIC_CHAT_SOCKET_PATH?.trim() || "/socket.io";
-
-    console.log(`[ChatRealtime] Connecting to ${baseUrl}${path} as user ${this.userInfo?.id}`);
 
     this.socket = io(baseUrl, {
       path,
@@ -147,7 +141,6 @@ class ChatRealtimeClient {
     });
 
     this.socket.on("connect", () => {
-      console.log("[ChatRealtime] Connected successfully");
       this.setStatus("open");
       this.reconnectMs = 1800;
       this.schedulePing();

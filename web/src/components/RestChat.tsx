@@ -3,9 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
-  AlertCircle,
   ArrowDown,
-  ArrowLeft,
   BellOff,
   Bell,
   Check,
@@ -14,7 +12,6 @@ import {
   Clock,
   Copy as CopyIcon,
   CornerUpRight,
-  FileText,
   Mic,
   MoreHorizontal,
   MessageSquareText,
@@ -26,7 +23,6 @@ import {
   Reply as ReplyIcon,
   Search,
   Send,
-  Smile,
   SmilePlus,
   Square,
   Trash2,
@@ -37,8 +33,7 @@ import {
   type Conversation,
   type PublicUser,
   createConversation,
-  blockUser,
-  unblockUser,
+  blockConversation,
   deleteChatMessage,
   editChatMessage,
   forwardChatMessage,
@@ -47,20 +42,10 @@ import {
   listMessages,
   postChatMessage,
   toggleChatMessageReaction,
+  unblockConversation,
   uploadChatFile,
   searchUsers,
-  listMembers,
-  addMembers,
-  removeMember,
-  getPresence,
-  markMessageAsRead,
 } from "@/lib/admin-api";
-import {
-  Users,
-  UserPlus,
-  UserMinus,
-  Crown,
-} from "lucide-react";
 import { chatRealtime, type RealtimeStatus } from "@/lib/chat-realtime";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { useChatUnreadStore } from "@/store/chatUnreadStore";
@@ -72,9 +57,6 @@ type ChatMessageView = ChatMessage & {
   senderName?: string;
   senderRole?: string;
   senderInitials?: string;
-  senderProfileImage?: string | null;
-  imageUrl?: string;
-  type?: "text" | "image" | "file" | "voice";
 };
 
 interface RestChatProps {
@@ -93,7 +75,7 @@ const ROLE_META: Record<PortalRole, { title: string; kicker: string; summary: st
     title: "Classroom and parent conversations",
     kicker: "Teacher Messenger",
     summary: "Handle student support, class threads, and direct parent follow-ups.",
-    accent: "#1d4ed8",
+    accent: "#7c3aed",
     allowGroups: true,
   },
   student: {
@@ -107,7 +89,7 @@ const ROLE_META: Record<PortalRole, { title: string; kicker: string; summary: st
     title: "Parent follow-up desk",
     kicker: "Parent Chat",
     summary: "Stay in touch with your child’s teachers and the school office.",
-    accent: "#3b82f6",
+    accent: "#8b5cf6",
     allowGroups: false,
   },
 };
@@ -431,11 +413,7 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
   }, []);
 
   useEffect(() => {
-    if (!meId || meId.startsWith("fallback-")) {
-      console.log("[Chat] Skipping socket connection - waiting for real user data");
-      return;
-    }
-    console.log(`[Chat] Connecting socket for user ${meId}`);
+    if (!meId) return;
     chatRealtime.connect({ id: meId, name: meName });
     const offStatus = chatRealtime.on("status", (s) => setStatus(s));
     const offMessage = chatRealtime.on("message:new", (payload) => {
@@ -465,9 +443,6 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
           : undefined,
         senderRole: (raw as any).senderRole ?? (raw as any).sender?.role,
         senderInitials: (raw as any).senderInitials,
-        senderProfileImage: (raw as any).senderProfileImage ?? (raw as any).sender?.profileImageFileId
-          ? `/files/${(raw as any).sender.profileImageFileId}/download`
-          : null,
       };
       setConversations((prev) =>
         prev
@@ -895,11 +870,11 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
     mediaRecorderRef.current = null;
   }
 
-  async function handleEditMessage(messageId: string, conversationId: string) {
+    async function handleEditMessage(messageId: string, conversationId: string) {
     const trimmed = editingText.trim();
     if (!trimmed) { setEditingMessageId(null); return; }
     try {
-      const updated = await editChatMessage(conversationId, messageId, trimmed);
+        const updated = await editChatMessage(messageId, trimmed);
       setMessagesByConversation((prev) => {
         const list = prev[updated.conversationId] ?? [];
         return {
@@ -914,10 +889,10 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
     }
   }
 
-  async function handleDeleteMessage(messageId: string, conversationId: string) {
+    async function handleDeleteMessage(messageId: string, conversationId: string) {
     if (!confirm("Delete this message?")) return;
     try {
-      await deleteChatMessage(conversationId, messageId);
+        await deleteChatMessage(messageId);
       setMessagesByConversation((prev) => {
         const list = prev[conversationId] ?? [];
         return {
@@ -1094,7 +1069,7 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
           {isPending
             ? <Clock size={11} />
             : isSeen
-            ? <CheckCheck size={12} style={{ color: "var(--primary-600)" }} />
+            ? <CheckCheck size={12} style={{ color: "#7c3aed" }} />
             : <Check size={12} />}
         </span>
       ) : null;
@@ -1106,7 +1081,7 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
 
       async function applyReaction(emoji: string) {
         try {
-          const updated = await toggleChatMessageReaction(message.conversationId, message.id, emoji);
+          const updated = await toggleChatMessageReaction(message.id, emoji);
           setMessagesByConversation((prev) => ({
             ...prev,
             [activeConversationId ?? ""]: (prev[activeConversationId ?? ""] ?? []).map((item) => item.id === updated.id ? { ...item, reactions: updated.reactions ?? null } : item),
@@ -1130,22 +1105,9 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
           >
             {!mine && (
               <div className="chat-bubble-avatar-slot">
-                {message.senderProfileImage ? (
-                  <img
-                    src={message.senderProfileImage}
-                    alt={author.label}
-                    className="chat-participant-avatar"
-                    style={{ objectFit: "cover" }}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = "none";
-                      (e.target as HTMLImageElement).parentElement!.innerHTML = `<div class="chat-participant-avatar" style="background: ${avatarColor(message.senderId)}">${author.initials}</div>`;
-                    }}
-                  />
-                ) : (
-                  <div className="chat-participant-avatar" style={{ background: avatarColor(message.senderId) }}>
-                    {author.initials}
-                  </div>
-                )}
+                <div className="chat-participant-avatar" style={{ background: avatarColor(message.senderId) }}>
+                  {author.initials}
+                </div>
               </div>
             )}
             <div className={`chat-bubble ${mine ? "mine" : "other"} ${isPending ? "pending" : ""}`} style={isDeleted ? { opacity: 0.6, fontStyle: "italic" } : emojiOnly ? { background: "transparent", boxShadow: "none", padding: "0.15rem 0.25rem" } : undefined}>
@@ -1206,19 +1168,8 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
                 </div>
               )}
               {!isDeleted && !isEditing && !message.imageUrl && message.mediaFileId && !(message.mediaType === "audio" || message.mediaMimeType?.startsWith("audio/")) && (
-                <div style={{
-                  marginTop: 8,
-                  padding: "0.5rem 0.75rem",
-                  borderRadius: 12,
-                  background: mine ? "rgba(255, 255, 255, 0.15)" : "rgba(37,99,235,0.08)",
-                  color: mine ? "#ffffff" : "var(--primary-700)",
-                  fontSize: "0.8rem",
-                  fontWeight: 600,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6
-                }}>
-                  <FileText size={14} /> <span>{message.mediaName ?? "Attachment"}</span>
+                <div style={{ marginTop: 8, padding: "0.5rem 0.75rem", borderRadius: 12, background: "rgba(124,58,237,0.08)", fontSize: "0.8rem", fontWeight: 600 }}>
+                  📎 {message.mediaName ?? "Attachment"}
                 </div>
               )}
               {!isDeleted && message.reactions && Object.keys(message.reactions).length > 0 && (
@@ -1228,7 +1179,7 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
                       key={emoji}
                       type="button"
                       onClick={() => void applyReaction(emoji)}
-                      style={{ borderRadius: 999, padding: "0.1rem 0.5rem", fontSize: "0.78rem", background: mine ? "rgba(255,255,255,0.2)" : "rgba(37,99,235,0.12)", color: mine ? "#fff" : "var(--primary-700)", border: "none", cursor: "pointer", fontWeight: 700 }}
+                      style={{ borderRadius: 999, padding: "0.1rem 0.5rem", fontSize: "0.78rem", background: mine ? "rgba(255,255,255,0.2)" : "rgba(124,58,237,0.12)", color: mine ? "#fff" : "#5b21b6", border: "none", cursor: "pointer", fontWeight: 700 }}
                     >
                       {emoji} {users.length}
                     </button>
@@ -1270,200 +1221,33 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
   }
 
   return (
-    <div className={`chat-shell ${activeConversationId ? "has-active-conv" : "no-active-conv"} ${showInfo ? "show-info-panel" : "hide-info-panel"}`}>
-      {/* Conversation List */}
-      <section className="chat-inbox">
-        <div className="chat-inbox-head">
-          <span className="chat-inbox-title">Chats</span>
-          <button type="button" className="chat-stage-icon-btn" onClick={() => setShowCompose(true)} title="New chat" aria-label="New chat"><Plus size={18} /></button>
-        </div>
-
-        <div className="chat-search-row">
-          <div className="chat-search-pill">
-            <Search size={15} />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search For Contacts or Messages" />
-          </div>
-        </div>
-
-        {sortedConversations.length > 0 && (
-          <div className="chat-recent-strip">
-            <div className="chat-recent-strip-label">
-              <span>Recent Chats</span>
-            </div>
-            <div className="chat-recent-avatars">
-              {sortedConversations.slice(0, 6).map((conv) => (
-                <div key={conv.id} className="chat-recent-avatar-item" onClick={() => selectConversation(conv.id)}>
-                  <div className={`chat-recent-avatar-ring ${conv.id === activeConversationId ? "active-ring" : ""}`} style={{ background: avatarColor(conv.id) }}>
-                    {initials(conversationDisplayName(conv))}
-                  </div>
-                  <span className="chat-recent-avatar-name">{conversationDisplayName(conv).split(" ")[0]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="chat-filter-row">
-          {(["all", "direct", "group"] as const).map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => setFilter(opt)}
-              className={`chat-filter-chip ${filter === opt ? "active" : ""}`}
-            >
-              {opt === "all" ? `All (${conversationCounts.all})` : opt === "direct" ? `Direct (${conversationCounts.direct})` : `Groups (${conversationCounts.group})`}
-            </button>
-          ))}
-        </div>
-
-        {error && (
-          <div className="chat-alert">
-            <AlertCircle size={15} style={{ flexShrink: 0 }} />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <div className="chat-conv-scroll">
-          {loadingConvs ? (
-            Array.from({ length: 6 }).map((_, i) => <div key={i} className="chat-conv-skeleton shimmer" />)
-          ) : filteredConversations.length ? (
-            filteredConversations.map((conv) => {
-              const active = conv.id === activeConversationId;
-              const unread = unreadCounts[conv.id] ?? 0;
-              const typing = typingUsers[conv.id] ?? [];
-              const displayName = conversationDisplayName(conv);
-              const online = isConversationOnline(conv);
-              const preview = typing.length ? "is typing…" : conv.lastMessageText?.trim() || conv.description || "No messages yet";
-              const convAvatar = conv.avatarFileId
-                ? `/files/${conv.avatarFileId}/download`
-                : null;
-              const otherParticipant = conv.type === "direct" && conv.participants?.length === 2
-                ? conv.participants.find(p => p.id !== meId)
-                : null;
-              const participantAvatar = otherParticipant?.profileImageFileId
-                ? `/files/${otherParticipant.profileImageFileId}/download`
-                : null;
-              const avatarUrl = convAvatar || participantAvatar;
-
-              return (
-                <div key={conv.id} className={`chat-conv-card ${active ? "active" : ""}`} style={{ position: "relative", cursor: "pointer" }} onClick={() => selectConversation(conv.id)}>
-                  <div className="chat-conv-avatar-shell">
-                    {avatarUrl ? (
-                      <img
-                        src={avatarUrl}
-                        alt={displayName}
-                        className="chat-conv-avatar-large"
-                        style={{ objectFit: "cover" }}
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = "none";
-                          (e.target as HTMLImageElement).parentElement!.innerHTML = `<div class="chat-conv-avatar-large" style="background: ${avatarColor(conv.id)}">${initials(displayName)}</div><span class="chat-avatar-dot ${online ? "online" : "offline"}"></span>`;
-                        }}
-                      />
-                    ) : (
-                      <div className="chat-conv-avatar-large" style={{ background: avatarColor(conv.id) }}>{initials(displayName)}</div>
-                    )}
-                    <span className={`chat-avatar-dot ${online ? "online" : "offline"}`} />
-                  </div>
-                  <div className="chat-conv-copy">
-                    <div className="chat-conv-card-title" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      {pinnedConvIds.has(conv.id) && <Pin size={11} style={{ color: "#7c3aed" }} />}
-                      {mutedConvIds.has(conv.id) && <BellOff size={11} style={{ color: "#94a3b8" }} />}
-                      <span>{displayName}</span>
-                    </div>
-                    <div className={`chat-conv-card-sub ${typing.length ? "typing" : ""}`}>{preview}</div>
-                  </div>
-                  <div className="chat-conv-meta">
-                    <span>{relative(conv.lastMessageAt ?? conv.updatedAt ?? conv.createdAt)}</span>
-                    {unread > 0 && <strong>{unread > 99 ? "99+" : unread}</strong>}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); togglePin(conv.id); }}
-                    title={pinnedConvIds.has(conv.id) ? "Unpin" : "Pin to top"}
-                    aria-label={pinnedConvIds.has(conv.id) ? "Unpin" : "Pin"}
-                    className="chat-conv-pin-btn"
-                    style={{ position: "absolute", top: 8, right: 8, border: "none", background: "rgba(30,35,55,0.9)", borderRadius: 999, width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: pinnedConvIds.has(conv.id) ? "#60a5fa" : "#6b7280", opacity: pinnedConvIds.has(conv.id) ? 1 : 0, transition: "opacity 0.15s" }}
-                  >
-                    {pinnedConvIds.has(conv.id) ? <Pin size={12} fill="var(--primary-600)" /> : <PinOff size={12} />}
-                  </button>
-                </div>
-              );
-            })
-          ) : (
-            <div className="chat-empty-state">
-              <strong style={{ color: "#e8eaf0", fontSize: "0.88rem" }}>No conversations found</strong>
-              <span style={{ fontSize: "0.78rem", color: "#6b7280" }}>Start a new thread.</span>
-              <button className="btn btn-primary btn-sm" type="button" onClick={() => setShowCompose(true)} style={{ marginTop: 8 }}>New chat</button>
-            </div>
-          )}
-        </div>
-      </section>
-
+    <div>
       {/* Message Area */}
       <main className="chat-stage">
-        {activeConversation ? (
-          <>
-            <div className="chat-stage-head">
-              <div className="chat-stage-contact">
-                <button
-                  type="button"
-                <div className="chat-stage-contact-avatar" style={{ background: avatarColor(activeConversation.id) }}>
-                  {initials(displayName)}
+          {activeConversation ? (
+            <>
+              <div className="chat-stage-head">
+                <div className="chat-stage-contact">
+                  <div className="chat-stage-contact-avatar" style={{ background: avatarColor(activeConversation.id) }}>
+                    {initials(conversationDisplayName(activeConversation))}
+                  </div>
+                  <div>
+                    <div className="chat-stage-title">{conversationDisplayName(activeConversation)}</div>
+                    <div className={`chat-stage-subtitle ${status !== "open" ? "offline" : ""}`}>
+                      {activeTyping.length > 0
+                        ? "typing…"
+                        : status === "connecting"
+                        ? "Connecting…"
+                        : activeConversation.type === "direct"
+                        ? isConversationOnline(activeConversation)
+                          ? "Online"
+                          : `Last seen ${getLastSeenLabel(getOtherDirectMember(activeConversation)?.userId) ?? "recently"}`
+                        : status === "open"
+                        ? "Connected"
+                        : "Offline"}
+                    </div>
+                  </div>
                 </div>
-              );
-            })()}
-          <div>
-            <div className="chat-stage-title">{conversationDisplayName(activeConversation)}</div>
-            {(() => {
-              const isOnline = activeConversation.type === "direct"
-                ? isConversationOnline(activeConversation)
-                : status === "open";
-              const subtitleClass = activeTyping.length > 0
-                ? "typing"
-                : status === "connecting"
-                ? "connecting"
-                : isOnline
-                ? "online"
-                : "offline";
-              return (
-                <div className={`chat-stage-subtitle ${subtitleClass}`}>
-                  {activeTyping.length > 0
-                    ? "typing…"
-                    : status === "connecting"
-                    ? "Connecting…"
-                    : activeConversation.type === "direct"
-                    ? isOnline
-                      ? "Online"
-                      : `Last seen ${getLastSeenLabel(getOtherDirectMember(activeConversation)?.userId) ?? "recently"}`
-                    : isOnline
-                    ? "Connected"
-                    : "Offline"}
-                      : status === "open";
-                    const subtitleClass = activeTyping.length > 0
-                      ? "typing"
-                      : status === "connecting"
-                      ? "connecting"
-                      : isOnline
-                      ? "online"
-                      : "offline";
-                    return (
-                      <div className={`chat-stage-subtitle ${subtitleClass}`}>
-                        {activeTyping.length > 0
-                          ? "typing…"
-                          : status === "connecting"
-                          ? "Connecting…"
-                          : activeConversation.type === "direct"
-                          ? isOnline
-                            ? "Online"
-                            : `Last seen ${getLastSeenLabel(getOtherDirectMember(activeConversation)?.userId) ?? "recently"}`
-                          : isOnline
-                          ? "Connected"
-                          : "Offline"}
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
               <div className="chat-stage-actions" style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 {inConvSearchOpen ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "0.3rem 0.6rem", background: "#f1f5f9", borderRadius: 999 }}>
@@ -1498,7 +1282,7 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
                   aria-label={showInfo ? "Hide info" : "Show info"}
                   title={showInfo ? "Hide details" : "Show details"}
                   onClick={() => setShowInfo((v) => !v)}
-                  style={{ color: showInfo ? "var(--primary-600)" : undefined }}
+                  style={{ color: showInfo ? "#7c3aed" : undefined }}
                 >
                   <ChevronRight size={18} style={{ transform: showInfo ? "rotate(0deg)" : "rotate(180deg)", transition: "transform 0.2s" }} />
                 </button>
@@ -1536,7 +1320,7 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
                 : renderMessages(searchedMessages)}
 
               {isDragging && (
-                <div style={{ position: "absolute", inset: 12, border: "2px dashed var(--primary-500)", borderRadius: 16, background: "rgba(239,246,255,0.9)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--primary-700)", fontWeight: 800, fontSize: "1rem", pointerEvents: "none", zIndex: 10 }}>
+                <div style={{ position: "absolute", inset: 12, border: "2px dashed #7c3aed", borderRadius: 16, background: "rgba(237,233,254,0.85)", display: "flex", alignItems: "center", justifyContent: "center", color: "#5b21b6", fontWeight: 800, fontSize: "1rem", pointerEvents: "none" }}>
                   Drop file to attach
                 </div>
               )}
@@ -1550,7 +1334,7 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
                 >
                   <ArrowDown size={18} />
                   {newSinceScroll > 0 && (
-                    <span style={{ position: "absolute", top: -4, right: -4, minWidth: 18, height: 18, padding: "0 5px", borderRadius: 999, background: "var(--primary-600)", color: "#fff", fontSize: "0.65rem", fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                    <span style={{ position: "absolute", top: -4, right: -4, minWidth: 18, height: 18, padding: "0 5px", borderRadius: 999, background: "#7c3aed", color: "#fff", fontSize: "0.65rem", fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
                       {newSinceScroll > 99 ? "99+" : newSinceScroll}
                     </span>
                   )}
@@ -1587,7 +1371,7 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
                 onClick={() => setEmojiPickerOpen((value) => !value)}
                 disabled={conversationIsBlocked}
               >
-                <Smile size={18} />
+                🙂
               </button>
               <button
                 type="button"
@@ -1619,12 +1403,12 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
               )}
               <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
                 {replyTarget && (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "0.5rem 0.75rem", borderRadius: 14, background: "var(--primary-50)", border: "1px solid var(--primary-200)", fontSize: "0.8rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "0.5rem 0.75rem", borderRadius: 14, background: "#eef2ff", border: "1px solid #c7d2fe", fontSize: "0.8rem" }}>
                     <div style={{ overflow: "hidden" }}>
-                      <div style={{ fontWeight: 700, color: "var(--primary-700)" }}>Replying to {deriveAuthor(replyTarget, meId, activeConversation?.title).label}</div>
-                      <div style={{ color: "var(--primary-600)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{replyTarget.text || replyTarget.mediaName || "Attachment"}</div>
+                      <div style={{ fontWeight: 700, color: "#4338ca" }}>Replying to {deriveAuthor(replyTarget, meId, activeConversation?.title).label}</div>
+                      <div style={{ color: "#4f46e5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{replyTarget.text || replyTarget.mediaName || "Attachment"}</div>
                     </div>
-                    <button type="button" onClick={() => setReplyToMessageId(null)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--primary-700)", fontWeight: 700 }}>Cancel</button>
+                    <button type="button" onClick={() => setReplyToMessageId(null)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#4338ca", fontWeight: 700 }}>Cancel</button>
                   </div>
                 )}
                 {pendingAttachment && (
@@ -1633,11 +1417,11 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
                       {pendingAttachment.mime.startsWith("image/") ? (
                         <img src={pendingAttachment.path} alt={pendingAttachment.filename} style={{ width: 34, height: 34, objectFit: "cover", borderRadius: 10, flexShrink: 0 }} />
                       ) : (
-                        <div style={{ width: 34, height: 34, borderRadius: 10, background: "var(--primary-50)", color: "var(--primary-600)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, flexShrink: 0 }}>FILE</div>
+                        <div style={{ width: 34, height: 34, borderRadius: 10, background: "#ede9fe", color: "#7c3aed", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, flexShrink: 0 }}>FILE</div>
                       )}
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pendingAttachment.filename}</span>
                     </div>
-                    <button type="button" onClick={() => setPendingAttachment(null)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--primary-600)" }}>Remove</button>
+                    <button type="button" onClick={() => setPendingAttachment(null)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#7c3aed" }}>Remove</button>
                   </div>
                 )}
                 {emojiPickerOpen && (
@@ -1702,171 +1486,105 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
             <>
               <div className="chat-info-card">
                 <div className="chat-info-card-hero">
-                  {(() => {
-                    const convAvatar = activeConversation.avatarFileId
-                      ? `/files/${activeConversation.avatarFileId}/download`
-                      : null;
-                    const otherParticipant = activeConversation.type === "direct" && activeConversation.participants?.length === 2
-                      ? activeConversation.participants.find(p => p.id !== meId)
-                      : null;
-                    const participantAvatar = otherParticipant?.profileImageFileId
-                      ? `/files/${otherParticipant.profileImageFileId}/download`
-                      : null;
-                    const avatarUrl = convAvatar || participantAvatar;
-                    const displayName = conversationDisplayName(activeConversation);
-
-                    if (avatarUrl) {
-                      return (
-                        <img
-                          src={avatarUrl}
-                          alt={displayName}
-                          className="chat-info-avatar"
-                          style={{ objectFit: "cover" }}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = "none";
-                            (e.target as HTMLImageElement).parentElement!.innerHTML = `<div class="chat-info-avatar" style="background: ${avatarColor(activeConversation.id)}">${initials(displayName)}</div>`;
-                          }}
-                        />
-                      );
-                    }
-                    return (
-                      <div className="chat-info-avatar" style={{ background: avatarColor(activeConversation.id) }}>
-                        {initials(displayName)}
-                      </div>
-                    );
-                  })()}
+                  <div className="chat-info-avatar" style={{ background: avatarColor(activeConversation.id) }}>{initials(conversationDisplayName(activeConversation))}</div>
                   <div className="chat-info-name">{conversationDisplayName(activeConversation)}</div>
-                  <div className="chat-info-role">
-                    {activeConversation.type} thread
-                    {conversationIsBlocked && (
-                      <span style={{ color: isBlockedByMe ? '#dc2626' : '#ea580c', marginLeft: 8, fontSize: '0.75rem' }}>
-                        {isBlockedByMe ? '• You blocked this chat' : '• You are blocked'}
-                      </span>
-                    )}
-                  </div>
+                  <div className="chat-info-role">{activeConversation.type} thread</div>
                 </div>
               </div>
 
-              <div className="chat-info-body">
-                {/* Block/Unblock - available for direct conversations only */}
-                {activeConversation.type === "direct" && activeConversation.members && (
-                  <div className="chat-info-action-row">
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${isBlockedByMe ? 'btn-primary' : 'btn-outline'}`}
-                      onClick={async () => {
-                        try {
-                          setIsBlocking(true);
-                          // Find peer user (the other member in direct conversation)
-                          const currentUserId = (await import('@/lib/api')).getCurrentUserId?.();
-                          const peerMember = activeConversation.members?.find((m: { userId: string }) => m.userId !== currentUserId);
-                          const peerUserId = peerMember?.userId;
-                          
-                          if (!peerUserId) {
-                            throw new Error("Could not find peer user to block/unblock");
-                          }
-                          
-                          console.log(`[Block] ${isBlockedByMe ? 'Unblocking' : 'Blocking'} user ${peerUserId}`);
-                          const result = isBlockedByMe ? await unblockUser(peerUserId) : await blockUser(peerUserId);
-                          console.log('[Block] Result:', result);
-                          
-                          // Update conversation state to reflect block status
-                          setConversations((prev) => prev.map((conv) => conv.id === activeConversation.id ? { ...conv, blockedByMe: !isBlockedByMe } : conv));
-                        } catch (err) {
-                          console.error('[Block] Error:', err);
-                          setError(err instanceof Error ? err.message : "Unable to update block status.");
-                        } finally {
-                          setIsBlocking(false);
-                        }
-                      }}
-                      disabled={isBlocking || isBlockedMe}
-                      style={{ width: '100%' }}
-                    >
-                      {isBlockedByMe ? "Unblock user" : isBlockedMe ? "You are blocked" : "Block user"}
-                    </button>
-                  </div>
-                )}
-
-                {/* Notifications row */}
-                <div className="chat-info-notif-row">
-                  <span className="notif-label">
-                    {mutedConvIds.has(activeConversation.id) ? <BellOff size={15} /> : <Bell size={15} />}
-                    {mutedConvIds.has(activeConversation.id) ? "Muted" : "Notifications on"}
-                  </span>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => toggleMute(activeConversation.id)}>
-                    {mutedConvIds.has(activeConversation.id) ? "Unmute" : "Mute"}
+              {activeConversation.type === "direct" && (
+                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={async () => {
+                      try {
+                        setIsBlocking(true);
+                        const result = isBlockedByMe ? await unblockConversation(activeConversation.id) : await blockConversation(activeConversation.id);
+                        setConversations((prev) => prev.map((conv) => conv.id === activeConversation.id ? { ...conv, blockedByMe: result.blockedByMe, blockedMe: result.blockedMe } : conv));
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "Unable to update block status.");
+                      } finally {
+                        setIsBlocking(false);
+                      }
+                    }}
+                    disabled={isBlocking}
+                  >
+                    {isBlockedByMe ? "Unblock user" : "Block user"}
                   </button>
                 </div>
+              )}
 
-                <div className="chat-info-section">
-                  <div className="chat-info-section-title">Shared media</div>
-                  {(() => {
-                    const photos = visibleMessages.filter((m) => !m.deletedAt && m.imageUrl);
-                    if (photos.length === 0) {
-                      return <div className="chat-empty-note">No photos shared yet.</div>;
-                    }
-                    return (
-                      <div className="chat-info-photos-grid">
-                        {photos.slice(-9).reverse().map((m) => (
-                          <a key={m.id} href={m.imageUrl} target="_blank" rel="noreferrer">
-                            <img src={m.imageUrl} alt={m.mediaName ?? ""} />
-                          </a>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                <div className="chat-info-section">
-                  <div className="chat-info-file-grid">
-                    {[
-                      { label: "Photos", value: fileStats.photos },
-                      { label: "Files", value: fileStats.files },
-                      { label: "Links", value: fileStats.links },
-                    ].map((item) => (
-                      <div key={item.label} className="chat-file-card">
-                        <span>{item.label}</span>
-                        <strong>{item.value}</strong>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="chat-info-section">
-                  <div className="chat-info-section-title">Members</div>
-                  <div className="chat-member-list">
-                    {activeRoster.map((person) => (
-                      <div key={person.id} className="chat-member-item">
-                        <div className="chat-member-avatar" style={{ background: avatarColor(person.id) }}>{person.initials}</div>
-                        <div className="chat-member-copy">
-                          <div className="chat-member-name">{person.name}</div>
-                          <div className="chat-member-role">{person.role}</div>
-                        </div>
-                        <span className={`chat-member-state ${person.online ? "online" : "offline"}`}>{person.online ? "●" : "○"}</span>
-                      </div>
-                    ))}
-                    {activeRoster.length === 0 && <div className="chat-empty-note">No members resolved yet.</div>}
-                  </div>
-                </div>
-
-                <div className="chat-info-section">
-                  <div className="chat-info-section-title">Details</div>
-                  <div className="chat-info-stats">
-                    <div><span>Last activity</span><strong>{relative(activeConversation.lastMessageAt ?? activeConversation.updatedAt ?? activeConversation.createdAt)}</strong></div>
-                    <div><span>Visibility</span><strong>{activeConversation.parentVisible ? "Parent visible" : "Private"}</strong></div>
-                    {activeConversation.type === "direct" && getOtherDirectMember(activeConversation) && (
-                      <div><span>Last seen</span><strong>{isConversationOnline(activeConversation) ? "Online now" : getLastSeenLabel(getOtherDirectMember(activeConversation)?.userId) ?? "Unknown"}</strong></div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="chat-info-note">Realtime sync active via backend socket.</div>
+              {/* Notifications row */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.6rem 0.85rem", borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0", marginBottom: 12, fontSize: "0.82rem", fontWeight: 600 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 8, color: "#475569" }}>
+                  {mutedConvIds.has(activeConversation.id) ? <BellOff size={15} /> : <Bell size={15} />}
+                  {mutedConvIds.has(activeConversation.id) ? "Muted" : "Notifications on"}
+                </span>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => toggleMute(activeConversation.id)} style={{ padding: "0.2rem 0.6rem", fontSize: "0.75rem" }}>
+                  {mutedConvIds.has(activeConversation.id) ? "Unmute" : "Mute"}
+                </button>
               </div>
+
+              <div className="chat-info-section-title">Shared media</div>
+              {(() => {
+                const photos = visibleMessages.filter((m) => !m.deletedAt && m.imageUrl);
+                if (photos.length === 0) {
+                  return <div className="chat-empty-note" style={{ marginBottom: 12 }}>No photos shared yet.</div>;
+                }
+                return (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, marginBottom: 12 }}>
+                    {photos.slice(-9).reverse().map((m) => (
+                      <a key={m.id} href={m.imageUrl} target="_blank" rel="noreferrer" style={{ display: "block", aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", border: "1px solid #e2e8f0" }}>
+                        <img src={m.imageUrl} alt={m.mediaName ?? ""} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                      </a>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginBottom: 12 }}>
+                {[
+                  { label: "Photos", value: fileStats.photos },
+                  { label: "Files", value: fileStats.files },
+                  { label: "Links", value: fileStats.links },
+                ].map((item) => (
+                  <div key={item.label} className="chat-file-card">
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                  </div>
+                ))}
+              </div>
+
+              <div className="chat-info-section-title">Members</div>
+              <div className="chat-member-list">
+                {activeRoster.map((person) => (
+                  <div key={person.id} className="chat-member-item">
+                    <div className="chat-member-avatar" style={{ background: avatarColor(person.id) }}>{person.initials}</div>
+                    <div className="chat-member-copy">
+                      <div className="chat-member-name">{person.name}</div>
+                      <div className="chat-member-role">{person.role}</div>
+                    </div>
+                    <span className={`chat-member-state ${person.online ? "online" : "offline"}`}>{person.online ? "●" : "○"}</span>
+                  </div>
+                ))}
+                {activeRoster.length === 0 && <div className="chat-empty-note">No members resolved yet.</div>}
+              </div>
+
+              <div className="chat-info-section-title">Details</div>
+              <div className="chat-info-stats">
+                <div><span>Last activity</span><strong>{relative(activeConversation.lastMessageAt ?? activeConversation.updatedAt ?? activeConversation.createdAt)}</strong></div>
+                <div><span>Visibility</span><strong>{activeConversation.parentVisible ? "Parent visible" : "Private"}</strong></div>
+                <div><span>Thread ID</span><strong>{activeConversation.id.slice(0, 8)}</strong></div>
+                {activeConversation.type === "direct" && getOtherDirectMember(activeConversation) && (
+                  <div><span>Last seen</span><strong>{isConversationOnline(activeConversation) ? "Online now" : getLastSeenLabel(getOtherDirectMember(activeConversation)?.userId) ?? "Unknown"}</strong></div>
+                )}
+              </div>
+
+              <div className="chat-info-note">Realtime sync active via backend socket.</div>
             </>
           ) : (
-            <div className="chat-info-body">
-              <div className="chat-empty-note">Open a thread to see details, files, and members.</div>
-            </div>
+            <div className="chat-empty-note">Open a thread to see details, files, and members.</div>
           )}
         </aside>
       )}
@@ -1880,48 +1598,21 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
               <button className="chat-stage-icon-btn" type="button" onClick={() => setForwardingMessageId(null)} aria-label="Close"><X size={16} /></button>
             </div>
             <div style={{ maxHeight: 380, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-              {sortedConversations.filter((c) => c.id !== activeConversationId).map((conv) => {
-                const convAvatar = conv.avatarFileId
-                  ? `/files/${conv.avatarFileId}/download`
-                  : null;
-                const otherParticipant = conv.type === "direct" && conv.participants?.length === 2
-                  ? conv.participants.find(p => p.id !== meId)
-                  : null;
-                const participantAvatar = otherParticipant?.profileImageFileId
-                  ? `/files/${otherParticipant.profileImageFileId}/download`
-                  : null;
-                const avatarUrl = convAvatar || participantAvatar;
-                const displayName = conversationDisplayName(conv);
-
-                return (
+              {sortedConversations.filter((c) => c.id !== activeConversationId).map((conv) => (
                 <button
                   key={conv.id}
                   type="button"
                   className="chat-member-option-row"
                   onClick={() => void handleForward(conv.id)}
                 >
-                  {avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt={displayName}
-                      className="chat-member-avatar"
-                      style={{ objectFit: "cover" }}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
-                        (e.target as HTMLImageElement).parentElement!.innerHTML = `<div class="chat-member-avatar" style="background: ${avatarColor(conv.id)}">${initials(displayName)}</div>`;
-                      }}
-                    />
-                  ) : (
-                    <div className="chat-member-avatar" style={{ background: avatarColor(conv.id) }}>{initials(displayName)}</div>
-                  )}
+                  <div className="chat-member-avatar" style={{ background: avatarColor(conv.id) }}>{initials(conversationDisplayName(conv))}</div>
                   <div className="chat-member-copy">
                     <div className="chat-member-name">{conversationDisplayName(conv)}</div>
                     <div className="chat-member-role">{conv.type === "direct" ? "Direct message" : "Group"}</div>
                   </div>
                   <span className="chat-member-action">Send</span>
                 </button>
-                );
-              })}
+              ))}
               {sortedConversations.filter((c) => c.id !== activeConversationId).length === 0 && (
                 <div className="chat-empty-note">No other conversations available.</div>
               )}
@@ -1982,13 +1673,23 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
             </div>
 
             {/* Role tabs: directory grouped by role */}
-            <div className="chat-modal-tabs">
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "0.5rem 0 0.75rem" }}>
               {(["all", "student", "teacher", "parent", "admin"] as const).map((tab) => (
                 <button
                   key={tab}
                   type="button"
                   onClick={() => setComposeRoleTab(tab)}
-                  className={`chat-modal-tab ${composeRoleTab === tab ? "active" : ""}`}
+                  style={{
+                    padding: "0.3rem 0.85rem",
+                    borderRadius: 999,
+                    border: "1px solid " + (composeRoleTab === tab ? "#7c3aed" : "#e5e7eb"),
+                    background: composeRoleTab === tab ? "#ede9fe" : "#fff",
+                    color: composeRoleTab === tab ? "#5b21b6" : "#475569",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    textTransform: "capitalize",
+                  }}
                 >
                   {tab === "all" ? "All" : `${tab}s`}
                 </button>

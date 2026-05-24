@@ -10,9 +10,7 @@ import { cachedFetch, invalidateCachePrefix } from "@/lib/cache";
 import TermSelector from "@/components/TermSelector";
 import { useTermStore } from "@/store/termStore";
 import { PageHeader, EmptyState } from "@/components/ui";
-import { ClipboardCheck, BookOpen, AlertCircle, ArrowLeft } from "lucide-react";
-import TablePagination from "@/components/TablePagination";
-import { useSearchParams, useRouter } from "next/navigation";
+import { ClipboardCheck, BookOpen, AlertCircle } from "lucide-react";
 
 type AttendanceStatus = "present" | "absent" | "excused";
 type ExcuseEntry = { note: string; saved: boolean };
@@ -60,10 +58,6 @@ function Skeleton() {
 }
 
 export default function TeacherAttendance() {
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const fromHomeroom = searchParams?.get("from") === "homeroom";
-
     const [isClient, setIsClient] = useState(false);
     useEffect(() => { setIsClient(true); }, []);
     const user = useCurrentUser("teacher");
@@ -86,13 +80,6 @@ export default function TeacherAttendance() {
 
     const [viewMode, setViewMode] = useState<"mark" | "tabular">("mark");
     const [drafts, setDrafts] = useState<Record<string, DraftState>>({});
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
-
-    // Reset page when offering changes
-    useEffect(() => {
-        setPage(0);
-    }, [selectedOfferingId]);
     const [toast, setToast] = useState<string | null>(null);
     const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<StudentRow | null>(null);
@@ -203,10 +190,6 @@ export default function TeacherAttendance() {
     // ── Derived state ──
     const students = studentsByOffering[selectedOfferingId] ?? [];
     const sessions = sessionsByOffering[selectedOfferingId] ?? [];
-
-    const visibleStudents = useMemo(() => {
-        return students.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
-    }, [students, page, rowsPerPage]);
     const currentSession = useMemo(() => sessions.find(s => s.date === today), [sessions, today]);
     const isLocked = !!currentSession;
     const currentMarks = currentSession ? (marksBySession[currentSession.id] ?? []) : [];
@@ -332,43 +315,7 @@ export default function TeacherAttendance() {
     if (err) {
         return (
             <div className="page-wrapper">
-                {fromHomeroom && (
-                    <div style={{ marginBottom: "1rem" }}>
-                        <button
-                            type="button"
-                            onClick={() => router.push("/teacher/homeroom")}
-                            style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "0.5rem",
-                                background: "#fff",
-                                border: "1.5px solid var(--gray-150)",
-                                borderRadius: "12px",
-                                padding: "0.55rem 1.15rem",
-                                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
-                                color: "var(--gray-800)",
-                                fontSize: "0.85rem",
-                                fontWeight: 700,
-                                cursor: "pointer",
-                                transition: "all 0.2s ease-in-out",
-                            }}
-                            onMouseEnter={e => {
-                                e.currentTarget.style.borderColor = "var(--primary-300)";
-                                e.currentTarget.style.boxShadow = "0 4px 16px rgba(37, 99, 235, 0.08)";
-                                e.currentTarget.style.transform = "translateY(-1px)";
-                            }}
-                            onMouseLeave={e => {
-                                e.currentTarget.style.borderColor = "var(--gray-150)";
-                                e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.04)";
-                                e.currentTarget.style.transform = "none";
-                            }}
-                        >
-                            <ArrowLeft size={14} strokeWidth={3} style={{ color: "var(--primary-600)" }} />
-                            <span>Back to Homeroom</span>
-                        </button>
-                    </div>
-                )}
-                <PageHeader kicker="Today" title="Attendance" subtitle="Error" icon={<ClipboardCheck size={22} />} variant="dark" />
+                <PageHeader kicker="Today" title="Attendance" subtitle="Error" icon={<ClipboardCheck size={22} />} variant="light" />
                 <EmptyState icon={<AlertCircle size={26} />} title="Couldn't load attendance" description={err} action={<button className="btn btn-primary" onClick={() => void loadData(true)} style={{ borderRadius: 12 }}>Try again</button>} />
             </div>
         );
@@ -377,43 +324,7 @@ export default function TeacherAttendance() {
     if (offerings.length === 0) {
         return (
             <div className="page-wrapper">
-                {fromHomeroom && (
-                    <div style={{ marginBottom: "1rem" }}>
-                        <button
-                            type="button"
-                            onClick={() => router.push("/teacher/homeroom")}
-                            style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "0.5rem",
-                                background: "#fff",
-                                border: "1.5px solid var(--gray-150)",
-                                borderRadius: "12px",
-                                padding: "0.55rem 1.15rem",
-                                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
-                                color: "var(--gray-800)",
-                                fontSize: "0.85rem",
-                                fontWeight: 700,
-                                cursor: "pointer",
-                                transition: "all 0.2s ease-in-out",
-                            }}
-                            onMouseEnter={e => {
-                                e.currentTarget.style.borderColor = "var(--primary-300)";
-                                e.currentTarget.style.boxShadow = "0 4px 16px rgba(37, 99, 235, 0.08)";
-                                e.currentTarget.style.transform = "translateY(-1px)";
-                            }}
-                            onMouseLeave={e => {
-                                e.currentTarget.style.borderColor = "var(--gray-150)";
-                                e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.04)";
-                                e.currentTarget.style.transform = "none";
-                            }}
-                        >
-                            <ArrowLeft size={14} strokeWidth={3} style={{ color: "var(--primary-600)" }} />
-                            <span>Back to Homeroom</span>
-                        </button>
-                    </div>
-                )}
-                <PageHeader kicker="Today" title="Attendance" subtitle={todayStr} icon={<ClipboardCheck size={22} />} variant="dark" />
+                <PageHeader kicker="Today" title="Attendance" subtitle={todayStr} icon={<ClipboardCheck size={22} />} variant="light" />
                 <EmptyState icon={<BookOpen size={26} />} title="No classes assigned" description="Ask an admin to assign you to class offerings for this academic year." />
             </div>
         );
@@ -421,42 +332,6 @@ export default function TeacherAttendance() {
 
     return (
         <div className="page-wrapper">
-            {fromHomeroom && (
-                <div style={{ marginBottom: "1rem" }}>
-                    <button
-                        type="button"
-                        onClick={() => router.push("/teacher/homeroom")}
-                        style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "0.5rem",
-                            background: "#fff",
-                            border: "1.5px solid var(--gray-150)",
-                            borderRadius: "12px",
-                            padding: "0.55rem 1.15rem",
-                            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
-                            color: "var(--gray-800)",
-                            fontSize: "0.85rem",
-                            fontWeight: 700,
-                            cursor: "pointer",
-                            transition: "all 0.2s ease-in-out",
-                        }}
-                        onMouseEnter={e => {
-                            e.currentTarget.style.borderColor = "var(--primary-300)";
-                            e.currentTarget.style.boxShadow = "0 4px 16px rgba(37, 99, 235, 0.08)";
-                            e.currentTarget.style.transform = "translateY(-1px)";
-                        }}
-                        onMouseLeave={e => {
-                            e.currentTarget.style.borderColor = "var(--gray-150)";
-                            e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.04)";
-                            e.currentTarget.style.transform = "none";
-                        }}
-                    >
-                        <ArrowLeft size={14} strokeWidth={3} style={{ color: "var(--primary-600)" }} />
-                        <span>Back to Homeroom</span>
-                    </button>
-                </div>
-            )}
             {toast && (
                 <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, background: "#fff", borderRadius: 14, padding: "1rem 1.5rem", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1.5px solid var(--success)", display: "flex", alignItems: "center", gap: "0.75rem" }}>
                     <div style={{ width: 32, height: 32, borderRadius: 8, background: "var(--success-light)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--success)" }}>
@@ -544,7 +419,7 @@ export default function TeacherAttendance() {
                 title="Attendance"
                 subtitle={todayStr}
                 icon={<ClipboardCheck size={22} />}
-                variant="dark"
+                variant="light"
                 actions={(
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                         <TermSelector academicYearId={activeYearId} readOnly={false} />
@@ -554,135 +429,29 @@ export default function TeacherAttendance() {
                 )}
             />
 
-            {/* Class Tabs (Buttons with "More" dropdown matching Students tab) */}
-            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                {visibleClasses.map(off => (
-                    <button 
-                        key={off.id} 
-                        className={`btn ${selectedOfferingId === off.id ? "btn-primary" : "btn-secondary"}`} 
-                        onClick={() => setSelectedOfferingId(off.id)}
-                        style={{ display: "flex", alignItems: "center", gap: "0.45rem", padding: "0.6rem 1.25rem", borderRadius: "12px", fontSize: "0.85rem", fontWeight: 600 }}
-                    >
-                        {offeringLabel(off)}
-                        {hasSessionToday(off.id) ? " • Locked" : ""}
-                    </button>
-                ))}
-
-                {hiddenClasses.length > 0 && (
-                    <div ref={moreRef} style={{ position: "relative" }}>
-                        <button
-                            type="button"
-                            className={`btn ${hiddenClasses.some(c => c.id === selectedOfferingId) ? "btn-primary" : "btn-secondary"}`}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowMoreDropdown(!showMoreDropdown);
-                            }}
-                            style={{ 
-                                display: "flex", 
-                                alignItems: "center", 
-                                gap: "0.45rem", 
-                                padding: "0.6rem 1.25rem", 
-                                borderRadius: "12px", 
-                                fontSize: "0.85rem", 
-                                fontWeight: 600 
-                            }}
-                        >
-                            {hiddenClasses.some(c => c.id === selectedOfferingId) 
-                                ? offeringLabel(hiddenClasses.find(c => c.id === selectedOfferingId)!) 
-                                : "More"}
-                            <svg 
-                                width="12" 
-                                height="12" 
-                                viewBox="0 0 24 24" 
-                                fill="none" 
-                                stroke="currentColor" 
-                                strokeWidth="2.5" 
-                                strokeLinecap="round" 
-                                strokeLinejoin="round"
-                                style={{ 
-                                    transform: showMoreDropdown ? "rotate(180deg)" : "rotate(0deg)", 
-                                    transition: "transform 0.2s ease",
-                                    marginLeft: "0.15rem"
-                                }}
-                            >
-                                <path d="m6 9 6 6 6-6"/>
-                            </svg>
+            <div className="card" style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {visibleClasses.map(off => (
+                        <button key={off.id} className={`btn ${selectedOfferingId === off.id ? "btn-primary" : "btn-secondary"}`} onClick={() => setSelectedOfferingId(off.id)}>
+                            {offeringLabel(off)}
+                            {hasSessionToday(off.id) ? " • Locked" : ""}
                         </button>
-                        
-                        {showMoreDropdown && (
-                            <div 
-                                style={{
-                                    position: "absolute",
-                                    top: "calc(100% + 8px)",
-                                    right: 0,
-                                    zIndex: 100,
-                                    background: "#fff",
-                                    border: "1.5px solid var(--gray-100)",
-                                    borderRadius: "20px",
-                                    padding: "0.6rem",
-                                    minWidth: "220px",
-                                    boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: "0.35rem",
-                                    animation: "fadeIn 0.15s ease-out"
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                {hiddenClasses.map(off => {
-                                    const isSelected = selectedOfferingId === off.id;
-                                    return (
-                                        <button
-                                            key={off.id}
-                                            type="button"
-                                            onClick={() => {
-                                                setSelectedOfferingId(off.id);
-                                                setShowMoreDropdown(false);
-                                            }}
-                                            style={{
-                                                padding: "0.65rem 1rem",
-                                                borderRadius: "12px",
-                                                background: isSelected ? "var(--primary-50)" : "transparent",
-                                                color: isSelected ? "var(--primary-700)" : "var(--gray-700)",
-                                                border: "none",
-                                                textAlign: "left",
-                                                fontSize: "0.85rem",
-                                                fontWeight: 600,
-                                                cursor: "pointer",
-                                                transition: "all 0.15s ease",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "space-between"
-                                            }}
-                                            onMouseEnter={e => {
-                                                if (!isSelected) {
-                                                    e.currentTarget.style.background = "var(--gray-50)";
-                                                    e.currentTarget.style.color = "var(--gray-900)";
-                                                }
-                                            }}
-                                            onMouseLeave={e => {
-                                                if (!isSelected) {
-                                                    e.currentTarget.style.background = "transparent";
-                                                    e.currentTarget.style.color = "var(--gray-700)";
-                                                }
-                                            }}
-                                        >
-                                            <span style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
-                                                {offeringLabel(off)}
-                                                {hasSessionToday(off.id) && (
-                                                    <span style={{ fontSize: "0.7rem", color: "var(--gray-400)", fontStyle: "italic" }}>• Locked</span>
-                                                )}
-                                            </span>
-                                            {isSelected && (
-                                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--primary-600)" }} />
-                                            )}
+                    ))}
+                    {hiddenClasses.length > 0 && (
+                        <div ref={moreRef} style={{ position: "relative" }}>
+                            <button className="btn btn-secondary" onClick={() => setShowMoreDropdown(v => !v)}>More</button>
+                            {showMoreDropdown && (
+                                <div className="card" style={{ position: "absolute", top: "110%", right: 0, zIndex: 50, minWidth: 240, padding: 8 }}>
+                                    {hiddenClasses.map(off => (
+                                        <button key={off.id} className="btn btn-secondary" style={{ width: "100%", justifyContent: "flex-start", marginBottom: 6 }} onClick={() => { setSelectedOfferingId(off.id); setShowMoreDropdown(false); }}>
+                                            {offeringLabel(off)}
                                         </button>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-                )}
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className="card" style={{ marginBottom: 16 }}>
@@ -698,183 +467,35 @@ export default function TeacherAttendance() {
                 </div>
             </div>
 
-            <div className="card" style={{ padding: 0, border: "1.5px solid var(--gray-100)" }}>
-                <div className="table-wrapper" style={{ overflowX: "auto", borderRadius: "16px 16px 0 0", overflow: "hidden" }}>
-                    <table style={{ margin: 0, borderCollapse: "collapse", width: "100%" }}>
-                        <thead>
-                            <tr>
-                                <th style={{ width: "30%", padding: "1rem 1.5rem" }}>Student</th>
-                                <th style={{ width: "30%", padding: "1rem 1.5rem", textAlign: "center" }}>Status</th>
-                                <th style={{ width: "30%", padding: "1rem 1.5rem" }}>Excuse Note</th>
-                                <th style={{ width: "10%", padding: "1rem 1.5rem", textAlign: "center" }}>History</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {visibleStudents.map(student => {
-                                const status = attendance[student.id] ?? "present";
-                                const note = excuseEntries[student.id]?.note ?? "";
-                                return (
-                                    <tr key={student.id} style={{ borderBottom: "1px solid var(--gray-100)" }}>
-                                        <td style={{ padding: "0.75rem 1.5rem" }}>
-                                            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                                                <div style={{
-                                                    width: 36, height: 36, borderRadius: "50%",
-                                                    background: "var(--primary-50)", color: "var(--primary-600)",
-                                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                                    fontWeight: 700, fontSize: "0.85rem", flexShrink: 0
-                                                }}>
-                                                    {student.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
-                                                </div>
-                                                <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                                                    <span style={{ fontWeight: 600, color: "var(--gray-900)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{student.name}</span>
-                                                    <span style={{ fontSize: "0.75rem", color: "var(--gray-500)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{student.email}</span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td style={{ padding: "0.75rem 1.5rem", textAlign: "center" }}>
-                                            <div style={{ display: "inline-flex", background: "var(--gray-50)", padding: 4, borderRadius: 12, border: "1px solid var(--gray-100)" }}>
-                                                <button
-                                                    type="button"
-                                                    disabled={isLocked}
-                                                    onClick={() => togglePresent(student.id)}
-                                                    style={{
-                                                        padding: "0.4rem 0.9rem",
-                                                        borderRadius: 8,
-                                                        border: "none",
-                                                        fontSize: "0.8rem",
-                                                        fontWeight: 600,
-                                                        cursor: isLocked ? "not-allowed" : "pointer",
-                                                        background: status === "present" ? "var(--success)" : "transparent",
-                                                        color: status === "present" ? "white" : "var(--gray-600)",
-                                                        transition: "all 0.15s ease",
-                                                    }}
-                                                >
-                                                    Present
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    disabled={isLocked}
-                                                    onClick={() => setAbsent(student.id)}
-                                                    style={{
-                                                        padding: "0.4rem 0.9rem",
-                                                        borderRadius: 8,
-                                                        border: "none",
-                                                        fontSize: "0.8rem",
-                                                        fontWeight: 600,
-                                                        cursor: isLocked ? "not-allowed" : "pointer",
-                                                        background: status === "absent" ? "var(--danger)" : "transparent",
-                                                        color: status === "absent" ? "white" : "var(--gray-600)",
-                                                        transition: "all 0.15s ease",
-                                                    }}
-                                                >
-                                                    Absent
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    disabled={isLocked}
-                                                    onClick={() => setExcused(student.id)}
-                                                    style={{
-                                                        padding: "0.4rem 0.9rem",
-                                                        borderRadius: 8,
-                                                        border: "none",
-                                                        fontSize: "0.8rem",
-                                                        fontWeight: 600,
-                                                        cursor: isLocked ? "not-allowed" : "pointer",
-                                                        background: status === "excused" ? "#d97706" : "transparent",
-                                                        color: status === "excused" ? "white" : "var(--gray-600)",
-                                                        transition: "all 0.15s ease",
-                                                    }}
-                                                >
-                                                    Excused
-                                                </button>
-                                            </div>
-                                        </td>
-                                        <td style={{ padding: "0.75rem 1.5rem" }}>
-                                            {status === "excused" ? (
-                                                <div style={{ display: "flex", gap: 8, maxWidth: "320px" }}>
-                                                    <input
-                                                        value={note}
-                                                        onChange={(e) => updateNote(student.id, e.target.value)}
-                                                        placeholder="Excuse note"
-                                                        disabled={isLocked}
-                                                        style={{
-                                                            flex: 1,
-                                                            padding: "0.35rem 0.75rem",
-                                                            borderRadius: 10,
-                                                            border: "1px solid var(--gray-200)",
-                                                            fontSize: "0.8rem",
-                                                            outline: "none",
-                                                        }}
-                                                    />
-                                                    {!isLocked && (
-                                                        <button
-                                                            className="btn btn-secondary"
-                                                            onClick={() => saveNote(student.id)}
-                                                            disabled={!note.trim()}
-                                                            style={{
-                                                                borderRadius: 10,
-                                                                padding: "0.35rem 0.75rem",
-                                                                fontSize: "0.8rem",
-                                                                fontWeight: 600,
-                                                                whiteSpace: "nowrap"
-                                                            }}
-                                                        >
-                                                            Save
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <span style={{ color: "var(--gray-400)", fontSize: "0.85rem" }}>—</span>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: "0.75rem 1.5rem", textAlign: "center" }}>
-                                            <button
-                                                type="button"
-                                                className="btn btn-secondary"
-                                                onClick={() => setSelectedStudent(student)}
-                                                style={{
-                                                    borderRadius: 10,
-                                                    padding: "0.4rem 0.8rem",
-                                                    fontSize: "0.8rem",
-                                                    fontWeight: 600,
-                                                    display: "inline-flex",
-                                                    alignItems: "center",
-                                                    gap: 6
-                                                }}
-                                            >
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M12 8v4l3 3" />
-                                                    <circle cx="12" cy="12" r="10" />
-                                                </svg>
-                                                History
-                                            </button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                            {students.length === 0 && (
-                                <tr>
-                                    <td colSpan={4} style={{ padding: "3rem", textAlign: "center", color: "var(--gray-400)" }}>
-                                        No students enrolled in this class.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
+            <div className="card">
+                <div style={{ display: "grid", gap: 10 }}>
+                    {students.map(student => {
+                        const status = attendance[student.id] ?? "present";
+                        const note = excuseEntries[student.id]?.note ?? "";
+                        return (
+                            <div key={student.id} style={{ padding: 12, border: "1px solid var(--gray-100)", borderRadius: 12, display: "grid", gap: 10 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                                    <div>
+                                        <div style={{ fontWeight: 600 }}>{student.name}</div>
+                                        <div style={{ fontSize: 12, color: "var(--gray-500)" }}>{student.email}</div>
+                                    </div>
+                                    <div style={{ display: "flex", gap: 8 }}>
+                                        <button className={`btn ${status === "present" ? "btn-primary" : "btn-secondary"}`} onClick={() => togglePresent(student.id)} disabled={isLocked}>Present</button>
+                                        <button className={`btn ${status === "absent" ? "btn-primary" : "btn-secondary"}`} onClick={() => setAbsent(student.id)} disabled={isLocked}>Absent</button>
+                                        <button className={`btn ${status === "excused" ? "btn-primary" : "btn-secondary"}`} onClick={() => setExcused(student.id)} disabled={isLocked}>Excused</button>
+                                        <button className="btn btn-secondary" onClick={() => setSelectedStudent(student)}>History</button>
+                                    </div>
+                                </div>
+                                {status === "excused" && (
+                                    <div style={{ display: "flex", gap: 8 }}>
+                                        <input value={note} onChange={(e) => updateNote(student.id, e.target.value)} placeholder="Excuse note" style={{ flex: 1 }} />
+                                        <button className="btn btn-secondary" onClick={() => saveNote(student.id)} disabled={!note.trim()}>Save note</button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
-
-                {students.length > 0 && (
-                    <TablePagination
-                        total={students.length}
-                        page={page}
-                        rowsPerPage={rowsPerPage}
-                        onPageChange={setPage}
-                        onRowsPerPageChange={(n) => {
-                            setRowsPerPage(n);
-                            setPage(0);
-                        }}
-                    />
-                )}
             </div>
         </div>
     );

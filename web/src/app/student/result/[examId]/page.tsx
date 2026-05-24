@@ -53,22 +53,26 @@ export default function ExamResult() {
     const formatTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
     // Build question review data
-    const questions = (data.questions || []).map((q, i) => {
+    const questions = (data.questions || []).map((q: any, i: number) => {
         let options: string[] | undefined;
         if (q.optionsJson) { try { options = JSON.parse(q.optionsJson); } catch { /* ignore */ } }
         let type: QuestionType = "fillin";
         if (q.type === "mcq" || q.type === "choose") type = "mcq";
         else if (q.type === "truefalse") type = "truefalse";
-        else if (q.type === "fillin") type = "fillin";
+        else if (q.type === "fillin" || q.type === "short_answer") type = "fillin";
+        else if (q.type === "long_answer") type = "fillin"; // For now treat long answer as fillin in result view
+
         return {
             id: q.id,
-            order: q.orderIndex + 1,
+            order: (q.orderIndex ?? i) + 1,
             type,
             text: q.stem,
             options,
-            correctAnswer: q.answerKey ?? "",
+            correctAnswer: q.answerKey ?? "Manual Review",
             studentAnswer: q.studentAnswer ?? "",
-            points: q.points,
+            points: q.points || 0,
+            pointsEarned: q.pointsEarned ?? 0,
+            isCorrect: q.isCorrect,
         };
     });
 
