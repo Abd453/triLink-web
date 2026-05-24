@@ -140,14 +140,12 @@ export default function AdminSettings() {
       </div>
 
       {err && (
-        <div className="card" style={{ display: "flex", alignItems: "center", gap: 8, padding: "0.8rem 1.2rem", background: "#fef2f2", border: "1px solid #fca5a5", color: "#b91c1c", fontWeight: 700, borderRadius: 12, marginBottom: "1.2rem", fontSize: "0.88rem" }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#dc2626" }} />
+        <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, background: "#dc2626", color: "#fff", padding: "0.75rem 1.25rem", borderRadius: 10, fontWeight: 600, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", maxWidth: 340 }}>
           {err}
         </div>
       )}
       {msg && (
-        <div className="card" style={{ display: "flex", alignItems: "center", gap: 8, padding: "0.8rem 1.2rem", background: "#f0fdf4", border: "1px solid #86efac", color: "#15803d", fontWeight: 700, borderRadius: 12, marginBottom: "1.2rem", fontSize: "0.88rem" }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#16a34a" }} />
+        <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, background: "var(--success, #22c55e)", color: "#fff", padding: "0.75rem 1.25rem", borderRadius: 10, fontWeight: 600, boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>
           {msg}
         </div>
       )}
@@ -243,12 +241,26 @@ export default function AdminSettings() {
               </label>
               <label className="settings-label">
                 Timezone (optional)
-                <input
+                <Select
                   value={schoolTimezone}
                   onChange={(e) => setSchoolTimezone(e.target.value)}
-                  placeholder="e.g. Africa/Addis_Ababa"
-                  className="settings-input"
-                />
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    marginTop: 6,
+                    padding: "0.6rem 1rem",
+                    borderRadius: "20px",
+                    border: "1px solid var(--primary-200)",
+                    background: "var(--primary-50)",
+                    color: schoolTimezone ? "var(--primary-800)" : "var(--gray-400)",
+                    fontWeight: 600,
+                  }}
+                >
+                  <option value="">— Select timezone —</option>
+                  {Intl.supportedValuesOf("timeZone").map((tz) => (
+                    <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>
+                  ))}
+                </Select>
               </label>
               <label className="settings-label">
                 Date format

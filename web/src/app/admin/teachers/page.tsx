@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Building2, Sparkles, Users, Search } from "lucide-react";
+import { BookOpen, Building2, AlertTriangle, Users, Search } from "lucide-react";
 import { type PublicUser, listUsers, patchUser } from "@/lib/admin-api";
 import Select from "@/components/Select";
 import TablePagination from "@/components/TablePagination";
@@ -12,7 +12,7 @@ function TeachersSkeleton() {
   return (
     <div className="page-wrapper">
       <PageHeaderSkeleton />
-      <StatGridSkeleton count={3} />
+      <StatGridSkeleton count={4} />
       <TableSkeleton rows={6} columns={5} />
     </div>
   );
@@ -88,6 +88,7 @@ export default function AdminTeachers() {
 
   const withSubject = rows.filter((t) => !!t.subject).length;
   const withDepartment = rows.filter((t) => !!t.department).length;
+  const unassigned = rows.filter((t) => !t.subject && !t.department).length;
 
   const openEdit = (t: PublicUser) => {
     setSaveErr(null);
@@ -186,6 +187,16 @@ export default function AdminTeachers() {
             <div className="stat-label admin-dash-stat-label">With department</div>
             <div className="stat-value">{withDepartment}</div>
             <div className="admin-dash-stat-note">Departmentalized staff</div>
+          </div>
+        </div>
+        <div className="stat-card admin-dash-stat-card">
+          <div className="stat-icon admin-dash-stat-icon" style={{ background: "#fef2f2", color: "#dc2626" }}>
+            <AlertTriangle size={20} />
+          </div>
+          <div className="stat-info">
+            <div className="stat-label admin-dash-stat-label">Unassigned</div>
+            <div className="stat-value">{unassigned}</div>
+            <div className="admin-dash-stat-note">No subject or dept</div>
           </div>
         </div>
       </div>

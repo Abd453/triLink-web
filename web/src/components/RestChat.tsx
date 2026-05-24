@@ -1221,9 +1221,115 @@ export default function RestChat({ role: forcedRole }: RestChatProps) {
   }
 
   return (
-    <div>
+    <div className="chat-layout" style={showInfo ? undefined : { gridTemplateColumns: "clamp(230px, 21vw, 280px) minmax(0, 1fr)" }}>
+      {/* Left sidebar — conversation list */}
+      <aside className="chat-list-card" style={{ background: "#fff", display: "flex", flexDirection: "column", borderRadius: 16, overflow: "hidden" }}>
+        <div style={{ padding: "0.9rem", display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+          <div className="chat-list-head">
+            <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "#1a1a2e" }}>Messages</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {status === "open" ? (
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} title="Connected" />
+              ) : (
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b", display: "inline-block" }} title="Connecting…" />
+              )}
+              <button
+                type="button"
+                className="chat-stage-icon-btn"
+                style={{ width: 28, height: 28, borderRadius: 8, background: "var(--primary-600)", color: "#fff", border: "none", display: "flex", alignItems: "center", justifyContent: "center" }}
+                onClick={() => setShowCompose(true)}
+                aria-label="New conversation"
+                title="New conversation"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="chat-tools-row">
+            <div className="chat-search-wrap">
+              <Search size={13} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search conversations…"
+              />
+            </div>
+          </div>
+
+          <div className="chat-filter-row">
+            {(["all", "direct", "group"] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                className={`chat-filter-chip ${filter === f ? "active" : ""}`}
+                onClick={() => setFilter(f)}
+              >
+                {f === "all" ? `All (${conversationCounts.all})` : f === "direct" ? `DMs (${conversationCounts.direct})` : `Groups (${conversationCounts.group})`}
+              </button>
+            ))}
+          </div>
+
+          {error && <div className="chat-alert">{error}</div>}
+
+          <div className="chat-conv-scroll">
+            {loadingConvs ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="chat-conv-skeleton shimmer" />
+              ))
+            ) : filteredConversations.length === 0 ? (
+              <div className="chat-empty-state" style={{ padding: "2rem 1rem", fontSize: "0.82rem" }}>
+                {conversations.length === 0 ? "No conversations yet. Start one with the + button." : "No matches for your search."}
+              </div>
+            ) : (
+              filteredConversations.map((conv) => {
+                const isActive = conv.id === activeConversationId;
+                const unread = unreadCounts[conv.id] ?? 0;
+                const typing = typingUsers[conv.id] ?? [];
+                const isPinned = pinnedConvIds.has(conv.id);
+                const displayName = conversationDisplayName(conv);
+                const lastText = typing.length > 0 ? "typing…" : conv.lastMessageText ?? "";
+
+                return (
+                  <button
+                    key={conv.id}
+                    type="button"
+                    className={`chat-conv-card ${isActive ? "active" : ""}`}
+                    onClick={() => setActiveConversationId(conv.id)}
+                  >
+                    <div className="chat-conv-avatar-shell">
+                      <div className={`chat-conv-avatar-large ${conv.type}`}>
+                        {initials(displayName)}
+                      </div>
+                      {conv.type === "direct" && (
+                        <span className={`chat-avatar-dot ${isConversationOnline(conv) ? "online" : "offline"}`} />
+                      )}
+                    </div>
+                    <div className="chat-conv-copy">
+                      <div className="chat-conv-card-title">
+                        {isPinned && <Pin size={10} style={{ marginRight: 3, opacity: 0.5 }} />}
+                        {displayName}
+                      </div>
+                      <div className={`chat-conv-card-sub ${typing.length > 0 ? "typing" : ""}`}>
+                        {lastText || <span style={{ opacity: 0.4 }}>No messages yet</span>}
+                      </div>
+                    </div>
+                    <div className="chat-conv-meta">
+                      {conv.lastMessageAt && (
+                        <span>{relative(conv.lastMessageAt)}</span>
+                      )}
+                      {unread > 0 && <strong>{unread > 99 ? "99+" : unread}</strong>}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </aside>
+
       {/* Message Area */}
-      <main className="chat-stage">
+      <main className="chat-stage" style={{ borderRadius: 16, overflow: "hidden" }}>
           {activeConversation ? (
             <>
               <div className="chat-stage-head">

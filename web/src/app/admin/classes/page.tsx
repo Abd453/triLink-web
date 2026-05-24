@@ -556,9 +556,9 @@ export default function AdminClasses() {
             <GraduationCap size={20} />
           </div>
           <div className="stat-info">
-            <div className="stat-label admin-dash-stat-label">Students scope</div>
-            <div className="stat-value">{years.length ? "Open" : "Pending"}</div>
-            <div className="admin-dash-stat-note">Based on enrollments</div>
+            <div className="stat-label admin-dash-stat-label">Grades configured</div>
+            <div className="stat-value">{grades.length}</div>
+            <div className="admin-dash-stat-note">School structure</div>
           </div>
         </div>
         <div className="stat-card admin-dash-stat-card">
@@ -566,9 +566,9 @@ export default function AdminClasses() {
             <CalendarDays size={20} />
           </div>
           <div className="stat-info">
-            <div className="stat-label admin-dash-stat-label">Active year</div>
-            <div className="stat-value" style={{ fontSize: "1.1rem" }}>{activeYear?.label ?? "None"}</div>
-            <div className="admin-dash-stat-note">Switch or activate below</div>
+            <div className="stat-label admin-dash-stat-label">Academic years</div>
+            <div className="stat-value">{years.length}</div>
+            <div className="admin-dash-stat-note">{activeYear ? `Active: ${activeYear.label}` : "No active year"}</div>
           </div>
         </div>
       </div>
@@ -587,7 +587,7 @@ export default function AdminClasses() {
             onChange={(e) => setYearId(e.target.value)}
             style={{ padding: "0.6rem 1rem", borderRadius: "20px", border: "1px solid var(--primary-200)", background: "var(--primary-50)", color: "var(--primary-800)", fontWeight: 600, minWidth: 220, outline: "none", cursor: "pointer" }}
           >
-            {years.length === 0 && <option value="">No years — create one under School setup</option>}
+            {years.length === 0 && <option value="">No academic years</option>}
             {years.map((y) => (
               <option key={y.id} value={y.id}>
                 {y.label}

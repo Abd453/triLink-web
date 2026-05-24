@@ -194,7 +194,7 @@ export default function AdminAnnouncements() {
       <div className="card announcements-panel" style={{ padding: "2rem", marginBottom: "2rem", borderRadius: 20, border: "1.5px solid var(--gray-100)" }}>
         <h3 className="card-title announcements-section-title" style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.5rem" }}>
           <BellRing size={20} className="text-primary-500" />
-          Create New Broadast
+          Create New Broadcast
         </h3>
         
         <div style={{ display: "grid", gap: "1.5rem", maxWidth: "800px" }}>
@@ -285,9 +285,9 @@ export default function AdminAnnouncements() {
             <p style={{ fontSize: "0.85rem", color: "var(--gray-500)" }}>
               {year ? (
                 <span>Publishing to <strong>{year.label}</strong></span>
-              ) : (
-                <span className="text-danger">Target year not selected</span>
-              )}
+              ) : !loading ? (
+                <span style={{ color: "var(--warning)" }}>No active academic year — activate one in School setup.</span>
+              ) : null}
             </p>
             <button 
               type="button" 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { GraduationCap, Layers3, Sparkles, Users } from "lucide-react";
+import { GraduationCap, Layers3, Phone, Users } from "lucide-react";
 import { type PublicUser, listUsers, patchUser, listGrades, getSectionsForGrade, assignStudentsToSection, clearStudentsSection, getActiveAcademicYear } from "@/lib/admin-api";
 import TablePagination from "@/components/TablePagination";
 import { PageHeader, PageHeaderSkeleton, StatGridSkeleton, TableSkeleton } from "@/components/ui";
@@ -127,6 +127,7 @@ export default function AdminStudents() {
 
   const withGrade = rows.filter((s) => !!s.grade).length;
   const withSection = rows.filter((s) => !!s.section).length;
+  const noPhone = rows.filter((s) => !s.phone).length;
 
   const openEdit = (s: PublicUser) => {
     setSaveErr(null);
@@ -263,6 +264,13 @@ export default function AdminStudents() {
           </div>
           <div className="students-summary-label">With section</div>
           <div className="students-summary-value">{withSection}</div>
+        </div>
+        <div className="card students-summary-card">
+          <div className="students-summary-icon" style={{ background: "#fef2f2", color: "#dc2626" }}>
+            <Phone size={18} />
+          </div>
+          <div className="students-summary-label">No phone</div>
+          <div className="students-summary-value">{noPhone}</div>
         </div>
       </div>
 

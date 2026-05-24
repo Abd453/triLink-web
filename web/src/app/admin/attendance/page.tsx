@@ -291,9 +291,9 @@ export default function AdminAttendance() {
             <CalendarDays size={20} />
           </div>
           <div className="stat-info">
-            <div className="stat-label admin-dash-stat-label">Academic year</div>
-            <div className="stat-value" style={{ fontSize: "1.2rem" }}>{activeYearLabel}</div>
-            <div className="admin-dash-stat-note">Selected scope</div>
+            <div className="stat-label admin-dash-stat-label">Academic years</div>
+            <div className="stat-value">{years.length}</div>
+            <div className="admin-dash-stat-note">{activeYearLabel !== "None" ? `Active: ${activeYearLabel}` : "No active year"}</div>
           </div>
         </div>
 

@@ -13,7 +13,9 @@ import {
   Sparkles,
   Users,
   MessageSquare,
+  ArrowRight,
 } from "lucide-react";
+import Link from "next/link";
 import { adminAnalytics, adminDashboard } from "@/lib/admin-api";
 import { PageHeader, PageHeaderSkeleton, StatGridSkeleton, CardSkeleton, EmptyState } from "@/components/ui";
 import { AlertCircle } from "lucide-react";
@@ -190,14 +192,17 @@ export default function AdminDashboard() {
                 <MessageSquare size={28} style={{ color: "#a0aabf" }} strokeWidth={2.5} />
               </div>
               <h4 style={{ fontSize: "1.15rem", fontWeight: 700, color: "var(--gray-600)", marginBottom: "0.5rem" }}>No feedback yet.</h4>
-              <p style={{ fontSize: "0.85rem", color: "var(--gray-400)", lineHeight: 1.5, maxWidth: "260px", fontWeight: 500 }}>Feedback from teachers and parents will appear here once they start reaching out.</p>
+              <p style={{ fontSize: "0.85rem", color: "var(--gray-400)", lineHeight: 1.5, maxWidth: "260px", fontWeight: 500, marginBottom: "1.25rem" }}>Feedback from teachers and parents will appear here once they start reaching out.</p>
+              <Link href="/admin/feedback" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.82rem", fontWeight: 700, color: "var(--primary-600)", textDecoration: "none" }}>
+                View feedback <ArrowRight size={14} />
+              </Link>
             </div>
           ) : (
             <ul className="admin-dash-feedback-list">
               {analytics.feedbackTicketsByStatus.map((f) => (
                 <li key={f.status} className="admin-dash-feedback-item">
                   <div className="admin-dash-feedback-row">
-                    <strong>{f.status}</strong>
+                    <strong>{f.status.replace(/_/g, " ")}</strong>
                     <span>{f.count}</span>
                   </div>
                   <div className="progress-bar">
